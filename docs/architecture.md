@@ -18,7 +18,12 @@
 ## 技术选型基线
 
 - Web 框架：`gin`
+- ORM：`gorm`
+- 数据库迁移：`github.com/golang-migrate/migrate/v4`
 - 异步任务：`Asynq`
+- 参数校验：`github.com/go-playground/validator/v10`
+- JWT：`github.com/golang-jwt/jwt/v5`
+- 测试：`github.com/stretchr/testify`
 - 前端：`Vue 3 + Vite + JavaScript`
 - 前端 UI：`Naive UI`
 - 前端状态管理：`Pinia`
@@ -32,7 +37,7 @@
 - Markdown 解析：Go 内直接解析
 - Embedding：外部 API
 - 配置管理：`yaml + viper`
-- 日志：`zap`
+- 日志：`zap + gopkg.in/natefinch/lumberjack.v2`
 - 监控：任务记录 + logging
 
 ## 目录约定
@@ -133,10 +138,16 @@
 
 职责建议：
 
-- `http.js`：统一请求客户端、错误处理、鉴权基础配置
+- `http.js`：基于原生 `fetch` 的统一请求客户端、错误处理、鉴权基础配置
 - `auth.js`：登录、退出、获取当前用户
 - `documents.js`：文档上传、列表、详情、删除、触发入库
 - `chunks.js`：chunk 列表、重切分、合并、拒绝、审核
+
+实现约定：
+
+- 第一版统一使用原生 `fetch`
+- 不引入 `axios`
+- 请求封装统一放在 `services/http.js` 及领域 service 中
 
 ## 前端配置加载方式
 
@@ -168,10 +179,11 @@
 
 第一版建议：
 
-- 列表页支持手动刷新
+- 列表页支持手动刷新，不默认自动轮询
 - 详情页对处理中任务进行轮询
 - 轮询间隔建议 `3 ~ 5` 秒
 - 文档进入终态后停止轮询
+- 页面进入隐藏状态时暂停轮询，恢复可见后再继续
 
 终态建议包括：
 
@@ -186,6 +198,7 @@
 
 - 登录成功后请求 `GET /api/me`
 - 前端不自行持久化 token
+- 所有 `/documents` 及其子路由都要求登录
 - 路由守卫基于当前用户态判断是否允许访问受保护页面
 - 退出登录后清理前端用户态缓存
 
@@ -204,12 +217,57 @@
 - `NSpin`
 - `NTabs`
 
+统一约定：
+
+- 全局提示统一使用 `Naive UI`
+- 表格统一使用 `NDataTable`
+- 图标体系统一使用 `Naive UI` 兼容方案，不额外混用多套组件风格
+
+提示建议：
+
+- 成功或失败短反馈使用 `message`
+- 危险操作确认使用 `dialog`
+- 不混用多套提示机制
+
+## 前端上传约定
+
+第一版上传能力建议：
+
+- 支持单文件上传
+- 可支持拖拽上传，但不是必须能力
+- 先不实现复杂并发上传
+- 上传完成后由页面展示异步处理状态，不在前端维护复杂上传任务队列
+
+## 前端状态页与空态约定
+
+第一版统一提供以下状态展示：
+
+- 加载中状态
+- 请求失败状态
+- 空列表状态
+- 无 chunk 状态
+- 配置加载失败状态
+
+建议通过公共组件统一这些状态表现，避免每个页面重复实现。
+
+## 前端样式与时间处理约定
+
+第一版前端样式使用普通 CSS：
+
+- 不引入 Sass 或 Less
+- 使用全局 token + 组件局部样式组织
+
+日期与时间格式化统一使用：
+
+- `dayjs`
+
 ## 前端目录建议
 
 建议目录结构：
 
 ```text
 frontend/
+  public/
   src/
     main.js
     App.vue
@@ -242,6 +300,8 @@ frontend/
     styles/
       tokens.css
       main.css
+  target/
+    dist/
 ```
 
 ## 前端实现原则
@@ -313,6 +373,56 @@ backend/
 
 详见 [数据模型](./data-model.md)。
 
+## 数据访问与迁移约定
+
+后端第一版采用以下约定：
+
+- 关系库访问使用 `gorm`
+- schema 变更使用 `github.com/golang-migrate/migrate/v4`
+- 关系库主键统一使用 `uuidv7`
+- 表结构以 migration 为准，`gorm` 模型负责读写映射，不依赖自动建表
+
+实现要求：
+
+- 不使用 `gorm` 的自动迁移作为正式 schema 管理方式
+- 每次表结构调整都补充显式 migration 文件
+- `documents`、`document_chunks`、`users` 等主表主键统一使用 `uuidv7`
+- repository 层基于 `gorm` 封装 `documents`、`document_chunks`、`users` 的数据访问
+
+## 请求校验约定
+
+后端第一版统一使用 `github.com/go-playground/validator/v10` 做请求参数校验。
+
+建议约束：
+
+- handler 层负责绑定请求并执行结构化校验
+- 校验规则尽量写在请求 DTO 上，不分散在业务代码中
+- 对外返回统一的参数错误格式，避免把底层校验错误直接暴露给前端
+
+## 测试约定
+
+后端第一版测试辅助库统一使用 `github.com/stretchr/testify`。
+
+建议用法：
+
+- `require` 用于前置条件和必须立即中断的断言
+- `assert` 用于可继续执行的结果断言
+- `_test.go` 文件与被测代码放在同目录
+
+## 日志约定
+
+后端日志建议使用：
+
+- `zap` 负责结构化日志输出
+- `gopkg.in/natefinch/lumberjack.v2` 负责日志文件轮转
+
+第一版要求：
+
+- 日志文件写入 `backend/logs/`
+- 同时保留控制台输出和文件输出
+- worker 和 API 进程使用统一日志格式
+- 不自行实现日志切片和归档逻辑，直接复用 `lumberjack`
+
 ## Milvus Schema 建议
 
 - `id`
@@ -366,6 +476,7 @@ backend/
 建议认证方式：
 
 - `JWT + HttpOnly Cookie`
+- JWT 实现库使用 `github.com/golang-jwt/jwt/v5`
 
 接口详见 [API 设计](./api.md)。
 
@@ -386,6 +497,10 @@ backend/
   logs/
   target/
   internal/
+    model/
+    repository/
+  migrations/
+    sql/
     api/
       handler/
       router/
@@ -423,6 +538,7 @@ frontend/
 - `backend/data/`: 后端数据目录，包含文档原文件、chunk 快照、派生资源等
 - `backend/logs/`: 后端日志目录
 - `backend/target/`: 后端编译产物目录
+- `backend/migrations/sql/`: SQL migration 文件目录
 - `frontend/public/`: 前端公开静态资源目录，包含 `app.json`
 - `frontend/target/dist`: 前端打包产物目录
 

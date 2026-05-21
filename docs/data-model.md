@@ -34,7 +34,7 @@
 
 建议约束：
 
-- 主键：`document_id`
+- 主键：`document_id`，使用 `uuidv7`
 - 索引：`knowledge_base_id`
 - 唯一约束：`knowledge_base_id + sha256`
 
@@ -142,8 +142,15 @@
 
 建议约束：
 
-- 主键：`user_id`
+- 主键：`user_id`，使用 `uuidv7`
 - 唯一约束：`username`
+
+主键约定：
+
+- `documents.document_id` 使用 `uuidv7`
+- `document_chunks.chunk_id` 使用 `uuidv7`
+- `users.user_id` 使用 `uuidv7`
+- 如果后续增加新业务主表，默认也使用 `uuidv7`
 
 ## Milvus Schema
 
