@@ -32,6 +32,7 @@
 - 上传 `pdf/docx/pptx/markdown`
 - 创建文档记录
 - 投递异步解析任务
+- `documents.status` 初始值建议为 `uploaded`
 
 字段建议：
 
@@ -60,10 +61,12 @@
 ### `GET /api/documents/:document_id/chunks`
 
 - 获取当前文档的 chunk 列表
+- 返回每个 chunk 的正文文本，以及结构化资源引用字段 `resource_refs`
 
 ### `POST /api/documents/:document_id/chunks/rechunk`
 
 - 重新自动切分整个文档
+- 忽略当前 chunk 快照，强制生成新的 chunk 版本和 JSON 快照
 
 ### `POST /api/documents/:document_id/chunks/merge`
 
@@ -81,10 +84,13 @@
 
 - 对当前 `approved` chunk 版本触发 embedding 和 Milvus 入库
 
+如果未开启人工审核，系统可在自动切分完成后直接触发 embedding 和入库，不必等待 `approve`。
+
 ## 状态查询建议
 
 文档状态：
 
+- `uploaded`
 - `pending`
 - `processing`
 - `review_pending`
@@ -102,3 +108,47 @@
 - `index`
 - `done`
 - `delete`
+
+## Chunk 返回字段建议
+
+`GET /api/documents/:document_id/chunks` 的单条 chunk 建议至少包含：
+
+- `chunk_id`
+- `chunk_index`
+- `section_title`
+- `page_start`
+- `page_end`
+- `text`
+- `normalized_text`
+- `status`
+- `resource_refs`
+
+其中：
+
+- `text` 中保留对图片、表格、链接的自然语言引用，便于语义检索和人工审核
+- `resource_refs` 中保存结构化引用，便于前端预览、跳转、定位原始资源
+- embedding 输入建议只使用 `text`，不直接使用 `resource_refs`
+
+`resource_refs` 字段示例：
+
+```json
+[
+  {
+    "ref_id": "img_001",
+    "ref_type": "image",
+    "label": "图 3",
+    "caption": "系统架构图",
+    "page": 5,
+    "anchor_text": "见图 3",
+    "storage_path": "backend/data/resources/kb_001/doc_123/images/img_001.png"
+  },
+  {
+    "ref_id": "lnk_002",
+    "ref_type": "link",
+    "label": "OpenAI API 文档",
+    "anchor_text": "参考文档",
+    "url": "https://platform.openai.com/docs/api-reference",
+    "is_external": true
+  }
+]
+```

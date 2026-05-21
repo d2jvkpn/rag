@@ -5,12 +5,8 @@
 This repository is currently design-first. Use `AGENTS.md` as the navigation entry point. Main directories:
 
 - `docs/`: planning documents for ingestion flow, architecture, API, and data model
-- `configs/`: configuration files
-- `data/`: local data, including stored source files
-- `logs/`: runtime logs
-- `target/`: backend build outputs and frontend packaged assets
-- `backend/`: future Go service code
-- `frontend/`: future Vue 3 + JavaScript UI code
+- `backend/`: future Go service code, plus backend-local `configs/`, `data/`, `logs/`, and `target/`
+- `frontend/`: future Vue 3 + JavaScript UI code, plus frontend-local `public/` and `target/`
 
 Current planning docs in `docs/`:
 
@@ -19,7 +15,7 @@ Current planning docs in `docs/`:
 - `api.md`: HTTP endpoints
 - `data-model.md`: PostgreSQL and Milvus schema notes
 
-When implementation starts, keep service code in `backend/` and UI code in `frontend/`. The planned backend layout is documented in [docs/architecture.md](/home/appuser/workspace/rag.git/docs/architecture.md:1).
+When implementation starts, keep service code in `backend/` and UI code in `frontend/`. Do not assume shared root-level `configs/`, `data/`, `logs/`, or `target/` directories. The planned backend layout is documented in [docs/architecture.md](/home/appuser/workspace/rag.git/docs/architecture.md:1).
 
 ## Build, Test, and Development Commands
 
