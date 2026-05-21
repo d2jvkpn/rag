@@ -55,7 +55,19 @@ When Go code is added, place `_test.go` files next to the code they cover.
 
 ## Commit & Pull Request Guidelines
 
-The repository does not yet show an established commit convention. Use short, imperative commit messages, for example: `docs: split rag ingestion plan` or `api: define chunk review endpoints`.
+Never create a commit unless the user explicitly asks for one.
+
+Write commit messages in English and use short, imperative prefixes such as:
+
+- `feat: add openclaw proxy handler`
+- `fix: handle upstream timeout response`
+- `docs: update backend decisions`
+
+Every AI-assisted commit must include:
+
+```text
+Assisted-by: <agent_name>:<model_version> [tool1] [tool2]
+```
 
 Pull requests should include:
 
