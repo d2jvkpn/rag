@@ -11,6 +11,94 @@
 5. chunk 审核与确认入库
 6. 文档删除
 
+## 统一响应格式
+
+成功返回统一使用：
+
+```json
+{
+  "data": {
+    "accepted": true
+  }
+}
+```
+
+分页列表返回统一使用：
+
+```json
+{
+  "data": {
+    "items": [],
+    "page": 1,
+    "page_size": 20,
+    "total": 100
+  }
+}
+```
+
+错误返回统一使用：
+
+```json
+{
+  "error": {
+    "code": "validation_error",
+    "message": "knowledge_base_id is required"
+  }
+}
+```
+
+字段级错误返回统一使用：
+
+```json
+{
+  "error": {
+    "code": "validation_error",
+    "message": "invalid request parameters",
+    "details": [
+      {
+        "field": "knowledge_base_id",
+        "reason": "required"
+      }
+    ]
+  }
+}
+```
+
+响应约定：
+
+- 成功响应统一放在 `data` 字段下
+- 错误响应统一放在 `error` 字段下
+- 列表集合字段统一命名为 `items`
+- `details` 始终使用数组，不混用对象和数组
+- 不在 JSON 中重复返回 `http_status`
+
+## 错误码约定
+
+第一版统一使用以下错误码：
+
+- `validation_error`
+- `unauthorized`
+- `forbidden`
+- `not_found`
+- `conflict`
+- `unsupported_file_type`
+- `processing_failed`
+- `internal_error`
+
+## HTTP 状态码约定
+
+- `200 OK`：普通成功读取
+- `201 Created`：创建成功
+- `202 Accepted`：异步任务已接受
+- `204 No Content`：删除成功
+- `400 Bad Request`：参数错误
+- `401 Unauthorized`：未登录
+- `403 Forbidden`：无权限
+- `404 Not Found`：资源不存在
+- `409 Conflict`：状态冲突、重复上传
+- `415 Unsupported Media Type`：文件类型不支持
+- `500 Internal Server Error`：服务端错误
+
 ## 认证接口
 
 ### `POST /api/login`

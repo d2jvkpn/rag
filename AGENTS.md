@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository is currently design-first. Use `AGENTS.md` as the navigation entry point. Main directories:
+This repository is currently design-first. Use `AGENTS.md` for repository guidance and [docs/README.md](/home/appuser/workspace/rag.git/docs/README.md:1) as the documentation entry point. Main directories:
 
 - `docs/`: planning documents for ingestion flow, architecture, API, and data model
 - `backend/`: future Go service code, plus backend-local `configs/`, `data/`, `logs/`, and `target/`
@@ -10,26 +10,29 @@ This repository is currently design-first. Use `AGENTS.md` as the navigation ent
 
 Current planning docs in `docs/`:
 
-- `business.md`: ingestion flow for `pdf`, `docx`, `pptx`, and `markdown`; chunk review; deletion; error handling
-- `architecture.md`: stack, system boundaries, frontend, auth
+- `README.md`: documentation index and scope summary
+- `workflow.md`: ingestion flow for `pdf`, `docx`, `pptx`, and `markdown`; chunk review; deletion; error handling
+- `backend.md`: backend stack, storage, auth, logging, and implementation boundaries
 - `api.md`: HTTP endpoints
 - `data-model.md`: PostgreSQL and Milvus schema notes
+- `frontend-business.md`: frontend pages, flows, and interaction rules
+- `frontend.md`: frontend technical baseline and implementation conventions
 
-When implementation starts, keep service code in `backend/` and UI code in `frontend/`. Do not assume shared root-level `configs/`, `data/`, `logs/`, or `target/` directories. The planned backend layout is documented in [docs/architecture.md](/home/appuser/workspace/rag.git/docs/architecture.md:1).
+When implementation starts, keep service code in `backend/` and UI code in `frontend/`. Do not assume shared root-level `configs/`, `data/`, `logs/`, or `target/` directories. The planned backend layout is documented in [docs/backend.md](/home/appuser/workspace/rag.git/docs/backend.md:1).
 
 ## Build, Test, and Development Commands
 
 There is no runnable application yet. For now, contributors mainly edit and review Markdown.
 
 - `ls -la`: inspect repository contents
-- `sed -n '1,120p' docs/rag-doc-ingestion/architecture.md`: read docs in chunks
+- `sed -n '1,120p' docs/backend.md`: read docs in chunks
 - `git status --short`: review local changes
 
 Once code is added, document project-specific build and test commands here and in the relevant README.
 
 ## Coding Style & Naming Conventions
 
-Use concise Markdown with short sections and flat bullet lists. Keep filenames lowercase with hyphens or clear domain names, such as `data-model.md` and `rag-doc-ingestion.md`.
+Use concise Markdown with short sections and flat bullet lists. Keep filenames lowercase with hyphens or clear domain names, such as `data-model.md` and `frontend-business.md`.
 
 For planned implementation:
 
@@ -43,7 +46,7 @@ For planned implementation:
 
 No automated test suite exists yet. Until implementation lands:
 
-- review docs for consistency across `business.md`, `architecture.md`, `api.md`, and `data-model.md`
+- review docs for consistency across `workflow.md`, `backend.md`, `api.md`, `data-model.md`, `frontend-business.md`, and `frontend.md`
 - verify field names and status names match across documents
 - include example payloads when changing API contracts
 

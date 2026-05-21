@@ -1,415 +1,279 @@
-# RAG 前端业务设计
+# RAG 前端技术方案
 
 相关文档：
 
-- [总览](./overview.md)
-- [业务方案](./business.md)
-- [架构与技术方案](./architecture.md)
+- [总览](./README.md)
+- [前端业务设计](./frontend-business.md)
+- [后端架构与技术方案](./backend.md)
 - [API 设计](./api.md)
-- [数据模型](./data-model.md)
 
-## 目标
+## 前端技术基线
 
-前端第一版的核心目标不是提供复杂编辑能力，而是围绕文档入库流程，提供清晰、可追踪、可回退的操作界面。
+第一版前端继续采用当前选型，不额外引入复杂框架：
 
-需要解决的核心问题：
+- `Vue 3`
+- `Vite`
+- `JavaScript`
+- `Naive UI`
+- `Pinia`
+- `vue-router`
+- `dayjs`
 
-- 上传文档并触发处理流程
-- 查看文档处理状态和错误原因
-- 查看 chunk 切分结果
-- 在启用人工审核时完成审核操作
-- 执行重切分、入库、删除等生命周期管理动作
+第一版不建议引入：
 
-## 产品定位
+- `TypeScript`
+- `Nuxt`
+- `SSR`
+- WebSocket 实时推送
+- 富文本编辑器
 
-前端定位为内部运营后台，而不是面向终端用户的内容消费界面。
+前端目标是优先跑通“上传、处理、查看、重切分、删除”的后台闭环，而不是提前建设复杂交互能力。
 
-设计重点：
+## 目录约定
 
-- 流程清晰
-- 状态可见
-- 操作可追踪
-- 错误可定位
+前端目录约定：
 
-不作为第一版重点的内容：
+- `frontend/public`
+- `frontend/target`
 
-- 高级可视化分析
-- 复杂富文本编辑
-- 批量协作审阅
-- 多角色权限编排
+前端构建产物目录约定：
 
-## 使用模式
+- 前端打包文件输出到 `frontend/target/dist`
 
-系统存在两种业务模式，前端需要同时兼容：
+## 前端分层建议
 
-### 自动入库模式
+前端代码建议按职责拆成 5 层：
 
-- 上传文档后直接进入处理链路
-- 自动完成解析、切分、embedding、Milvus 入库
-- 用户主要查看状态、错误和结果
-- 用户仅在需要抽查或处理异常时进入 chunk 详情
+1. `pages`
+2. `components`
+3. `stores`
+4. `services`
+5. `utils`
 
-### 人工审核模式
+分层职责：
 
-- 上传文档后先完成解析和切分
-- 文档进入 `review_pending`
-- 用户进入 chunk 审核页确认内容
-- 审核通过后再触发入库
+- `pages`：页面级容器，负责路由、布局、页面数据加载
+- `components`：通用展示组件和局部交互组件
+- `stores`：通过 `Pinia` 管理跨页面共享状态
+- `services`：统一封装 API 请求
+- `utils`：沉淀状态映射、格式化、类型判断等基础工具
 
-前端必须明确展示当前文档是否启用人工审核，以及当前所在处理路径。
+约束建议：
 
-## 页面结构
+- 不要在页面组件中直接散落接口调用
+- 不要过早把所有页面数据都放进全局 store
+- 页面局部数据优先在页面内管理，跨页面共享的数据再进入 `Pinia`
 
-第一版建议包含 5 个核心页面：
+## 前端路由建议
 
-1. 登录页
-2. 文档列表页
-3. 上传弹窗或上传页
-4. 文档详情页
-5. chunk 审核页
+第一版建议使用以下核心路由：
 
-## 页面设计
+- `/login`
+- `/documents`
+- `/documents/:documentId`
+- `/documents/:documentId/chunks`
 
-### 登录页
+如果上传能力使用弹窗承载，则无需单独定义 `/upload` 页面路由。
 
-用途：
+## 前端状态管理建议
 
-- 用户名密码登录
-- 获取当前登录态
+第一版推荐只维护少量全局 store：
 
-页面元素：
+- `authStore`
+- `documentFilterStore`
+- 可选：`documentCacheStore`
 
-- 用户名输入框
-- 密码输入框
-- 登录按钮
-- 登录失败提示
+其中：
 
-业务要求：
+- `authStore`：保存当前登录用户和登录态
+- `documentFilterStore`：保存列表页筛选条件
+- `documentCacheStore`：可选，用于缓存近期访问的文档详情
 
-- 登录成功后进入文档列表页
-- 如果已有有效登录态，可直接进入主页面
+页面级数据例如当前 chunk 列表、当前文档详情、表单临时状态，优先由页面组件本地管理。
 
-### 文档列表页
+## 前端接口封装建议
 
-用途：
+前端请求层建议按领域拆分，不在页面内直接发请求。
 
-- 作为系统主工作台
-- 查看所有文档的处理进度和结果
-- 进入详情、审核、重切分、删除等操作
+建议目录：
 
-建议布局：
+- `services/http.js`
+- `services/auth.js`
+- `services/documents.js`
+- `services/chunks.js`
 
-- 顶部工具栏
-- 中部文档表格
-- 行内操作区
+职责建议：
 
-顶部工具栏建议包含：
+- `http.js`：基于原生 `fetch` 的统一请求客户端、错误处理、鉴权基础配置
+- `auth.js`：登录、退出、获取当前用户
+- `documents.js`：文档上传、列表、详情、删除、触发入库
+- `chunks.js`：chunk 列表、重切分、合并、拒绝、审核
 
-- 上传按钮
-- `knowledge_base_id` 筛选
-- 文档状态筛选
-- 文件类型筛选
-- 关键词搜索
+实现约定：
 
-文档表格建议字段：
+- 第一版统一使用原生 `fetch`
+- 不引入 `axios`
+- 请求封装统一放在 `services/http.js` 及领域 service 中
 
-- 文档标题或文件名
-- 文件类型
-- `knowledge_base_id`
-- `status`
-- `stage`
-- `chunk_count`
-- `updated_at`
-- 错误摘要
-- 操作
+## 前端配置加载方式
 
-支持的主要操作：
+前端第一版不使用 `.env` 配置文件，不依赖构建时注入配置。
 
-- 查看详情
-- 查看 chunks
-- 重新切分
-- 触发入库
-- 删除文档
+配置方式建议：
 
-业务要求：
+- 在 `frontend/public/app.json` 中保存前端运行时配置
+- 浏览器加载应用后，通过 HTTP 请求读取 `/app.json`
+- 前端在应用启动阶段加载配置，再初始化后续接口请求和页面渲染
 
-- `status` 和 `stage` 需要显式展示，不只显示纯文本
-- 失败文档需要突出展示 `error_message`
-- 如果文档命中 chunk 快照且已完成切分，可从列表进入详情或 chunk 页面
-- 页面默认提供手动刷新，不依赖自动轮询
+适合放入 `app.json` 的配置包括：
 
-### 上传弹窗或上传页
+- 后端 API 基础地址
+- 页面标题
+- 默认轮询间隔
+- 是否默认启用人工审核入口
 
-用途：
+设计要求：
 
-- 上传源文档并创建 `documents` 记录
+- `app.json` 作为公开静态资源提供，不要放敏感信息
+- 前端代码中不要硬编码环境差异配置
+- 配置读取失败时，应显示明确错误，而不是静默降级
+- `services/http.js` 等请求模块应依赖运行时加载后的配置
 
-表单字段：
+## 前端数据刷新策略
 
-- `file`
-- `knowledge_base_id`
-- `title` 可选
-- `tags` 可选
-- 是否启用人工审核
+由于后端采用异步处理链路，前端必须考虑处理中状态的刷新机制。
 
-业务要求：
+第一版建议：
 
-- 支持上传 `pdf/docx/pptx/markdown`
-- 第一版仅支持单文件上传
-- 可支持拖拽上传，但不是必须
-- 不实现复杂并发上传
-- 上传成功后显示初始状态 `uploaded`
-- 页面应提示后续将进入异步处理流程
-- 上传成功后可以跳转到详情页，或回到列表页展示处理中状态
+- 列表页支持手动刷新，不默认自动轮询
+- 详情页对处理中任务进行轮询
+- 轮询间隔建议 `3 ~ 5` 秒
+- 文档进入终态后停止轮询
+- 页面进入隐藏状态时暂停轮询，恢复可见后再继续
 
-### 文档详情页
+终态建议包括：
 
-用途：
-
-- 展示单个文档的完整处理信息
-- 作为文档级操作入口
-
-建议展示内容：
-
-- 文档基础信息
-- 原始文件信息
-- 当前状态和阶段
-- 处理时间
-- `chunk_count`
-- `chunk_version`
-- `chunk_snapshot_path`
-- 是否启用人工审核
-- 最近错误信息
-
-建议操作：
-
-- 查看 chunk 列表
-- 重新切分
-- 触发入库
-- 删除文档
-
-业务要求：
-
-- 如果文档处于失败状态，需优先展示错误原因
-- 如果文档存在有效 chunk 快照，应展示当前快照版本
-- 如果文档尚未切分完成，应展示处理中状态而不是空白页
-- 对处理中任务执行轮询刷新
-- 页面隐藏时暂停轮询，恢复可见后继续
-
-### chunk 审核页
-
-用途：
-
-- 查看当前文档的 chunk 切分结果
-- 在启用人工审核时完成审核
-- 在未启用人工审核时作为只读检查页
-
-建议布局：
-
-- 左侧 chunk 列表
-- 右侧 chunk 详情
-
-左侧列表展示：
-
-- `chunk_index`
-- `section_title`
-- `page_start ~ page_end`
-- `status`
-- 文本摘要
-
-右侧详情展示：
-
-- `text`
-- `normalized_text`
-- `resource_refs`
-- 页码范围
-- 章节信息
-- `chunk_version`
-
-支持的操作：
-
-- 合并相邻 chunk
-- 删除 chunk
-- 标记忽略入库
-- 审核通过
-- 重新切分整个文档
-
-业务要求：
-
-- 未启用人工审核时，可隐藏“审核通过”主按钮，保留只读查看和重切分操作
-- 启用人工审核时，只有审核通过后的 chunk 版本才能进入入库流程
-- 被忽略或拒绝的 chunk 需要有清晰状态标识
-
-## `resource_refs` 展示规则
-
-前端需要统一展示 `image`、`table`、`link` 三类结构化引用。
-
-### 图片引用
-
-展示字段：
-
-- `label`
-- `caption`
-- `page`
-- `storage_path`
-
-建议交互：
-
-- 显示缩略信息
-- 支持预览图片或查看路径
-
-### 表格引用
-
-展示字段：
-
-- `label`
-- `caption`
-- `page`
-- `storage_path`
-
-建议交互：
-
-- 显示结构化资源路径
-- 后续可扩展为表格预览
-
-### 链接引用
-
-展示字段：
-
-- `label`
-- `anchor_text`
-- `url`
-- `is_external`
-
-建议交互：
-
-- 显示锚文本
-- 支持点击跳转原始链接
-
-## 关键业务流程
-
-### 流程一：上传并自动入库
-
-1. 用户上传文档
-2. 列表页显示 `uploaded`
-3. 后端异步执行解析、切分、embedding、入库
-4. 前端轮询或刷新后看到状态推进到 `indexed` 或 `failed`
-5. 如果失败，用户进入详情查看错误
-
-### 流程二：上传并人工审核
-
-1. 用户上传文档并启用人工审核
-2. 后端完成解析和切分
-3. 文档状态进入 `review_pending`
-4. 用户进入 chunk 审核页
-5. 用户确认 chunk 内容并执行审核通过
-6. 系统触发 embedding 和入库
-7. 文档状态变为 `indexed` 或 `failed`
-
-### 流程三：重切分
-
-1. 用户在列表页、详情页或审核页触发 `rechunk`
-2. 系统忽略当前快照，生成新的 `chunk_version`
-3. 新版本 chunk JSON 快照落盘
-4. 页面刷新后展示最新 chunk 列表
-
-### 流程四：删除文档
-
-1. 用户发起删除
-2. 前端二次确认
-3. 后端删除原始文件、chunk 快照、派生资源、数据库记录和向量
-4. 删除成功后从列表中移除
-
-## 状态展示规则
-
-前端至少要区分两组状态：
-
-### 文档状态
-
-- `uploaded`
-- `pending`
-- `processing`
-- `review_pending`
-- `reviewing`
-- `approved`
 - `indexed`
 - `failed`
 
-### 处理阶段
+第一版不建议为了状态刷新引入 WebSocket，轮询已经足够支撑当前业务。
 
-- `upload`
-- `parse`
-- `chunk`
-- `embed`
-- `index`
-- `done`
-- `delete`
+## 前端鉴权建议
 
-展示要求：
+认证方式已确定为 `JWT + HttpOnly Cookie`，前端按 Cookie 会话模式处理：
 
-- 状态和阶段同时展示
-- `failed` 必须关联错误信息
-- `review_pending` 和 `reviewing` 需要明显区别于自动流程状态
+- 登录成功后请求 `GET /api/me`
+- 前端不自行持久化 token
+- 所有 `/documents` 及其子路由都要求登录
+- 路由守卫基于当前用户态判断是否允许访问受保护页面
+- 退出登录后清理前端用户态缓存
 
-## 前端通用交互约定
+## 前端 UI 组件建议
 
-- 所有 `/documents` 相关页面都要求登录后访问
+`Naive UI` 足以支撑第一版后台界面，优先使用其标准组件完成实现。
+
+建议优先使用：
+
+- `NDataTable`
+- `NForm`
+- `NModal`
+- `NDrawer`
+- `NTag`
+- `NAlert`
+- `NSpin`
+- `NTabs`
+
+统一约定：
+
 - 全局提示统一使用 `Naive UI`
-- 表格统一使用 `Naive UI` 的 `NDataTable`
-- 加载态、错误态、空态和配置加载失败态应统一风格
-- 日期和时间格式化统一使用 `dayjs`
+- 表格统一使用 `NDataTable`
+- 图标体系统一使用 `Naive UI` 兼容方案，不额外混用多套组件风格
 
-## 交互约束
+提示建议：
 
-为了避免误操作，以下动作建议二次确认：
+- 成功或失败短反馈使用 `message`
+- 危险操作确认使用 `dialog`
+- 不混用多套提示机制
 
-- 删除文档
-- 重新切分
-- 审核通过并触发入库
+## 前端上传约定
 
-为了避免用户误判系统状态，以下信息建议始终可见：
+第一版上传能力建议：
 
-- 当前 `status`
-- 当前 `stage`
-- 最近更新时间
-- 错误信息
+- 支持单文件上传
+- 可支持拖拽上传，但不是必须能力
+- 先不实现复杂并发上传
+- 上传完成后由页面展示异步处理状态，不在前端维护复杂上传任务队列
 
-## 第一版取舍
+## 前端状态页与空态约定
 
-第一版建议优先实现：
+第一版统一提供以下状态展示：
 
-- 登录页
-- 文档列表页
-- 上传弹窗
-- 文档详情页
-- chunk 查看与基础审核页
+- 加载中状态
+- 请求失败状态
+- 空列表状态
+- 无 chunk 状态
+- 配置加载失败状态
 
-第一版可以暂缓：
+建议通过公共组件统一这些状态表现，避免每个页面重复实现。
 
-- 高级批量操作
-- 表格结构化预览
-- 复杂 chunk 局部编辑
-- 多列看板
-- 多人协作审核
+## 前端样式与时间处理约定
 
-## 与后端接口的对应关系
+第一版前端样式使用普通 CSS：
 
-前端主要依赖这些接口：
+- 不引入 Sass 或 Less
+- 使用全局 token + 组件局部样式组织
 
-- `POST /api/login`
-- `POST /api/logout`
-- `GET /api/me`
-- `POST /api/documents`
-- `GET /api/documents`
-- `GET /api/documents/:document_id`
-- `DELETE /api/documents/:document_id`
-- `GET /api/documents/:document_id/chunks`
-- `POST /api/documents/:document_id/chunks/rechunk`
-- `POST /api/documents/:document_id/chunks/merge`
-- `POST /api/documents/:document_id/chunks/:chunk_id/reject`
-- `POST /api/documents/:document_id/chunks/approve`
-- `POST /api/documents/:document_id/index`
+日期与时间格式化统一使用：
 
-## 一句话结论
+- `dayjs`
 
-前端第一版应围绕“文档上传、状态追踪、chunk 查看、可选人工审核、重切分与删除”构建一个信息密度高、状态清晰的运营后台，而不是优先做复杂编辑器或展示型界面。
+## 前端目录建议
+
+建议目录结构：
+
+```text
+frontend/
+  public/
+  src/
+    main.js
+    App.vue
+    router/
+      index.js
+    stores/
+      auth.js
+      document-filters.js
+    services/
+      http.js
+      auth.js
+      documents.js
+      chunks.js
+    config/
+      app-config.js
+    pages/
+      LoginPage.vue
+      DocumentsPage.vue
+      DocumentDetailPage.vue
+      DocumentChunksPage.vue
+    components/
+      layout/
+      documents/
+      chunks/
+      common/
+    utils/
+      status.js
+      format.js
+      resource-refs.js
+    styles/
+      tokens.css
+      main.css
+  target/
+    dist/
+```
+
+## 前端实现原则
+
+- 先做 CSR，不做 SSR
+- 先做 REST API，不做实时推送
+- 先做页面级数据获取，不做过度抽象
+- 先保证状态流转清晰，不做重编辑体验
+- 先完成文档后台闭环，再补充高级能力
