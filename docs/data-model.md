@@ -13,8 +13,12 @@
 字段建议：
 
 - `document_id`
+- `created_at`
+- `updated_at`
 - `knowledge_base_id`
 - `filename`
+- `title`
+- `tags`
 - `source_type`
 - `storage_path`
 - `chunk_snapshot_path`
@@ -29,14 +33,13 @@
 - `chunk_config_hash`
 - `started_at`
 - `finished_at`
-- `created_at`
-- `updated_at`
 
 建议约束：
 
 - 主键：`document_id`，使用 `uuidv7`
 - 索引：`knowledge_base_id`
 - 唯一约束：`knowledge_base_id + sha256`
+- 数据库定义建议使用 `UUID PRIMARY KEY DEFAULT uuidv7()`
 
 字段说明补充：
 
@@ -44,21 +47,22 @@
 - `chunk_snapshot_path`：当前生效的 chunk JSON 快照路径
 - `chunk_version`：当前 chunk 版本号
 - `chunk_config_hash`：切分参数和切分策略配置的哈希，用于判断快照是否可复用
+- `tags`：建议使用 PostgreSQL `TEXT[]`，不使用 `jsonb`
 
 ## `document_chunks`
 
 字段建议：
 
 - `chunk_id`
+- `created_at`
+- `updated_at`
 - `document_id`
-- `knowledge_base_id`
 - `chunk_index`
 - `section_title`
 - `page_start`
 - `page_end`
 - `text`
 - `normalized_text`
-- `text_hash`
 - `status`
 - `chunk_version`
 - `source`
@@ -67,8 +71,6 @@
 - `filename`
 - `embedding_model`
 - `resource_refs`
-- `created_at`
-- `updated_at`
 
 字段说明：
 
@@ -78,6 +80,8 @@
 - `source`：`auto / manual / mixed`
 - `is_current`：当前展示和操作的版本标记
 - `resource_refs`：chunk 关联的图片、表格、链接等结构化引用信息，建议使用 `jsonb`
+- `knowledge_base_id` 不建议在 `document_chunks` 中重复保存，查询时可通过 `documents` 关联获取
+- 第一版不单独保存 `text_hash`
 
 `resource_refs` 建议结构：
 
@@ -133,12 +137,12 @@
 字段建议：
 
 - `user_id`
+- `created_at`
+- `updated_at`
 - `username`
 - `password_hash`
 - `status`
 - `last_login_at`
-- `created_at`
-- `updated_at`
 
 建议约束：
 
@@ -151,6 +155,7 @@
 - `document_chunks.chunk_id` 使用 `uuidv7`
 - `users.user_id` 使用 `uuidv7`
 - 如果后续增加新业务主表，默认也使用 `uuidv7`
+- migration 可直接写成 `UUID PRIMARY KEY DEFAULT uuidv7()`
 
 ## Milvus Schema
 

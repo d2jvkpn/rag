@@ -2,7 +2,7 @@
 
 ## 文档结构
 
-当前方案拆分为 6 份文档：
+当前方案拆分为 6 份设计文档，外加 `plans/` 下的实施计划文档：
 
 - [流程与业务规则](./workflow.md)
 - [后端架构与技术方案](./backend.md)
@@ -10,6 +10,7 @@
 - [数据模型](./data-model.md)
 - [前端业务设计](./frontend-business.md)
 - [前端技术方案](./frontend.md)
+- [实施计划](./plans/phase-1.md)
 
 ## 范围
 

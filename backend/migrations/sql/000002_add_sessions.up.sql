@@ -1,0 +1,5 @@
+CREATE TABLE sessions (
+  token TEXT PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL
+);

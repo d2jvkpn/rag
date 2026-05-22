@@ -37,6 +37,37 @@
 - 日志：`zap + gopkg.in/natefinch/lumberjack.v2`
 - 监控：任务记录 + logging
 
+## 当前第一阶段脚手架实现
+
+当前仓库已经落了一版可运行的后端最小骨架，但它是“第一阶段验证实现”，不是最终技术栈终态。
+
+当前已落地实现：
+
+- HTTP 服务当前使用 `gin`
+- 鉴权先使用服务端 session + `HttpOnly Cookie`
+- 配置文件固定使用 `backend/configs/local.yaml`
+- 配置读取使用 `viper`，统一通过 `viper.Viper.GetString/GetXX` 获取
+- 启动参数使用命令行 flag，不使用环境变量
+- 当前状态存储先使用本地 JSON 文件，路径由 `state_path` 指定
+- 异步处理先使用进程内 goroutine 队列
+- chunk 快照先写入 `backend/data/chunks/`
+
+当前启动参数：
+
+- `--release bool`
+- `--addr string`
+- `--config configs/local.yaml`
+
+当前实现取舍：
+
+- 先验证“上传 -> 解析 -> 切分 -> 快照 -> 查询 -> 删除”闭环
+- 先不引入 `gorm`
+- 先不接 `PostgreSQL`
+- 先不接 `Asynq`
+- 先不接 `Milvus`
+
+后续进入第二阶段时，再把 repository、任务队列、日志和鉴权能力逐步替换为目标技术栈。
+
 ## 目录约定
 
 仓库不使用共享的根目录 `configs/`、`data/`、`logs/`、`target/`。
@@ -64,6 +95,14 @@
 - `documents`、`document_chunks`、`users` 等主表主键统一使用 `uuidv7`
 - repository 层基于 `gorm` 封装 `documents`、`document_chunks`、`users` 的数据访问
 
+当前 migration 约定补充：
+
+- `users.user_id`、`documents.document_id`、`document_chunks.chunk_id` 使用 `UUID PRIMARY KEY DEFAULT uuidv7()`
+- `created_at`、`updated_at` 在表定义中统一前置
+- `documents.tags` 使用 PostgreSQL `TEXT[]`
+- `document_chunks` 不保留冗余的 `knowledge_base_id`
+- `document_chunks` 不保留 `text_hash`
+
 ## 请求校验约定
 
 后端第一版统一使用 `github.com/go-playground/validator/v10` 做请求参数校验。
@@ -73,6 +112,8 @@
 - handler 层负责绑定请求并执行结构化校验
 - 校验规则尽量写在请求 DTO 上，不分散在业务代码中
 - 对外返回统一的参数错误格式，避免把底层校验错误直接暴露给前端
+
+当前第一阶段脚手架里，请求校验暂时由 handler 手工完成；后续切到正式 DTO 和 `validator/v10` 时，保持对外错误格式不变。
 
 ## 日志约定
 
@@ -166,6 +207,12 @@ chunk 快照约定：
 - `JWT + HttpOnly Cookie`
 - JWT 实现库使用 `github.com/golang-jwt/jwt/v5`
 
+当前第一阶段脚手架实现：
+
+- 暂时使用服务端 session + `HttpOnly Cookie`
+- 登录成功后在本地状态存储中写入 session
+- 该实现只用于第一阶段闭环验证，后续可切换为 JWT 方案
+
 接口详见 [API 设计](./api.md)。
 
 ## 推荐目录结构
@@ -214,6 +261,26 @@ backend/
 - `backend/target/`: 后端编译产物目录
 - `backend/migrations/sql/`: SQL migration 文件目录
 
+当前已落地的最小目录结构：
+
+```text
+backend/
+  cmd/server/
+  configs/local.yaml
+  data/
+  logs/
+  target/
+  migrations/sql/
+  internal/
+    api/
+    config/
+    model/
+    parser/
+    repository/
+    service/
+    uuid/
+```
+
 ## 实现顺序
 
 1. 定义 `documents` / `document_chunks` / `users` 数据模型
@@ -227,3 +294,30 @@ backend/
 9. 接 embedding API
 10. 接 Milvus 写入与删除
 11. 增加重试、幂等、日志
+
+## 当前完成情况
+
+当前已完成：
+
+- `backend/` Go 模块和最小目录骨架
+- `gin` 路由与鉴权中间件骨架
+- `configs/local.yaml` + `viper` 配置加载
+- `--release`、`--addr`、`--config` 启动参数
+- `users`、`documents`、`document_chunks` 初版 migration（000001）
+- `sessions` migration（000002）
+- `repository.Store` 接口；`JSONStore` 和 `PostgresStore` 双实现
+- `PostgresStore`：`gorm` + `lib/pq` driver，支持 `TEXT[]` tags 和 `JSONB` resource_refs
+- 启动时根据 `database.dsn` 配置自动选择 store
+- 登录、退出、当前用户接口
+- 文档上传、列表、详情、删除接口
+- `markdown`、`docx`、`pptx` 基础解析
+- 简化版文本型 `pdf` 解析
+- chunk 切分和 chunk JSON 快照写入
+- `rechunk` 接口和 chunk 版本递增
+- chunk 列表查询接口
+
+当前未完成：
+
+- `Asynq` worker
+- 正式 JWT 鉴权
+- embedding 和 Milvus

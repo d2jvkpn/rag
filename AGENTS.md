@@ -42,6 +42,23 @@ For planned implementation:
 - use `filename`, not `file_name`
 - keep frontend code in JavaScript; do not introduce TypeScript unless the repository guidance changes
 
+## Documentation Sync Rules
+
+When code changes introduce or confirm design, technical, schema, configuration, API, or architecture decisions, update the relevant docs in the same task. Do not leave implemented behavior only in code when it changes repository guidance or invalidates existing design docs.
+
+Required sync behavior:
+
+- if backend implementation changes config loading, startup flags, auth model, storage layout, async processing, logging, or framework choices, update `docs/backend.md`
+- if schema or field definitions change, update `docs/data-model.md`
+- if request or response contracts, status names, error codes, or auth behavior change, update `docs/api.md`
+- if implementation sequencing or scope decisions change, update files under `docs/plans/`
+- if implementation differs from an existing design decision, either align the code to the docs or update the docs in the same task so they are consistent again
+
+Documentation updates should describe both:
+
+- the target design, when it still applies
+- the current implemented state, when the repository is still in a staged or scaffold phase
+
 ## Testing Guidelines
 
 No automated test suite exists yet. Until implementation lands:
