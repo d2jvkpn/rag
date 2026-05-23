@@ -57,3 +57,4 @@ CREATE TABLE document_chunks (
 );
 
 CREATE INDEX idx_document_chunks_document_id ON document_chunks (document_id);
+CREATE INDEX idx_document_chunks_document_id_chunk_index ON document_chunks (document_id, chunk_index);

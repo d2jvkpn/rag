@@ -11,11 +11,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
-	"backend/internal/api"
-	"backend/internal/config"
-	"backend/internal/repository"
-	"backend/internal/service"
+	"backend/internal/app"
+	"backend/internal/logger"
 )
 
 func main() {
@@ -24,33 +23,27 @@ func main() {
 	configPath := flag.String("config", filepath.Join("configs", "local.yaml"), "config file path")
 	flag.Parse()
 
-	cfg := config.Load(config.LoadOptions{
-		Release:    *release,
-		ConfigPath: *configPath,
-		HTTPAddr:   *addr,
-	})
+	v := app.LoadConfig(*configPath)
+	if *addr != "" {
+		v.Set("http.addr", *addr)
+	}
 
-	if cfg.Release {
+	logger.Init(filepath.Join(filepath.Dir(*configPath), "..", "logs"), *release)
+	defer logger.Sync()
+
+	if *release {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	store, err := initStore(cfg)
+	application, err := app.New(v)
 	if err != nil {
-		log.Fatalf("init store: %v", err)
+		logger.L.Fatal("init app", zap.Error(err))
 	}
-
-	documentService, err := service.NewDocumentService(cfg, store)
-	if err != nil {
-		log.Fatalf("init document service: %v", err)
-	}
-	defer documentService.Close()
-
-	authService := service.NewAuthService(store, cfg.JWTSecret)
-	handler := api.NewHandler(cfg, authService, documentService)
+	defer application.DocumentService.Close()
 
 	server := &http.Server{
-		Addr:              cfg.HTTPAddr,
-		Handler:           handler.Routes(),
+		Addr:              v.GetString("http.addr"),
+		Handler:           application.Handler.Routes(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -64,17 +57,12 @@ func main() {
 		_ = server.Shutdown(shutdownCtx)
 	}()
 
-	log.Printf("server starting release=%t addr=%s config=%s", cfg.Release, cfg.HTTPAddr, cfg.ConfigPath)
+	logger.L.Info("server starting",
+		zap.Bool("release", *release),
+		zap.String("addr", v.GetString("http.addr")),
+		zap.String("config", *configPath),
+	)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("listen: %v", err)
 	}
-}
-
-func initStore(cfg config.Config) (repository.Store, error) {
-	if cfg.DatabaseDSN != "" {
-		log.Printf("store: postgres dsn configured")
-		return repository.NewPostgresStore(cfg.DatabaseDSN, cfg.AdminUsername, cfg.AdminPassword)
-	}
-	log.Printf("store: using local json file %s", cfg.StatePath)
-	return repository.NewJSONStore(cfg.StatePath, cfg.AdminUsername, cfg.AdminPassword)
 }

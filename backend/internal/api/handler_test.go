@@ -12,39 +12,41 @@ import (
 	"testing"
 	"time"
 
-	"backend/internal/config"
+	"github.com/spf13/viper"
+
 	"backend/internal/repository"
 	"backend/internal/service"
 )
+
+func testConfig(tmpDir string) *viper.Viper {
+	v := viper.New()
+	v.Set("app.data_dir", filepath.Join(tmpDir, "data"))
+	v.Set("app.state_path", filepath.Join(tmpDir, "data", "app-state.json"))
+	v.Set("http.session_cookie", "rag_session")
+	v.Set("admin.username", "admin")
+	v.Set("admin.password", "admin123")
+	return v
+}
 
 func TestDocumentLifecycle(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	cfg := config.Config{
-		Release:       false,
-		ConfigPath:    filepath.Join(tmpDir, "local.yaml"),
-		HTTPAddr:      ":0",
-		DataDir:       filepath.Join(tmpDir, "data"),
-		StatePath:     filepath.Join(tmpDir, "data", "app-state.json"),
-		SessionCookie: "rag_session",
-		AdminUsername: "admin",
-		AdminPassword: "admin123",
-	}
+	v := testConfig(tmpDir)
 
-	store, err := repository.NewJSONStore(cfg.StatePath, cfg.AdminUsername, cfg.AdminPassword)
+	store, err := repository.NewJSONStore(v.GetString("app.state_path"), v.GetString("admin.username"), v.GetString("admin.password"))
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}
 
-	documentService, err := service.NewDocumentService(cfg, store)
+	documentService, err := service.NewDocumentService(v, store)
 	if err != nil {
 		t.Fatalf("init document service: %v", err)
 	}
 	defer documentService.Close()
 
 	authService := service.NewAuthService(store, "test-secret")
-	handler := NewHandler(cfg, authService, documentService).Routes()
+	handler := NewHandler(v, authService, documentService).Routes()
 
 	sessionCookie := loginForTest(t, handler)
 	documentID := createMarkdownDocumentForTest(t, handler, sessionCookie)
@@ -113,7 +115,7 @@ func TestDocumentLifecycle(t *testing.T) {
 		return ok && int(version) == 2 && documentResponse.Data["status"] == "review_pending"
 	})
 
-	if _, err := os.Stat(filepath.Join(cfg.DataDir, "chunks", "kb-1", documentID, "chunks-v2.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(v.GetString("app.data_dir"), "chunks", "kb-1", documentID, "chunks-v2.json")); err != nil {
 		t.Fatalf("expected chunk snapshot v2: %v", err)
 	}
 
@@ -126,7 +128,7 @@ func TestDocumentLifecycle(t *testing.T) {
 	}
 
 	waitForTest(t, time.Second, func() bool {
-		_, err := os.Stat(filepath.Join(cfg.DataDir, "documents", "kb-1", documentID))
+		_, err := os.Stat(filepath.Join(v.GetString("app.data_dir"), "documents", "kb-1", documentID))
 		return os.IsNotExist(err)
 	})
 }
@@ -135,27 +137,20 @@ func TestAuthRequired(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	cfg := config.Config{
-		HTTPAddr:      ":0",
-		DataDir:       filepath.Join(tmpDir, "data"),
-		StatePath:     filepath.Join(tmpDir, "data", "app-state.json"),
-		SessionCookie: "rag_session",
-		AdminUsername: "admin",
-		AdminPassword: "admin123",
-	}
+	v := testConfig(tmpDir)
 
-	store, err := repository.NewJSONStore(cfg.StatePath, cfg.AdminUsername, cfg.AdminPassword)
+	store, err := repository.NewJSONStore(v.GetString("app.state_path"), v.GetString("admin.username"), v.GetString("admin.password"))
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}
-	documentService, err := service.NewDocumentService(cfg, store)
+	documentService, err := service.NewDocumentService(v, store)
 	if err != nil {
 		t.Fatalf("init document service: %v", err)
 	}
 	defer documentService.Close()
 
 	authService := service.NewAuthService(store, "test-secret")
-	handler := NewHandler(cfg, authService, documentService).Routes()
+	handler := NewHandler(v, authService, documentService).Routes()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/documents", nil)
 	rec := httptest.NewRecorder()

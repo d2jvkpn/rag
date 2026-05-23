@@ -8,28 +8,32 @@ import (
 	"strings"
 	"testing"
 
-	"backend/internal/config"
+	"github.com/spf13/viper"
+
 	"backend/internal/repository"
 )
+
+func testConfig(tmpDir string) *viper.Viper {
+	v := viper.New()
+	v.Set("app.data_dir", filepath.Join(tmpDir, "data"))
+	v.Set("app.state_path", filepath.Join(tmpDir, "data", "app-state.json"))
+	v.Set("admin.username", "admin")
+	v.Set("admin.password", "admin123")
+	return v
+}
 
 func TestCreateDocumentDuplicateDoesNotLeaveFiles(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	cfg := config.Config{
-		DataDir:       filepath.Join(tmpDir, "data"),
-		StatePath:     filepath.Join(tmpDir, "data", "app-state.json"),
-		SessionCookie: "rag_session",
-		AdminUsername: "admin",
-		AdminPassword: "admin123",
-	}
+	v := testConfig(tmpDir)
 
-	store, err := repository.NewJSONStore(cfg.StatePath, cfg.AdminUsername, cfg.AdminPassword)
+	store, err := repository.NewJSONStore(v.GetString("app.state_path"), v.GetString("admin.username"), v.GetString("admin.password"))
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}
 
-	documentService, err := NewDocumentService(cfg, store)
+	documentService, err := NewDocumentService(v, store)
 	if err != nil {
 		t.Fatalf("init document service: %v", err)
 	}
@@ -57,7 +61,7 @@ func TestCreateDocumentDuplicateDoesNotLeaveFiles(t *testing.T) {
 		t.Fatalf("expected duplicate upload error, got second document %+v", second)
 	}
 
-	documentsDir := filepath.Join(cfg.DataDir, "documents", "kb-1")
+	documentsDir := filepath.Join(v.GetString("app.data_dir"), "documents", "kb-1")
 	entries, err := os.ReadDir(documentsDir)
 	if err != nil {
 		t.Fatalf("read documents dir: %v", err)

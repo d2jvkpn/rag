@@ -6,6 +6,9 @@ import (
 	"errors"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
+	migratepg "github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/lib/pq"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -13,6 +16,7 @@ import (
 
 	"backend/internal/model"
 	"backend/internal/uuid"
+	"backend/migrations"
 )
 
 type PostgresStore struct {
@@ -22,6 +26,10 @@ type PostgresStore struct {
 func NewPostgresStore(dsn, adminUsername, adminPassword string) (*PostgresStore, error) {
 	sqlDB, err := sql.Open("postgres", dsn)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := runMigrations(sqlDB); err != nil {
 		return nil, err
 	}
 
@@ -37,6 +45,25 @@ func NewPostgresStore(dsn, adminUsername, adminPassword string) (*PostgresStore,
 		return nil, err
 	}
 	return store, nil
+}
+
+func runMigrations(sqlDB *sql.DB) error {
+	src, err := iofs.New(migrations.FS, "sql")
+	if err != nil {
+		return err
+	}
+	driver, err := migratepg.WithInstance(sqlDB, &migratepg.Config{})
+	if err != nil {
+		return err
+	}
+	m, err := migrate.NewWithInstance("iofs", src, "postgres", driver)
+	if err != nil {
+		return err
+	}
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		return err
+	}
+	return nil
 }
 
 func (s *PostgresStore) ensureAdmin(username, password string) error {
@@ -111,9 +138,13 @@ func (s *PostgresStore) GetDocument(documentID string) (model.Document, error) {
 	return documentFromRow(row), nil
 }
 
-func (s *PostgresStore) ListDocuments() []model.Document {
+func (s *PostgresStore) ListDocuments(knowledgeBaseID string) []model.Document {
+	q := s.db.Order("created_at desc")
+	if knowledgeBaseID != "" {
+		q = q.Where("knowledge_base_id = ?", knowledgeBaseID)
+	}
 	var rows []documentRow
-	s.db.Order("created_at desc").Find(&rows)
+	q.Find(&rows)
 	docs := make([]model.Document, len(rows))
 	for i, r := range rows {
 		docs[i] = documentFromRow(r)
@@ -154,6 +185,21 @@ func (s *PostgresStore) DeleteDocument(documentID string) (model.Document, []mod
 		return model.Document{}, nil, err
 	}
 	return doc, chunks, nil
+}
+
+func (s *PostgresStore) GetChunk(chunkID string) (model.DocumentChunk, error) {
+	var row chunkRow
+	if err := s.db.First(&row, "chunk_id = ?", chunkID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return model.DocumentChunk{}, ErrNotFound
+		}
+		return model.DocumentChunk{}, err
+	}
+	return chunkFromRow(row), nil
+}
+
+func (s *PostgresStore) UpdateChunk(chunk model.DocumentChunk) error {
+	return s.db.Save(chunkToRow(chunk)).Error
 }
 
 func (s *PostgresStore) ReplaceChunks(documentID string, chunks []model.DocumentChunk) error {
