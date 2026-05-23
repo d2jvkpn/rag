@@ -43,11 +43,10 @@
 
 第一阶段当前实现说明：
 
-- HTTP 服务当前使用 `gin`
-- 状态存储先使用本地 JSON 文件
-- 异步处理先使用进程内 goroutine 队列
-- 鉴权先使用服务端 session + `HttpOnly Cookie`
-- 这些实现用于先跑通闭环，后续再切换到目标技术栈
+- HTTP 服务使用 `gin`
+- 状态存储：`JSONStore`（本地 JSON）和 `PostgresStore`（`gorm` + `lib/pq`）双实现，通过 `database.dsn` 配置选择
+- 异步处理使用进程内 goroutine 队列（`Asynq` 待接入）
+- 鉴权使用 `JWT + HttpOnly Cookie`（`github.com/golang-jwt/jwt/v5`）
 
 第一阶段不包含：
 
@@ -74,8 +73,8 @@
 
 - 第 1、2、3、4、5、7、8、9、10 步已完成最小骨架
 - `rechunk` 已提前落地
-- 第 6 步当前用进程内队列替代 `Asynq`
-- PostgreSQL、Milvus 和正式 worker 仍未开始
+- 第 6 步当前用进程内 goroutine 队列替代 `Asynq`
+- `PostgresStore` 已完整实现，通过 `database.dsn` 启用；Milvus 和 embedding 仍未开始
 
 ## 前端落地顺序
 

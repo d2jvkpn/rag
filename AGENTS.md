@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository is currently design-first. Use `AGENTS.md` for repository guidance and [docs/README.md](/home/appuser/workspace/rag.git/docs/README.md:1) as the documentation entry point. Main directories:
+Use `AGENTS.md` for repository guidance and [docs/README.md](/home/appuser/workspace/rag.git/docs/README.md:1) as the documentation entry point. Main directories:
 
 - `docs/`: planning documents for ingestion flow, architecture, API, and data model
 - `backend/`: future Go service code, plus backend-local `configs/`, `data/`, `logs/`, and `target/`
@@ -22,13 +22,28 @@ When implementation starts, keep service code in `backend/` and UI code in `fron
 
 ## Build, Test, and Development Commands
 
-There is no runnable application yet. For now, contributors mainly edit and review Markdown.
+### Backend (Go)
 
-- `ls -la`: inspect repository contents
-- `sed -n '1,120p' docs/backend.md`: read docs in chunks
-- `git status --short`: review local changes
+```bash
+cd backend
+go build ./...                    # compile
+go test ./...                     # run tests
+go run cmd/server/main.go         # dev server (uses configs/local.yaml, JSONStore)
+go run cmd/server/main.go --addr :8080 --config configs/local.yaml
+```
 
-Once code is added, document project-specific build and test commands here and in the relevant README.
+Config: `backend/configs/local.yaml`. Set `database.dsn` to enable PostgresStore; leave empty to use JSONStore.
+
+### Frontend (Vue 3 + Vite)
+
+```bash
+cd frontend
+npm install
+npm run dev      # dev server at http://localhost:5173 (proxies /api → :8080)
+npm run build    # production build → frontend/target/dist/
+```
+
+Runtime config: `frontend/public/app.json` — adjust `apiBase` if the backend is not on the same origin.
 
 ## Coding Style & Naming Conventions
 

@@ -39,18 +39,18 @@
 
 ## 当前第一阶段脚手架实现
 
-当前仓库已经落了一版可运行的后端最小骨架，但它是“第一阶段验证实现”，不是最终技术栈终态。
+当前仓库已经落了一版可运行的后端最小骨架，但它是”第一阶段验证实现”，不是最终技术栈终态。
 
 当前已落地实现：
 
-- HTTP 服务当前使用 `gin`
-- 鉴权先使用服务端 session + `HttpOnly Cookie`
+- HTTP 服务使用 `gin`
+- 鉴权使用 `JWT`（HS256，`github.com/golang-jwt/jwt/v5`），令牌存 `HttpOnly Cookie`
 - 配置文件固定使用 `backend/configs/local.yaml`
-- 配置读取使用 `viper`，统一通过 `viper.Viper.GetString/GetXX` 获取
+- 配置读取使用 `viper`，统一通过 `viper.GetString/GetXX` 获取
 - 启动参数使用命令行 flag，不使用环境变量
-- 当前状态存储先使用本地 JSON 文件，路径由 `state_path` 指定
-- 异步处理先使用进程内 goroutine 队列
-- chunk 快照先写入 `backend/data/chunks/`
+- 存储双实现：`JSONStore`（本地 JSON 文件，`state_path` 指定）和 `PostgresStore`（`gorm` + `lib/pq`），通过 `database.dsn` 配置自动选择
+- 异步处理先使用进程内 goroutine 队列（channel 容量 32）
+- chunk 快照写入 `backend/data/chunks/`
 
 当前启动参数：
 
@@ -58,15 +58,12 @@
 - `--addr string`
 - `--config configs/local.yaml`
 
-当前实现取舍：
+当前实现取舍（第一阶段历史记录）：
 
-- 先验证“上传 -> 解析 -> 切分 -> 快照 -> 查询 -> 删除”闭环
-- 先不引入 `gorm`
-- 先不接 `PostgreSQL`
-- 先不接 `Asynq`
-- 先不接 `Milvus`
-
-后续进入第二阶段时，再把 repository、任务队列、日志和鉴权能力逐步替换为目标技术栈。
+- 先验证”上传 -> 解析 -> 切分 -> 快照 -> 查询 -> 删除”闭环
+- 第一阶段未引入 `Asynq`，使用进程内 goroutine 队列；第三阶段已补充
+- 第一阶段未接入 `Milvus` 和 embedding API；第三阶段已补充
+- 第一阶段 `Logout` 为 no-op；现已实现 JTI + `TokenBlacklist`（内存/Redis 双实现）
 
 ## 目录约定
 
@@ -207,11 +204,12 @@ chunk 快照约定：
 - `JWT + HttpOnly Cookie`
 - JWT 实现库使用 `github.com/golang-jwt/jwt/v5`
 
-当前第一阶段脚手架实现：
+当前实现：
 
-- 暂时使用服务端 session + `HttpOnly Cookie`
-- 登录成功后在本地状态存储中写入 session
-- 该实现只用于第一阶段闭环验证，后续可切换为 JWT 方案
+- 使用 `JWT + HttpOnly Cookie`（HS256，`github.com/golang-jwt/jwt/v5`）
+- 每个 token 携带 JTI（UUID）
+- `Logout` 将 JTI 写入 `TokenBlacklist`，后续请求在 `withAuth()` 中被拦截
+- 未配置 `redis.dsn` 时使用 `MemoryBlacklist`（进程级，重启后失效）；配置后自动切换为 `RedisBlacklist`（TTL = token 剩余有效期）
 
 接口详见 [API 设计](./api.md)。
 
@@ -297,7 +295,7 @@ backend/
 
 ## 当前完成情况
 
-当前已完成：
+当前已完成（第一、二阶段）：
 
 - `backend/` Go 模块和最小目录骨架
 - `gin` 路由与鉴权中间件骨架
@@ -315,9 +313,13 @@ backend/
 - chunk 切分和 chunk JSON 快照写入
 - `rechunk` 接口和 chunk 版本递增
 - chunk 列表查询接口
+- chunk 审核接口：approve / reject / merge / index
+- 结构化日志（zap + lumberjack，同时输出控制台和 backend/logs/app.log）
+- `Embedder` 接口 + Noop 实现 + OpenAI-compatible 实现（`embedder/openai.go`）
+- `VectorStore` 接口 + Noop 实现 + Milvus REST API 实现（`vectorstore/milvus.go`）
+- `TaskQueue` 接口 + GoroutineQueue 实现（默认，无额外依赖）+ AsynqQueue 实现（需 Redis）
+- 启动时根据 `redis.dsn`、`embedder.*`、`milvus.*` 配置自动选择实现
 
 当前未完成：
 
-- `Asynq` worker
-- 正式 JWT 鉴权
-- embedding 和 Milvus
+- （第一版全部已完成）

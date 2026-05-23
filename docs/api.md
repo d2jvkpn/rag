@@ -108,6 +108,8 @@
 ### `POST /api/logout`
 
 - 退出登录
+- 清除客户端 Cookie，服务端将 token JTI 写入 `TokenBlacklist`
+- 已登出的 token 后续请求将返回 `401 unauthorized`
 
 ### `GET /api/me`
 
@@ -118,9 +120,9 @@
 ### `POST /api/documents`
 
 - 上传 `pdf/docx/pptx/markdown`
-- 创建文档记录
-- 投递异步解析任务
-- `documents.status` 初始值建议为 `uploaded`
+- 创建文档记录（同步），投递异步解析任务
+- `documents.status` 初始值为 `uploaded`
+- 返回 `202 Accepted`（文档已创建，处理异步进行）
 
 字段建议：
 
@@ -174,18 +176,58 @@
 
 如果未开启人工审核，系统可在自动切分完成后直接触发 embedding 和入库，不必等待 `approve`。
 
+## 语义检索接口
+
+### `POST /api/query`
+
+- 输入查询文本，返回语义相似的 chunk 列表
+- 使用与入库相同的 Embedder 对查询文本进行向量化，然后在 Milvus 中检索
+
+请求字段：
+
+- `knowledge_base_id`：可选，不传则跨所有知识库检索
+- `query`：查询文本（必填）
+- `top_k`：返回条数，默认 5，最大 50
+
+响应：
+
+```json
+{
+  "data": {
+    "query": "...",
+    "knowledge_base_id": "...",
+    "items": [
+      {
+        "ChunkID": "...",
+        "DocumentID": "...",
+        "KnowledgeBaseID": "...",
+        "Filename": "...",
+        "SourceType": "pdf",
+        "SectionTitle": "...",
+        "PageStart": 3,
+        "PageEnd": 4,
+        "ChunkIndex": 2,
+        "Text": "...",
+        "Score": 0.92
+      }
+    ]
+  }
+}
+```
+
+注意：未配置 `embedder.base_url` 和 `embedder.api_key` 时，接口返回 500 错误（Noop embedder 无法生成有效向量）。
+
 ## 状态查询建议
 
 文档状态：
 
-- `uploaded`
-- `pending`
-- `processing`
-- `review_pending`
-- `reviewing`
-- `approved`
-- `indexed`
-- `failed`
+- `uploaded`：文档已上传，等待处理
+- `processing`：解析或切分进行中
+- `review_pending`：切分完成，等待人工审核（或直接入库）
+- `reviewing`：人工审核进行中
+- `approved`：审核通过，待触发入库
+- `indexed`：已完成 embedding 和向量写入
+- `failed`：某阶段处理失败，错误原因见 `error_message`
 
 阶段状态：
 

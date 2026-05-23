@@ -151,7 +151,12 @@
 - `knowledge_base_id`
 - `title` 可选
 - `tags` 可选
-- 是否启用人工审核
+
+人工审核模式说明：
+
+- 是否启用人工审核由 `app.json` 中的全局配置控制，不是每次上传的表单字段
+- 当 `app.json` 开启人工审核时，前端在上传弹窗展示对应提示；关闭时隐藏相关 UI
+- 第一版后端不感知这个开关；审核流程由前端引导用户操作 chunk 审核接口实现
 
 业务要求：
 
@@ -326,14 +331,13 @@
 
 ### 文档状态
 
-- `uploaded`
-- `pending`
-- `processing`
-- `review_pending`
-- `reviewing`
-- `approved`
-- `indexed`
-- `failed`
+- `uploaded`：文档已上传，等待处理
+- `processing`：解析或切分进行中
+- `review_pending`：切分完成，等待人工审核（或直接入库）
+- `reviewing`：人工审核进行中
+- `approved`：审核通过，待触发入库
+- `indexed`：已完成 embedding 和向量写入
+- `failed`：某阶段处理失败，错误原因见 `error_message`
 
 ### 处理阶段
 
