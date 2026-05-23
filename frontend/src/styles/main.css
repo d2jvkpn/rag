@@ -1,0 +1,58 @@
+@import './tokens.css';
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg-color);
+  color: #333;
+}
+
+.page-layout {
+  min-height: 100%;
+}
+
+.page-body {
+  padding: 24px;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.page-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.split-view {
+  display: flex;
+  gap: 16px;
+  height: calc(100vh - 120px);
+}
+
+.split-view__left {
+  width: 320px;
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+
+.split-view__right {
+  flex: 1;
+  overflow-y: auto;
+}
