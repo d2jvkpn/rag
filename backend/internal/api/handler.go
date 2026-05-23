@@ -77,7 +77,7 @@ func (h *Handler) handleLogin(c *gin.Context) {
 
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(h.cfg.GetString("http.session_cookie"), token, 3600*24, "/", "", false, true)
-	writeData(c, 200, map[string]any{"user": sanitizeUser(user)})
+	writeData(c, 200, sanitizeUser(user))
 }
 
 func (h *Handler) handleLogout(c *gin.Context) {
@@ -107,10 +107,16 @@ func (h *Handler) handleCreateDocument(c *gin.Context) {
 	}
 	defer file.Close()
 
+	knowledgeBaseID := strings.TrimSpace(c.Request.FormValue("knowledge_base_id"))
+	if knowledgeBaseID == "" {
+		writeError(c, 400, "validation_error", "knowledge_base_id is required", []fieldError{{Field: "knowledge_base_id", Reason: "required"}})
+		return
+	}
+
 	document, err := h.documentService.CreateDocument(
 		file,
 		header,
-		c.Request.FormValue("knowledge_base_id"),
+		knowledgeBaseID,
 		c.Request.FormValue("title"),
 		c.Request.MultipartForm.Value["tags"],
 	)
@@ -177,7 +183,12 @@ func (h *Handler) handleGetChunks(c *gin.Context) {
 		h.writeStoreError(c, err)
 		return
 	}
-	writeData(c, 200, map[string]any{"items": chunks})
+	writeData(c, 200, map[string]any{
+		"items":     chunks,
+		"page":      1,
+		"page_size": len(chunks),
+		"total":     len(chunks),
+	})
 }
 
 func (h *Handler) handleRechunk(c *gin.Context) {
