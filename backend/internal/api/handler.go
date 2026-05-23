@@ -36,6 +36,7 @@ func (h *Handler) Routes() http.Handler {
 	apiGroup.POST("/login", h.handleLogin)
 	apiGroup.POST("/logout", h.withAuth(), h.handleLogout)
 	apiGroup.GET("/me", h.withAuth(), h.handleMe)
+	apiGroup.PUT("/me/password", h.withAuth(), h.handleChangePassword)
 	apiGroup.POST("/documents", h.withAuth(), h.handleCreateDocument)
 	apiGroup.GET("/documents", h.withAuth(), h.handleListDocuments)
 	apiGroup.GET("/documents/:document_id", h.withAuth(), h.handleGetDocument)
@@ -94,6 +95,38 @@ func (h *Handler) handleMe(c *gin.Context) {
 	writeData(c, 200, sanitizeUser(user))
 }
 
+func (h *Handler) handleChangePassword(c *gin.Context) {
+	user := c.MustGet("current_user").(model.User)
+	var body struct {
+		OldPassword string `json:"old_password"`
+		NewPassword string `json:"new_password"`
+	}
+	if err := json.NewDecoder(c.Request.Body).Decode(&body); err != nil {
+		writeError(c, 400, "validation_error", "invalid request body", nil)
+		return
+	}
+	var errs []fieldError
+	if strings.TrimSpace(body.OldPassword) == "" {
+		errs = append(errs, fieldError{Field: "old_password", Reason: "required"})
+	}
+	if strings.TrimSpace(body.NewPassword) == "" {
+		errs = append(errs, fieldError{Field: "new_password", Reason: "required"})
+	}
+	if len(errs) > 0 {
+		writeError(c, 400, "validation_error", "missing required fields", errs)
+		return
+	}
+	if err := h.authService.ChangePassword(user.UserID, body.OldPassword, body.NewPassword); err != nil {
+		if err.Error() == "incorrect current password" {
+			writeError(c, 400, "validation_error", err.Error(), []fieldError{{Field: "old_password", Reason: "incorrect"}})
+			return
+		}
+		writeError(c, 500, "internal_error", err.Error(), nil)
+		return
+	}
+	writeData(c, 200, map[string]any{"accepted": true})
+}
+
 func (h *Handler) handleCreateDocument(c *gin.Context) {
 	if err := c.Request.ParseMultipartForm(64 << 20); err != nil {
 		writeError(c, 400, "validation_error", "invalid multipart form", nil)
@@ -113,12 +146,14 @@ func (h *Handler) handleCreateDocument(c *gin.Context) {
 		return
 	}
 
+	humanReview := c.Request.FormValue("human_review") == "true"
 	document, err := h.documentService.CreateDocument(
 		file,
 		header,
 		knowledgeBaseID,
 		c.Request.FormValue("title"),
 		c.Request.MultipartForm.Value["tags"],
+		humanReview,
 	)
 	if err != nil {
 		status := 400
