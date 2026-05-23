@@ -95,7 +95,7 @@ func (s *DocumentService) Close() {
 	s.indexWg.Wait()
 }
 
-func (s *DocumentService) CreateDocument(file multipart.File, header *multipart.FileHeader, knowledgeBaseID, title string, tags []string) (model.Document, error) {
+func (s *DocumentService) CreateDocument(file multipart.File, header *multipart.FileHeader, knowledgeBaseID, title string, tags []string, humanReview bool) (model.Document, error) {
 	if knowledgeBaseID == "" {
 		return model.Document{}, errors.New("knowledge_base_id is required")
 	}
@@ -141,6 +141,7 @@ func (s *DocumentService) CreateDocument(file multipart.File, header *multipart.
 		SHA256:          hex.EncodeToString(sum[:]),
 		Status:          "uploaded",
 		Stage:           "upload",
+		HumanReview:     humanReview,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}

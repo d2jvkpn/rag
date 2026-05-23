@@ -266,6 +266,7 @@ type documentRow struct {
 	ChunkConfigHash   string         `gorm:"column:chunk_config_hash"`
 	StartedAt         *time.Time     `gorm:"column:started_at"`
 	FinishedAt        *time.Time     `gorm:"column:finished_at"`
+	HumanReview       bool           `gorm:"column:human_review"`
 }
 
 func (documentRow) TableName() string { return "documents" }
@@ -346,6 +347,7 @@ func documentFromRow(r documentRow) model.Document {
 		ChunkConfigHash:   r.ChunkConfigHash,
 		StartedAt:         r.StartedAt,
 		FinishedAt:        r.FinishedAt,
+		HumanReview:       r.HumanReview,
 	}
 }
 
@@ -376,6 +378,7 @@ func documentToRow(d model.Document) documentRow {
 		ChunkConfigHash:   d.ChunkConfigHash,
 		StartedAt:         d.StartedAt,
 		FinishedAt:        d.FinishedAt,
+		HumanReview:       d.HumanReview,
 	}
 }
 

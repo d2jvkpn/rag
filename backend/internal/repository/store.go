@@ -127,11 +127,14 @@ func (s *JSONStore) GetDocument(documentID string) (model.Document, error) {
 	return document, nil
 }
 
-func (s *JSONStore) ListDocuments() []model.Document {
+func (s *JSONStore) ListDocuments(knowledgeBaseID string) []model.Document {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	documents := make([]model.Document, 0, len(s.data.Documents))
 	for _, document := range s.data.Documents {
+		if knowledgeBaseID != "" && document.KnowledgeBaseID != knowledgeBaseID {
+			continue
+		}
 		documents = append(documents, document)
 	}
 	sort.Slice(documents, func(i, j int) bool {
@@ -154,6 +157,36 @@ func (s *JSONStore) DeleteDocument(documentID string) (model.Document, []model.D
 		return model.Document{}, nil, err
 	}
 	return document, chunks, nil
+}
+
+func (s *JSONStore) GetChunk(chunkID string) (model.DocumentChunk, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, chunks := range s.data.Chunks {
+		for _, c := range chunks {
+			if c.ChunkID == chunkID {
+				return c, nil
+			}
+		}
+	}
+	return model.DocumentChunk{}, ErrNotFound
+}
+
+func (s *JSONStore) UpdateChunk(chunk model.DocumentChunk) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	list, ok := s.data.Chunks[chunk.DocumentID]
+	if !ok {
+		return ErrNotFound
+	}
+	for i, c := range list {
+		if c.ChunkID == chunk.ChunkID {
+			list[i] = chunk
+			s.data.Chunks[chunk.DocumentID] = list
+			return s.persistLocked()
+		}
+	}
+	return ErrNotFound
 }
 
 func (s *JSONStore) ReplaceChunks(documentID string, chunks []model.DocumentChunk) error {

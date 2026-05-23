@@ -10,9 +10,11 @@ type Store interface {
 	CreateDocument(document model.Document) error
 	UpdateDocument(document model.Document) error
 	GetDocument(documentID string) (model.Document, error)
-	ListDocuments() []model.Document
+	ListDocuments(knowledgeBaseID string) []model.Document
 	DeleteDocument(documentID string) (model.Document, []model.DocumentChunk, error)
 
 	ReplaceChunks(documentID string, chunks []model.DocumentChunk) error
 	GetChunks(documentID string) ([]model.DocumentChunk, error)
+	GetChunk(chunkID string) (model.DocumentChunk, error)
+	UpdateChunk(chunk model.DocumentChunk) error
 }

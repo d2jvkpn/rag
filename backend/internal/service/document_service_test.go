@@ -45,6 +45,7 @@ func TestCreateDocumentDuplicateDoesNotLeaveFiles(t *testing.T) {
 		"kb-1",
 		"Sample",
 		nil,
+		false,
 	)
 	if err != nil {
 		t.Fatalf("create first document: %v", err)
@@ -56,6 +57,7 @@ func TestCreateDocumentDuplicateDoesNotLeaveFiles(t *testing.T) {
 		"kb-1",
 		"Sample",
 		nil,
+		false,
 	)
 	if err == nil {
 		t.Fatalf("expected duplicate upload error, got second document %+v", second)

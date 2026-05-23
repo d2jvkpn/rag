@@ -34,6 +34,7 @@ type Document struct {
 	ChunkConfigHash   string     `json:"chunk_config_hash,omitempty"`
 	StartedAt         *time.Time `json:"started_at,omitempty"`
 	FinishedAt        *time.Time `json:"finished_at,omitempty"`
+	HumanReview       bool       `json:"human_review"`
 }
 
 type ResourceRef struct {
