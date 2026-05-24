@@ -6,8 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"backend/internal/model"
-	"backend/internal/uuid"
 )
 
 const (
@@ -41,7 +42,7 @@ func BuildChunks(documentID, filename, text string, chunkVersion int) []model.Do
 			continue
 		}
 		chunks = append(chunks, model.DocumentChunk{
-			ChunkID:        uuid.NewV7(),
+			ChunkID:        uuid.Must(uuid.NewV7()).String(),
 			CreatedAt:      now,
 			UpdatedAt:      now,
 			DocumentID:     documentID,

@@ -11,8 +11,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"backend/internal/model"
-	"backend/internal/uuid"
 )
 
 var ErrNotFound = errors.New("not found")
@@ -54,7 +55,7 @@ func NewJSONStore(path, adminUsername, adminPassword string) (*JSONStore, error)
 	if len(store.data.Users) == 0 {
 		now := time.Now().UTC()
 		user := model.User{
-			UserID:       uuid.NewV7(),
+			UserID:       uuid.Must(uuid.NewV7()).String(),
 			Username:     adminUsername,
 			PasswordHash: hashPassword(adminPassword),
 			Status:       "active",

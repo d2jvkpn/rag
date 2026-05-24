@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 
 	"backend/internal/model"
 	"backend/internal/repository"
-	"backend/internal/uuid"
 )
 
 const tokenExpiry = 24 * time.Hour
@@ -100,7 +100,7 @@ func (s *AuthService) issueToken(userID string) (string, error) {
 	c := claims{
 		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ID:        uuid.NewV7(),
+			ID:        uuid.Must(uuid.NewV7()).String(),
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(tokenExpiry)),
 		},

@@ -19,6 +19,8 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 
+	"github.com/google/uuid"
+
 	"backend/internal/embedder"
 	"backend/internal/llm"
 	"backend/internal/logger"
@@ -26,7 +28,6 @@ import (
 	"backend/internal/parser"
 	"backend/internal/queue"
 	"backend/internal/repository"
-	"backend/internal/uuid"
 	"backend/internal/vectorstore"
 )
 
@@ -116,7 +117,7 @@ func (s *DocumentService) CreateDocument(file multipart.File, header *multipart.
 		return model.Document{}, errors.New("file is empty")
 	}
 
-	documentID := uuid.NewV7()
+	documentID := uuid.Must(uuid.NewV7()).String()
 	dir := filepath.Join(s.cfg.GetString("app.data_dir"), "documents", knowledgeBaseID, documentID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return model.Document{}, err
@@ -272,7 +273,7 @@ func (s *DocumentService) MergeChunks(documentID string, chunkIDs []string) erro
 
 	// create merged chunk at the first chunk's index position
 	newChunk := model.DocumentChunk{
-		ChunkID:        uuid.NewV7(),
+		ChunkID:        uuid.Must(uuid.NewV7()).String(),
 		CreatedAt:      now,
 		UpdatedAt:      now,
 		DocumentID:     documentID,

@@ -9,13 +9,13 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	migratepg "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
 	"backend/internal/model"
-	"backend/internal/uuid"
 	"backend/migrations"
 )
 
@@ -76,7 +76,7 @@ func (s *PostgresStore) ensureAdmin(username, password string) error {
 	}
 	now := time.Now().UTC()
 	row := userRow{
-		UserID:       uuid.NewV7(),
+		UserID:       uuid.Must(uuid.NewV7()).String(),
 		Username:     username,
 		PasswordHash: hashPassword(password),
 		Status:       "active",
