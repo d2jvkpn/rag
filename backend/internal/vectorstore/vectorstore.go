@@ -50,7 +50,7 @@ type VectorStore interface {
 // Noop discards all writes and returns empty search results.
 type Noop struct{}
 
-func (Noop) Upsert(_ context.Context, _ []VectorRecord) error { return nil }
+func (Noop) Upsert(_ context.Context, _ []VectorRecord) error      { return nil }
 func (Noop) DeleteByDocument(_ context.Context, _, _ string) error { return nil }
 func (Noop) Search(_ context.Context, _ string, _ []float32, _ int) ([]SearchResult, error) {
 	return nil, nil

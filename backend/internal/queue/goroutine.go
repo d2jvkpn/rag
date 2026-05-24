@@ -4,8 +4,8 @@ import "sync"
 
 // GoroutineQueue dispatches tasks to a pool of goroutines via a buffered channel.
 type GoroutineQueue struct {
-	ch      chan task
-	wg      sync.WaitGroup
+	ch chan task
+	wg sync.WaitGroup
 }
 
 type task struct {
