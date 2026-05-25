@@ -52,12 +52,7 @@
     </n-modal>
 
     <n-modal v-model:show="showTOTPModal" preset="card" title="两步验证" style="width:400px" :mask-closable="false">
-      <div v-if="totpStep === 'idle'" style="text-align:center;padding:8px 0">
-        <n-text depth="3" style="display:block;margin-bottom:16px">为账户添加动态验证码保护，登录时需要额外输入 App 中显示的 6 位验证码。</n-text>
-        <n-button type="primary" :loading="totpLoading" @click="startTOTPSetup">开始设置</n-button>
-      </div>
-
-      <div v-else-if="totpStep === 'setup'">
+      <div v-if="totpStep === 'setup'">
         <div style="text-align:center;margin-bottom:12px">
           <img v-if="totpQRDataUrl" :src="totpQRDataUrl" alt="QR Code" style="width:200px;height:200px" />
         </div>
@@ -65,7 +60,7 @@
         <n-text code style="font-size:13px;word-break:break-all;display:block;margin-bottom:16px">{{ totpSecret }}</n-text>
         <n-input
           v-model:value="totpCode"
-          placeholder="输入 App 中显示的 6 位验证码"
+          placeholder="000000"
           maxlength="6"
           :allow-input="(v) => /^\d*$/.test(v)"
           style="margin-bottom:8px"
@@ -77,7 +72,7 @@
         <n-text depth="3" style="display:block;margin-bottom:16px">关闭两步验证后，登录时将不再需要动态验证码。请输入当前验证码以确认操作。</n-text>
         <n-input
           v-model:value="totpCode"
-          placeholder="输入 App 中显示的 6 位验证码"
+          placeholder="000000"
           maxlength="6"
           :allow-input="(v) => /^\d*$/.test(v)"
           style="margin-bottom:8px"
@@ -225,7 +220,7 @@ async function submitPasswordChange() {
 
 // TOTP modal
 const showTOTPModal = ref(false)
-const totpStep = ref('idle') // idle | setup | confirm | disable
+const totpStep = ref('setup') // setup | disable
 const totpSecret = ref('')
 const totpQRDataUrl = ref('')
 const totpCode = ref('')
@@ -233,12 +228,17 @@ const totpLoading = ref(false)
 const totpError = ref('')
 
 async function openTOTPModal() {
-  totpStep.value = auth.user?.totp_enabled ? 'disable' : 'idle'
   totpCode.value = ''
   totpError.value = ''
   totpSecret.value = ''
   totpQRDataUrl.value = ''
   showTOTPModal.value = true
+  if (auth.user?.totp_enabled) {
+    totpStep.value = 'disable'
+  } else {
+    totpStep.value = 'setup'
+    startTOTPSetup()
+  }
 }
 
 async function startTOTPSetup() {
