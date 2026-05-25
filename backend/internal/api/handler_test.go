@@ -34,7 +34,8 @@ func TestDocumentLifecycle(t *testing.T) {
 	tmpDir := t.TempDir()
 	v := testConfig(tmpDir)
 
-	store, err := repository.NewJSONStore(v.GetString("app.state_path"), []repository.AccountSeed{{Username: "admin", Password: "admin123"}})
+	accounts := []repository.AccountSeed{{Username: "admin", Password: "admin123", Permissions: []string{"view_user_list", "delete_documents", "disable_users"}}}
+	store, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}
@@ -45,10 +46,10 @@ func TestDocumentLifecycle(t *testing.T) {
 	}
 	defer documentService.Close()
 
-	authService := service.NewAuthService(store, "test-secret", 0)
+	authService := service.NewAuthService(store, "test-secret", 0, accounts)
 	handler := NewHandler(v, authService, documentService).Routes()
 
-	sessionCookie := loginForTest(t, handler)
+	sessionCookie := loginForTest(t, handler, "admin", "admin123")
 	documentID := createMarkdownDocumentForTest(t, handler, sessionCookie)
 
 	var documentResponse struct {
@@ -139,7 +140,8 @@ func TestAuthRequired(t *testing.T) {
 	tmpDir := t.TempDir()
 	v := testConfig(tmpDir)
 
-	store, err := repository.NewJSONStore(v.GetString("app.state_path"), []repository.AccountSeed{{Username: "admin", Password: "admin123"}})
+	accounts := []repository.AccountSeed{{Username: "admin", Password: "admin123"}}
+	store, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}
@@ -149,7 +151,7 @@ func TestAuthRequired(t *testing.T) {
 	}
 	defer documentService.Close()
 
-	authService := service.NewAuthService(store, "test-secret", 0)
+	authService := service.NewAuthService(store, "test-secret", 0, accounts)
 	handler := NewHandler(v, authService, documentService).Routes()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/documents", nil)
@@ -160,10 +162,161 @@ func TestAuthRequired(t *testing.T) {
 	}
 }
 
-func loginForTest(t *testing.T, handler http.Handler) *http.Cookie {
+func TestUserListRequiresPermission(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	v := testConfig(tmpDir)
+	accounts := []repository.AccountSeed{
+		{Username: "admin", Password: "admin123", Permissions: []string{"view_user_list"}},
+		{Username: "user1", Password: "user123"},
+	}
+
+	store, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
+	if err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+	documentService, err := service.NewDocumentService(v, store)
+	if err != nil {
+		t.Fatalf("init document service: %v", err)
+	}
+	defer documentService.Close()
+
+	authService := service.NewAuthService(store, "test-secret", 0, accounts)
+	handler := NewHandler(v, authService, documentService).Routes()
+
+	adminCookie := loginForTest(t, handler, "admin", "admin123")
+	userCookie := loginForTest(t, handler, "user1", "user123")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
+	req.AddCookie(adminCookie)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin list users status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/users", nil)
+	req.AddCookie(userCookie)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("user list users status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestDisableUserBlocksFurtherRequests(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	v := testConfig(tmpDir)
+	accounts := []repository.AccountSeed{
+		{Username: "admin", Password: "admin123", Permissions: []string{"disable_users", "view_user_list"}},
+		{Username: "user1", Password: "user123"},
+	}
+
+	store, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
+	if err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+	documentService, err := service.NewDocumentService(v, store)
+	if err != nil {
+		t.Fatalf("init document service: %v", err)
+	}
+	defer documentService.Close()
+
+	authService := service.NewAuthService(store, "test-secret", 0, accounts)
+	handler := NewHandler(v, authService, documentService).Routes()
+
+	adminCookie := loginForTest(t, handler, "admin", "admin123")
+	userCookie := loginForTest(t, handler, "user1", "user123")
+
+	user, err := store.FindUserByUsername("user1")
+	if err != nil {
+		t.Fatalf("find user1: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/users/"+user.UserID+"/disable", nil)
+	req.AddCookie(adminCookie)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("disable user status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/me", nil)
+	req.AddCookie(userCookie)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("disabled user /me status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(`{"username":"user1","password":"user123"}`))
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("disabled user login status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestDeleteDocumentPermissionOverridesOwnership(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	v := testConfig(tmpDir)
+	accounts := []repository.AccountSeed{
+		{Username: "admin", Password: "admin123", Permissions: []string{"delete_documents"}},
+		{Username: "user1", Password: "user123"},
+	}
+
+	store, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
+	if err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+	documentService, err := service.NewDocumentService(v, store)
+	if err != nil {
+		t.Fatalf("init document service: %v", err)
+	}
+	defer documentService.Close()
+
+	authService := service.NewAuthService(store, "test-secret", 0, accounts)
+	handler := NewHandler(v, authService, documentService).Routes()
+
+	userCookie := loginForTest(t, handler, "user1", "user123")
+	adminCookie := loginForTest(t, handler, "admin", "admin123")
+	documentID := createMarkdownDocumentForTest(t, handler, userCookie)
+
+	waitForTest(t, 2*time.Second, func() bool {
+		req := httptest.NewRequest(http.MethodGet, "/api/documents/"+documentID, nil)
+		req.AddCookie(userCookie)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			return false
+		}
+		var response struct {
+			Data map[string]any `json:"data"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+			t.Fatalf("decode document response: %v", err)
+		}
+		return response.Data["status"] == "review_pending"
+	})
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/documents/"+documentID, nil)
+	req.AddCookie(adminCookie)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("admin delete other user's doc status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func loginForTest(t *testing.T, handler http.Handler, username, password string) *http.Cookie {
 	t.Helper()
 
-	body := strings.NewReader(`{"username":"admin","password":"admin123"}`)
+	body := strings.NewReader(`{"username":"` + username + `","password":"` + password + `"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/login", body)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)

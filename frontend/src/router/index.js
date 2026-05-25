@@ -6,6 +6,7 @@ import DocumentsPage from '../pages/DocumentsPage.vue'
 import DocumentDetailPage from '../pages/DocumentDetailPage.vue'
 import DocumentChunksPage from '../pages/DocumentChunksPage.vue'
 import SearchPage from '../pages/SearchPage.vue'
+import UsersPage from '../pages/UsersPage.vue'
 
 const routes = [
   { path: '/login', component: LoginPage },
@@ -19,6 +20,7 @@ const routes = [
       { path: 'documents/:documentId', component: DocumentDetailPage },
       { path: 'documents/:documentId/chunks', component: DocumentChunksPage },
       { path: 'search', component: SearchPage },
+      { path: 'users', component: UsersPage, meta: { requiresPermission: 'view_user_list' } },
     ],
   },
 ]
@@ -33,6 +35,9 @@ router.beforeEach(async (to) => {
   const auth = useAuthStore()
   if (!auth.user) await auth.fetchMe()
   if (!auth.user) return { path: '/login', query: { redirect: to.fullPath } }
+  if (to.meta.requiresPermission && !auth.user.permissions?.includes(to.meta.requiresPermission)) {
+    return { path: '/documents' }
+  }
   return true
 })
 

@@ -111,7 +111,7 @@
 import { computed, h, ref, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { NIcon, useDialog, useMessage } from 'naive-ui'
-import { DocumentOutline, SearchOutline, LogOutOutline as LogOutIcon, KeyOutline as KeyIcon, PersonCircleOutline as PersonIcon, ShieldCheckmarkOutline as ShieldIcon, LanguageOutline as LangIcon } from '@vicons/ionicons5'
+import { DocumentOutline, SearchOutline, PeopleOutline, LogOutOutline as LogOutIcon, KeyOutline as KeyIcon, PersonCircleOutline as PersonIcon, ShieldCheckmarkOutline as ShieldIcon, LanguageOutline as LangIcon } from '@vicons/ionicons5'
 import QRCode from 'qrcode'
 import { useAuthStore } from '../stores/auth.js'
 import { getConfig } from '../config/app-config.js'
@@ -132,6 +132,7 @@ const activeKey = computed(() => {
   const p = route.path
   if (p.startsWith('/documents')) return 'documents'
   if (p.startsWith('/search')) return 'search'
+  if (p.startsWith('/users')) return 'users'
   return null
 })
 
@@ -139,10 +140,16 @@ function icon(component) {
   return () => h(NIcon, null, { default: () => h(component) })
 }
 
-const menuOptions = computed(() => [
-  { label: t('nav.documents'), key: 'documents', icon: icon(DocumentOutline) },
-  { label: t('nav.search'), key: 'search', icon: icon(SearchOutline) },
-])
+const menuOptions = computed(() => {
+  const items = [
+    { label: t('nav.documents'), key: 'documents', icon: icon(DocumentOutline) },
+    { label: t('nav.search'), key: 'search', icon: icon(SearchOutline) },
+  ]
+  if (auth.user?.permissions?.includes('view_user_list')) {
+    items.push({ label: t('nav.users'), key: 'users', icon: icon(PeopleOutline) })
+  }
+  return items
+})
 
 const userMenuOptions = computed(() => [
   { label: t('user.changePassword'), key: 'change-password', icon: () => h(NIcon, null, { default: () => h(KeyIcon) }) },

@@ -69,6 +69,7 @@
 4. 文档详情页
 5. chunk 审核页
 6. 知识库查询页
+7. 用户列表页（仅对具备权限的用户显示）
 
 ## 页面设计
 
@@ -149,7 +150,7 @@
 表单字段：
 
 - `file`
-- `knowledge_base_id`（选择后自动展示该 collection 的 dim / analyzer / chunk_size / chunk_overlap，帮助用户确认入库参数）
+- `knowledge_base_id`（选择后自动展示该 collection 的 dim / analyzer / chunk_size / chunk_overlap / min_chunks，帮助用户确认入库参数）
 - `title` 可选
 - `tags` 可选
 - `human_review` 开关
@@ -252,6 +253,21 @@
 
 - 在指定知识库中执行语义检索，查看命中 chunk 和 AI 回答
 
+### 用户列表页
+
+用途：
+
+- 查看全部账户
+- 查看账户状态、两步验证状态、最后登录时间
+- 查看由配置文件下发的 `permissions`
+- 对其他账户执行启用、禁用
+
+业务要求：
+
+- 仅具备 `view_user_list` 权限的用户可进入
+- 仅具备 `disable_users` 权限的用户可执行启用、禁用
+- 不允许对自己执行状态切换
+
 布局：
 
 - 顶部参数区（卡片内）：知识库选择 → 文档筛选按钮 → Top K → 搜索模式 → 高级参数收起/展开
@@ -261,7 +277,7 @@
 关键交互设计：
 
 - **知识库必选**：不支持跨 collection 检索，未选 KB 时搜索按钮禁用
-- **Collection 参数展示**：选择知识库后，立即显示该 collection 的 `dim / analyzer / chunk_size / chunk_overlap`，让用户了解入库参数
+- **Collection 参数展示**：选择知识库后，立即显示该 collection 的 `dim / analyzer / chunk_size / chunk_overlap / min_chunks`，让用户了解入库参数
 - **文档筛选抽屉**：点击"全部文档"按钮打开右侧抽屉，可搜索文件名、全选/取消全选、勾选指定文档后点确认，范围缩小至已选文档；关闭不提交；"重置"仅清空抽屉内临时选择
 - **搜索模式**：Dense（纯向量）/ BM25（全文）/ Hybrid（两路 + RRF 重排）三选一
 - **高级参数**：EF（HNSW 搜索精度，dense/hybrid）、Drop Ratio（BM25 剪枝，bm25/hybrid）、RRF K（hybrid）

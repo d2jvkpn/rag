@@ -34,14 +34,14 @@
         :columns="columns"
         :data="filteredDocuments"
         :loading="loading"
-        :pagination="{ pageSize: 20 }"
+        :pagination="pagination"
         :row-key="(row) => row.document_id"
         size="small"
       />
     </div>
 
     <!-- Upload Modal -->
-    <n-modal v-model:show="showUpload" preset="card" :title="t('documents.uploadModal.title')" style="width:480px" @after-enter="loadKbOptions">
+    <n-modal v-model:show="showUpload" preset="card" :title="t('documents.uploadModal.title')" class="upload-modal" style="width:560px" @after-enter="loadKbOptions">
       <n-form ref="uploadFormRef" :model="uploadForm" :rules="uploadRules">
         <n-form-item :label="t('documents.uploadModal.file')" path="file">
           <n-upload
@@ -50,31 +50,36 @@
             :default-upload="false"
             @change="onFileChange"
           >
-            <n-upload-dragger>
+            <n-upload-dragger class="upload-modal__dragger">
               <n-icon size="32"><upload-icon /></n-icon>
-              <n-text>{{ t('documents.uploadModal.dragHint') }}</n-text>
-              <n-text depth="3" style="font-size:12px">{{ t('documents.uploadModal.supportedFormats') }}</n-text>
+              <div class="upload-modal__dragger-copy">
+                <n-text class="upload-modal__dragger-title">{{ t('documents.uploadModal.dragHint') }}</n-text>
+                <n-text depth="3" class="upload-modal__dragger-subtitle">{{ t('documents.uploadModal.supportedFormats') }}</n-text>
+              </div>
             </n-upload-dragger>
           </n-upload>
         </n-form-item>
         <n-form-item :label="t('documents.uploadModal.knowledgeBase')" path="knowledgeBaseId">
-          <div style="width:100%;display:flex;flex-direction:column;gap:6px">
+          <div class="upload-modal__kb">
             <n-select
               v-model:value="uploadForm.knowledgeBaseId"
               :options="kbOptions"
               :placeholder="t('documents.uploadModal.selectKb')"
               style="width:100%"
             />
-            <div v-if="currentUploadKbConfig" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-              <n-text depth="3" style="font-size:12px">
-                dim <n-tag size="tiny" :bordered="false">{{ currentUploadKbConfig.dim }}</n-tag>
+            <div v-if="currentUploadKbConfig" class="upload-modal__kb-meta">
+              <n-text depth="3" class="upload-modal__kb-meta-item">
+                dim <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.dim }}</n-tag>
               </n-text>
-              <n-text depth="3" style="font-size:12px">
-                analyzer <n-tag size="tiny" :bordered="false">{{ currentUploadKbConfig.analyzer || 'chinese' }}</n-tag>
+              <n-text depth="3" class="upload-modal__kb-meta-item">
+                analyzer <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.analyzer || 'chinese' }}</n-tag>
               </n-text>
-              <n-text depth="3" style="font-size:12px">
-                chunk <n-tag size="tiny" :bordered="false">{{ currentUploadKbConfig.chunk_size }}</n-tag>
-                overlap <n-tag size="tiny" :bordered="false">{{ currentUploadKbConfig.chunk_overlap }}</n-tag>
+              <n-text depth="3" class="upload-modal__kb-meta-item">
+                chunk <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.chunk_size }}</n-tag>
+                overlap <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.chunk_overlap }}</n-tag>
+              </n-text>
+              <n-text depth="3" class="upload-modal__kb-meta-item upload-modal__kb-meta-item--full">
+                min chunks <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.min_chunks }}</n-tag>
               </n-text>
             </div>
           </div>
@@ -86,12 +91,14 @@
           <n-dynamic-tags v-model:value="uploadForm.tags" />
         </n-form-item>
         <n-form-item :label="t('documents.uploadModal.humanReview')">
-          <n-switch v-model:value="uploadForm.humanReview" />
-          <n-text depth="3" style="font-size:12px;margin-left:8px">{{ t('documents.uploadModal.humanReviewHint') }}</n-text>
+          <div class="upload-modal__review">
+            <n-switch v-model:value="uploadForm.humanReview" />
+            <n-text depth="3" class="upload-modal__review-hint">{{ t('documents.uploadModal.humanReviewHint') }}</n-text>
+          </div>
         </n-form-item>
       </n-form>
       <template #footer>
-        <div style="display:flex;gap:8px;justify-content:flex-end">
+        <div class="upload-modal__footer">
           <n-button @click="showUpload = false">{{ t('documents.uploadModal.cancel') }}</n-button>
           <n-button type="primary" :loading="uploading" @click="handleUpload">{{ t('documents.upload') }}</n-button>
         </div>
@@ -101,7 +108,7 @@
 </template>
 
 <script setup>
-import { ref, computed, h, onMounted } from 'vue'
+import { ref, computed, h, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage, useDialog, NButton, NTag, NSpace, NText, NEllipsis } from 'naive-ui'
 import { CloudUploadOutline as UploadIcon } from '@vicons/ionicons5'
@@ -119,8 +126,10 @@ const dialog = useDialog()
 const filters = useDocumentFiltersStore()
 const { t } = useI18n()
 const { fromNow, rfc3339 } = useFormat()
+const pageSize = 20
 
 const documents = ref([])
+const currentPage = ref(1)
 const loading = ref(false)
 const error = ref('')
 const lastRefreshed = ref('')
@@ -145,6 +154,17 @@ const filteredDocuments = computed(() => {
   return documents.value.filter(d => d.status === filters.statusFilter)
 })
 
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredDocuments.value.length / pageSize)))
+const displayPage = computed(() => Math.min(currentPage.value, totalPages.value))
+const pageStart = computed(() => filteredDocuments.value.length === 0 ? 0 : (displayPage.value - 1) * pageSize + 1)
+const pageEnd = computed(() => filteredDocuments.value.length === 0 ? 0 : Math.min(displayPage.value * pageSize, filteredDocuments.value.length))
+const pagination = computed(() => ({
+  page: displayPage.value,
+  pageSize,
+  prefix: () => t('documents.pageSummary', { page: displayPage.value, pages: totalPages.value, start: pageStart.value, end: pageEnd.value, total: filteredDocuments.value.length }),
+  onUpdatePage: (page) => { currentPage.value = page },
+}))
+
 const currentUploadKbConfig = computed(() => kbConfigs.value[uploadForm.value.knowledgeBaseId] || null)
 
 async function loadKbOptions() {
@@ -164,6 +184,7 @@ async function loadDocuments() {
   try {
     const data = await documentsService.list(filters.knowledgeBaseId)
     documents.value = data.items || []
+    currentPage.value = 1
     lastRefreshed.value = t('documents.updatedAt', { time: new Date().toLocaleTimeString() })
   } catch (e) {
     error.value = e.message
@@ -171,6 +192,10 @@ async function loadDocuments() {
     loading.value = false
   }
 }
+
+watch(totalPages, (pages) => {
+  if (currentPage.value > pages) currentPage.value = pages
+})
 
 function onFileChange({ fileList }) {
   selectedFile.value = fileList[0]?.file || null
@@ -316,3 +341,82 @@ const columns = computed(() => [
 
 onMounted(() => { loadDocuments(); loadKbOptions() })
 </script>
+
+<style scoped>
+.upload-modal :deep(.n-card-header) {
+  padding-bottom: 8px;
+}
+
+.upload-modal :deep(.n-card__content) {
+  padding-top: 4px;
+}
+
+.upload-modal__dragger :deep(.n-upload-dragger__content) {
+  min-height: 132px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.upload-modal__dragger-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.upload-modal__dragger-title {
+  font-size: 15px;
+}
+
+.upload-modal__dragger-subtitle {
+  font-size: 12px;
+}
+
+.upload-modal__kb {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.upload-modal__kb-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+}
+
+.upload-modal__kb-meta-item {
+  font-size: 12px;
+}
+
+.upload-modal__kb-meta-item :deep(.n-tag) {
+  margin-left: 4px;
+}
+
+.upload-modal__kb-meta-item--full {
+  flex-basis: 100%;
+}
+
+.upload-modal__review {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.upload-modal__review-hint {
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 420px;
+}
+
+.upload-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+</style>

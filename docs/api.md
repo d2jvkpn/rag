@@ -115,6 +115,7 @@
 
 - 获取当前登录用户信息
 - 响应包含 `totp_enabled` 字段，表示当前用户是否已开启两步验证
+- 响应包含 `permissions` 字段；该字段来自配置文件 `accounts[].permissions`，不从数据库读取
 
 ### `POST /api/login`（TOTP 两步验证）
 
@@ -176,11 +177,12 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 - `title` 可选
 - `tags` 可选
 
-### 文档所有权
+### 文档所有权与删除权限
 
-所有用户均可查看所有文档，但以下操作仅限文档上传者（返回 `403 forbidden`）：
+所有用户均可查看所有文档。
 
-- `DELETE /api/documents/:id`
+以下操作仅限文档上传者（返回 `403 forbidden`）：
+
 - `POST /api/documents/:id/chunks/rechunk`
 - `POST /api/documents/:id/chunks/approve`
 - `POST /api/documents/:id/chunks/merge`
@@ -190,6 +192,11 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 - `POST /api/documents/:id/index`
 
 注：`uploader_id` 为空的文档（存量数据）不受所有权限制。
+
+`DELETE /api/documents/:id` 允许两类用户执行：
+
+- 文档上传者本人
+- 配置权限中包含 `delete_documents` 的用户
 
 ### `GET /api/documents`
 
@@ -205,6 +212,28 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 - 删除本地原文件
 - 删除 chunk 记录
 - 删除 Milvus 向量
+
+## 用户接口
+
+### `GET /api/users`
+
+- 返回全部账户列表
+- 需要权限 `view_user_list`
+- 返回字段包含数据库中的 `status`，以及按用户名从配置补出的 `permissions`
+
+### `POST /api/users/:user_id/disable`
+
+- 将目标用户状态设为 `disabled`
+- 需要权限 `disable_users`
+- 被禁用用户后续登录返回 `403 forbidden`
+- 已登录但被禁用的用户，在后续请求鉴权阶段返回 `403 forbidden`
+- 不允许禁用自己
+
+### `POST /api/users/:user_id/enable`
+
+- 将目标用户状态设为 `active`
+- 需要权限 `disable_users`
+- 不允许操作自己的状态
 
 ## Chunk 审核接口
 
@@ -253,7 +282,8 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
         "dim": 1024,
         "analyzer": "chinese",
         "chunk_size": 512,
-        "chunk_overlap": 64
+        "chunk_overlap": 64,
+        "min_chunks": 3
       }
     ]
   }

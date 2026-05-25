@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -15,6 +16,8 @@ import (
 )
 
 var ErrTOTPRequired = errors.New("totp_required")
+var ErrUserDisabled = errors.New("user_disabled")
+var ErrCannotChangeOwnStatus = errors.New("cannot change your own status")
 
 const defaultTokenTTL = 8 * time.Hour
 
@@ -24,17 +27,23 @@ type claims struct {
 }
 
 type AuthService struct {
-	store     repository.Store
-	jwtSecret []byte
-	tokenTTL  time.Duration
-	blacklist TokenBlacklist
+	store       repository.Store
+	jwtSecret   []byte
+	tokenTTL    time.Duration
+	blacklist   TokenBlacklist
+	permsByUser map[string][]string
 }
 
-func NewAuthService(store repository.Store, jwtSecret string, tokenTTL time.Duration, bl ...TokenBlacklist) *AuthService {
+func NewAuthService(store repository.Store, jwtSecret string, tokenTTL time.Duration, accounts []repository.AccountSeed, bl ...TokenBlacklist) *AuthService {
 	if tokenTTL <= 0 {
 		tokenTTL = defaultTokenTTL
 	}
-	svc := &AuthService{store: store, jwtSecret: []byte(jwtSecret), tokenTTL: tokenTTL}
+	svc := &AuthService{
+		store:       store,
+		jwtSecret:   []byte(jwtSecret),
+		tokenTTL:    tokenTTL,
+		permsByUser: buildPermissionMap(accounts),
+	}
 	if len(bl) > 0 && bl[0] != nil {
 		svc.blacklist = bl[0]
 	} else {
@@ -49,6 +58,9 @@ func (s *AuthService) Login(username, password, totpCode string) (model.User, st
 	user, err := s.store.FindUserByUsername(username)
 	if err != nil {
 		return model.User{}, "", errors.New("invalid username or password")
+	}
+	if err := ensureUserActive(user); err != nil {
+		return model.User{}, "", err
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
 		return model.User{}, "", errors.New("invalid username or password")
@@ -167,7 +179,46 @@ func (s *AuthService) Me(tokenStr string) (model.User, error) {
 	if err != nil {
 		return model.User{}, err
 	}
-	return s.store.GetUser(c.UserID)
+	user, err := s.store.GetUser(c.UserID)
+	if err != nil {
+		return model.User{}, err
+	}
+	if err := ensureUserActive(user); err != nil {
+		return model.User{}, err
+	}
+	return user, nil
+}
+
+func (s *AuthService) Permissions(user model.User) []string {
+	perms := s.permsByUser[user.Username]
+	if len(perms) == 0 {
+		return []string{}
+	}
+	return append([]string(nil), perms...)
+}
+
+func (s *AuthService) HasPermission(user model.User, permission string) bool {
+	return slices.Contains(s.permsByUser[user.Username], permission)
+}
+
+func (s *AuthService) ListUsers() []model.User {
+	return s.store.ListUsers()
+}
+
+func (s *AuthService) SetUserStatus(actor model.User, userID, status string) error {
+	user, err := s.store.GetUser(userID)
+	if err != nil {
+		return err
+	}
+	if user.UserID == actor.UserID {
+		return ErrCannotChangeOwnStatus
+	}
+	if user.Status == status {
+		return nil
+	}
+	user.Status = status
+	user.UpdatedAt = time.Now().UTC()
+	return s.store.UpdateUser(user)
 }
 
 func (s *AuthService) issueToken(userID string) (string, error) {
@@ -220,3 +271,35 @@ func (s *AuthService) parseToken(tokenStr string) (*claims, error) {
 	return c, nil
 }
 
+func ensureUserActive(user model.User) error {
+	if user.Status == "" || user.Status == "active" {
+		return nil
+	}
+	if user.Status == "disabled" {
+		return ErrUserDisabled
+	}
+	return fmt.Errorf("user status %q is not allowed", user.Status)
+}
+
+func buildPermissionMap(accounts []repository.AccountSeed) map[string][]string {
+	out := make(map[string][]string, len(accounts))
+	for _, acc := range accounts {
+		if acc.Username == "" {
+			continue
+		}
+		seen := make(map[string]struct{}, len(acc.Permissions))
+		perms := make([]string, 0, len(acc.Permissions))
+		for _, p := range acc.Permissions {
+			switch p {
+			case "view_user_list", "delete_documents", "disable_users":
+				if _, ok := seen[p]; ok {
+					continue
+				}
+				seen[p] = struct{}{}
+				perms = append(perms, p)
+			}
+		}
+		out[acc.Username] = perms
+	}
+	return out
+}

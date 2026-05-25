@@ -20,6 +20,7 @@ export default {
   nav: {
     documents: '文档管理',
     search: '知识库查询',
+    users: '账户列表',
   },
   user: {
     changePassword: '修改密码',
@@ -27,6 +28,38 @@ export default {
     disableTOTP: '关闭两步验证',
     logout: '退出登录',
     language: '语言',
+  },
+  users: {
+    refresh: '刷新',
+    pageSummary: '第 {page} / {pages} 页 · {start}–{end} / 共 {total} 条',
+    updatedAt: '更新于 {time}',
+    enabled: '已开启',
+    disabled: '未开启',
+    table: {
+      username: '用户名',
+      status: '状态',
+      permissions: '权限',
+      totp: '两步验证',
+      lastLogin: '最后登录',
+      createdAt: '创建时间',
+      actions: '操作',
+    },
+    actions: {
+      disable: '禁用',
+      enable: '启用',
+      cancel: '取消',
+    },
+    dialog: {
+      disableTitle: '禁用用户',
+      disableContent: '确认禁用「{name}」？禁用后其现有登录态也会失效。',
+      enableTitle: '启用用户',
+      enableContent: '确认启用「{name}」？',
+    },
+    messages: {
+      disableSuccess: '已禁用 {name}',
+      enableSuccess: '已启用 {name}',
+      actionFailed: '操作失败',
+    },
   },
   logout: {
     title: '退出登录',
@@ -70,6 +103,7 @@ export default {
     upload: '上传文档',
     kbFilter: '知识库筛选',
     statusFilter: '状态筛选',
+    pageSummary: '第 {page} / {pages} 页 · {start}–{end} / 共 {total} 条',
     updatedAt: '更新于 {time}',
     table: {
       filename: '文档',

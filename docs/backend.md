@@ -219,12 +219,29 @@ chunk 快照约定：
 
 **账户初始化：** `local.yaml` 的 `accounts` 列表在启动时按用户名检查，不存在则插入。`password` 支持明文（启动时自动 bcrypt hash）或已有 bcrypt hash（以 `$2a$`/`$2b$`/`$2y$` 开头，直接存入）。已存在的账户不做修改。
 
+`accounts[].permissions` 是纯配置态能力，不写入 `users` 表，也不会在启动时回写数据库。当前仅支持：
+
+- `view_user_list`
+- `delete_documents`
+- `disable_users`
+
+`users.status` 是运行态状态，当前使用：
+
+- `active`
+- `disabled`
+
+权限和状态的关系：
+
+- 接口权限按当前登录用户的 `username` 到配置中查 `permissions`
+- 账号一旦变成 `disabled`，即使配置中仍有权限，也无法登录，已有 JWT 在后续请求中也会被拦截
+
 ```yaml
 accounts:
   - username: admin
     password: "changeme"          # 明文，启动时自动 hash
   - username: ops
     password: "$2a$10$Xyz..."     # 已有 hash，直接写入
+    permissions: ["view_user_list", "delete_documents"]
 ```
 
 接口详见 [API 设计](./api.md)。

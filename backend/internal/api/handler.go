@@ -44,7 +44,7 @@ func (h *Handler) Routes() http.Handler {
 	apiGroup.POST("/documents", h.withAuth(), h.handleCreateDocument)
 	apiGroup.GET("/documents", h.withAuth(), h.handleListDocuments)
 	apiGroup.GET("/documents/:document_id", h.withAuth(), h.handleGetDocument)
-	apiGroup.DELETE("/documents/:document_id", h.withAuth(), h.withDocumentOwner(), h.handleDeleteDocument)
+	apiGroup.DELETE("/documents/:document_id", h.withAuth(), h.withDocumentOwnerOrPermission("delete_documents"), h.handleDeleteDocument)
 	apiGroup.GET("/documents/:document_id/chunks", h.withAuth(), h.handleGetChunks)
 	apiGroup.POST("/documents/:document_id/chunks/rechunk", h.withAuth(), h.withDocumentOwner(), h.handleRechunk)
 	apiGroup.POST("/documents/:document_id/chunks/approve", h.withAuth(), h.withDocumentOwner(), h.handleApproveChunks)
@@ -53,7 +53,9 @@ func (h *Handler) Routes() http.Handler {
 	apiGroup.POST("/documents/:document_id/chunks/:chunk_id/reject", h.withAuth(), h.withDocumentOwner(), h.handleRejectChunk)
 	apiGroup.POST("/documents/:document_id/chunks/:chunk_id/restore", h.withAuth(), h.withDocumentOwner(), h.handleRestoreChunk)
 	apiGroup.POST("/documents/:document_id/index", h.withAuth(), h.withDocumentOwner(), h.handleIndexDocument)
-	apiGroup.GET("/users", h.withAuth(), h.handleListUsers)
+	apiGroup.GET("/users", h.withAuth(), h.withPermission("view_user_list"), h.handleListUsers)
+	apiGroup.POST("/users/:user_id/disable", h.withAuth(), h.withPermission("disable_users"), h.handleDisableUser)
+	apiGroup.POST("/users/:user_id/enable", h.withAuth(), h.withPermission("disable_users"), h.handleEnableUser)
 	apiGroup.POST("/query", h.withAuth(), h.handleQuery)
 	apiGroup.GET("/knowledge-bases", h.withAuth(), h.handleListKnowledgeBases)
 	apiGroup.GET("/knowledge-bases/available", h.withAuth(), h.handleListAvailableKnowledgeBases)
@@ -89,13 +91,17 @@ func (h *Handler) handleLogin(c *gin.Context) {
 			writeData(c, 200, map[string]any{"totp_required": true})
 			return
 		}
+		if errors.Is(err, service.ErrUserDisabled) {
+			writeError(c, 403, "forbidden", "user is disabled", nil)
+			return
+		}
 		writeError(c, 401, "unauthorized", err.Error(), nil)
 		return
 	}
 
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(h.cfg.GetString("http.session_cookie"), token, int(h.authService.TokenTTL().Seconds()), "/", "", gin.Mode() == gin.ReleaseMode, true)
-	writeData(c, 200, sanitizeUser(user))
+	writeData(c, 200, h.sanitizeUser(user))
 }
 
 func (h *Handler) handleLogout(c *gin.Context) {
@@ -110,16 +116,34 @@ func (h *Handler) handleLogout(c *gin.Context) {
 
 func (h *Handler) handleMe(c *gin.Context) {
 	user := c.MustGet("current_user").(model.User)
-	writeData(c, 200, sanitizeUser(user))
+	writeData(c, 200, h.sanitizeUser(user))
 }
 
 func (h *Handler) handleListUsers(c *gin.Context) {
 	users := h.authService.ListUsers()
 	items := make([]map[string]any, len(users))
 	for i, u := range users {
-		items[i] = sanitizeUser(u)
+		items[i] = h.sanitizeUser(u)
 	}
 	writeData(c, 200, map[string]any{"items": items, "total": len(items)})
+}
+
+func (h *Handler) handleDisableUser(c *gin.Context) {
+	actor := c.MustGet("current_user").(model.User)
+	if err := h.authService.SetUserStatus(actor, c.Param("user_id"), "disabled"); err != nil {
+		h.writeActionError(c, err)
+		return
+	}
+	writeData(c, 200, map[string]any{"accepted": true})
+}
+
+func (h *Handler) handleEnableUser(c *gin.Context) {
+	actor := c.MustGet("current_user").(model.User)
+	if err := h.authService.SetUserStatus(actor, c.Param("user_id"), "active"); err != nil {
+		h.writeActionError(c, err)
+		return
+	}
+	writeData(c, 200, map[string]any{"accepted": true})
 }
 
 func (h *Handler) handleChangePassword(c *gin.Context) {
@@ -362,6 +386,7 @@ func (h *Handler) handleListAvailableKnowledgeBases(c *gin.Context) {
 			"analyzer":          cfg.Analyzer,
 			"chunk_size":        cfg.ChunkSize,
 			"chunk_overlap":     cfg.ChunkOverlap,
+			"min_chunks":        cfg.MinChunks,
 		})
 	}
 	writeData(c, 200, map[string]any{"items": items})
@@ -416,6 +441,10 @@ func (h *Handler) handleQuery(c *gin.Context) {
 }
 
 func (h *Handler) withDocumentOwner() gin.HandlerFunc {
+	return h.withDocumentOwnerOrPermission("")
+}
+
+func (h *Handler) withDocumentOwnerOrPermission(permission string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		user := c.MustGet("current_user").(model.User)
 		doc, err := h.documentService.GetDocument(c.Param("document_id"))
@@ -424,7 +453,7 @@ func (h *Handler) withDocumentOwner() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		if doc.UploaderID != "" && doc.UploaderID != user.UserID {
+		if doc.UploaderID != "" && doc.UploaderID != user.UserID && (permission == "" || !h.authService.HasPermission(user, permission)) {
 			writeError(c, 403, "forbidden", "you can only modify your own documents", nil)
 			c.Abort()
 			return
@@ -443,6 +472,11 @@ func (h *Handler) withAuth() gin.HandlerFunc {
 		}
 		user, err := h.authService.Me(cookie.Value)
 		if err != nil {
+			if errors.Is(err, service.ErrUserDisabled) {
+				writeError(c, 403, "forbidden", "user is disabled", nil)
+				c.Abort()
+				return
+			}
 			writeError(c, 401, "unauthorized", "invalid session", nil)
 			c.Abort()
 			return
@@ -452,9 +486,33 @@ func (h *Handler) withAuth() gin.HandlerFunc {
 	}
 }
 
+func (h *Handler) withPermission(permission string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user := c.MustGet("current_user").(model.User)
+		if !h.authService.HasPermission(user, permission) {
+			writeError(c, 403, "forbidden", "missing permission: "+permission, nil)
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
 func (h *Handler) writeStoreError(c *gin.Context, err error) {
 	if errors.Is(err, repository.ErrNotFound) {
 		writeError(c, 404, "not_found", "resource not found", nil)
+		return
+	}
+	writeError(c, 500, "internal_error", err.Error(), nil)
+}
+
+func (h *Handler) writeActionError(c *gin.Context, err error) {
+	if errors.Is(err, repository.ErrNotFound) {
+		writeError(c, 404, "not_found", "resource not found", nil)
+		return
+	}
+	if errors.Is(err, service.ErrCannotChangeOwnStatus) {
+		writeError(c, 400, "validation_error", err.Error(), nil)
 		return
 	}
 	writeError(c, 500, "internal_error", err.Error(), nil)
@@ -502,7 +560,7 @@ func (h *Handler) handleTOTPDisable(c *gin.Context) {
 	writeData(c, 200, map[string]any{"enabled": false})
 }
 
-func sanitizeUser(user model.User) map[string]any {
+func (h *Handler) sanitizeUser(user model.User) map[string]any {
 	return map[string]any{
 		"user_id":       user.UserID,
 		"username":      user.Username,
@@ -511,5 +569,6 @@ func sanitizeUser(user model.User) map[string]any {
 		"created_at":    user.CreatedAt,
 		"updated_at":    user.UpdatedAt,
 		"totp_enabled":  user.TOTPEnabled,
+		"permissions":   h.authService.Permissions(user),
 	}
 }

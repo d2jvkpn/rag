@@ -69,9 +69,11 @@ uploaded → processing/parse → processing/chunk → review_pending
 
 **TOTP:** Users can enable/disable TOTP (Time-based OTP, RFC 6238) via the settings menu. `POST /api/me/totp/setup` generates a secret + `otpauth://` URL (rendered as QR code in browser via `qrcode` npm package). `POST /api/me/totp/enable` activates it after the user confirms a valid code. `POST /api/me/totp/disable` deactivates it. At login, if `totp_enabled=true` and no `totp_code` is submitted, the server returns HTTP 200 `{"totp_required": true}` without setting a cookie; the frontend shows a second step to collect the code. Migration `000004_add_totp` adds `totp_secret TEXT` and `totp_enabled BOOLEAN` columns to `users`.
 
-**Account seeding:** `accounts` in `local.yaml` is a list of `{username, password}`. On startup, each entry whose username does not exist in the users table is inserted. `password` may be plaintext (auto-hashed on insert) or a pre-computed bcrypt hash (detected by `$2a$`/`$2b$`/`$2y$` prefix, stored as-is). Existing accounts are never modified.
+**Account seeding:** `accounts` in `local.yaml` is a list of `{username, password, permissions[]}`. On startup, each entry whose username does not exist in the users table is inserted. `password` may be plaintext (auto-hashed on insert) or a pre-computed bcrypt hash (detected by `$2a$`/`$2b$`/`$2y$` prefix, stored as-is). Existing accounts are never modified. `permissions` are config-only and are **not** persisted in the database. Supported permissions: `view_user_list`, `delete_documents`, `disable_users`.
 
-**Document ownership:** `documents.uploader_id` and `documents.uploader_name` are set at upload time from the authenticated user. `withDocumentOwner()` middleware (applied to DELETE, rechunk, approve, merge, edit, reject, restore, index) returns 403 if `doc.uploader_id != ""` and the current user is not the uploader. All users can read all documents.
+**User status:** `users.status` is runtime state stored in the database. `active` users can log in and use the API. `disabled` users are blocked both at login time and on every authenticated request, so existing JWT cookies stop working after disablement.
+
+**Document ownership:** `documents.uploader_id` and `documents.uploader_name` are set at upload time from the authenticated user. `withDocumentOwner()` middleware is applied to rechunk, approve, merge, edit, reject, restore, index and returns 403 if `doc.uploader_id != ""` and the current user is not the uploader. `DELETE /api/documents/:id` additionally allows users with `delete_documents` permission to delete any document. All users can read all documents.
 
 **API response envelope:**
 - Success: `{"data": <payload>}`
@@ -84,7 +86,7 @@ Error codes: `validation_error`, `unauthorized`, `forbidden`, `not_found`, `conf
 
 **Migrations** live in `migrations/sql/` as numbered pairs (`*.up.sql` / `*.down.sql`). gorm auto-migrate is not used; schema changes always require a new migration file. Primary keys use `UUID PRIMARY KEY DEFAULT uuidv7()`.
 
-**Config** reads `backend/configs/local.yaml` via viper. Key fields: `http_addr`, `data_dir`, `state_path`, `database.dsn`, `redis.dsn`, `http.jwt_secret`, `http.jwt_token_ttl` (default `8h`, any `time.ParseDuration` string), `http.session_cookie`, `accounts[].{username,password}`, `embedder.{base_url,api_key,model}`, `milvus.{addr,db,collections[].{collection,dim,chunk_size,chunk_overlap,min_chunks,analyzer}}`. All optional sections fall back to Noop implementations.
+**Config** reads `backend/configs/local.yaml` via viper. Key fields: `http_addr`, `data_dir`, `state_path`, `database.dsn`, `redis.dsn`, `http.jwt_secret`, `http.jwt_token_ttl` (default `8h`, any `time.ParseDuration` string), `http.session_cookie`, `accounts[].{username,password,permissions[]}`, `embedder.{base_url,api_key,model}`, `milvus.{addr,db,collections[].{collection,dim,chunk_size,chunk_overlap,min_chunks,analyzer}}`. All optional sections fall back to Noop implementations.
 
 ### Milvus / VectorStore
 
@@ -106,7 +108,7 @@ milvus:
 - Each collection schema contains: dense float vector field `embedding`, sparse vector field `sparse` (BM25 auto-generated from `text` via built-in BM25 function), plus metadata fields.
 - On startup, `NewMilvus` calls `ensureDatabase` then `ensureCollection` for each configured collection. `ensureCollection` calls `DescribeCollection` on existing collections to check for `sparse` field presence and analyzer match; drops and recreates if schema is stale (e.g. pre-BM25 collection or changed analyzer). **Data loss on recreate — documents must be re-indexed.**
 - `knowledge_base_id` on a document must match a configured collection name; validated at upload time.
-- `GET /api/knowledge-bases/available` returns the configured collection list with full config (`dim`, `analyzer`, `chunk_size`, `chunk_overlap`). Used by frontend dropdowns and to display collection parameters in upload modal and search page.
+- `GET /api/knowledge-bases/available` returns the configured collection list with full config (`dim`, `analyzer`, `chunk_size`, `chunk_overlap`, `min_chunks`). Used by frontend dropdowns and to display collection parameters in upload modal and search page.
 - `GET /api/knowledge-bases` returns KB IDs with document counts (from DB scan, not Milvus).
 - `DeleteByDocument` is called on document delete only when `status=indexed`.
 

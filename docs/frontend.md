@@ -72,6 +72,7 @@
 - `/documents`
 - `/documents/:documentId`
 - `/documents/:documentId/chunks`
+- `/users`（仅当当前用户具备 `view_user_list` 权限时可访问）
 
 如果上传能力使用弹窗承载，则无需单独定义 `/upload` 页面路由。
 
@@ -89,6 +90,11 @@
 - `documentFilterStore`：保存列表页筛选条件
 - `documentCacheStore`：可选，用于缓存近期访问的文档详情
 
+补充约定：
+
+- `authStore.user.permissions` 直接来自后端 `/api/me`
+- 前端只消费权限，不在本地自行推导权限
+
 页面级数据例如当前 chunk 列表、当前文档详情、表单临时状态，优先由页面组件本地管理。
 
 ## 前端接口封装建议
@@ -101,6 +107,7 @@
 - `services/auth.js`
 - `services/documents.js`
 - `services/chunks.js`
+- `services/users.js`
 
 职责建议：
 
@@ -108,6 +115,7 @@
 - `auth.js`：登录、退出、获取当前用户
 - `documents.js`：文档上传、列表、详情、删除、触发入库
 - `chunks.js`：chunk 列表、重切分、合并、拒绝、审核
+- `users.js`：用户列表、启用、禁用
 
 实现约定：
 
@@ -165,6 +173,7 @@
 - 登录成功后请求 `GET /api/me`
 - 前端不自行持久化 token
 - 所有 `/documents` 及其子路由都要求登录
+- `/users` 路由除登录外，还要求 `view_user_list` 权限
 - 路由守卫基于当前用户态判断是否允许访问受保护页面
 - 退出登录后清理前端用户态缓存
 

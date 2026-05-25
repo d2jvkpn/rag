@@ -61,6 +61,9 @@
               chunk <n-tag size="tiny" :bordered="false">{{ currentKbConfig.chunk_size }}</n-tag>
               overlap <n-tag size="tiny" :bordered="false">{{ currentKbConfig.chunk_overlap }}</n-tag>
             </n-text>
+            <n-text depth="3" style="font-size:12px">
+              min chunks <n-tag size="tiny" :bordered="false">{{ currentKbConfig.min_chunks }}</n-tag>
+            </n-text>
           </div>
 
           <!-- Advanced params -->

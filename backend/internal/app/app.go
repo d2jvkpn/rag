@@ -9,8 +9,8 @@ import (
 	"go.uber.org/zap"
 
 	"backend/internal/api"
-	"backend/internal/llm"
 	"backend/internal/infra"
+	"backend/internal/llm"
 	"backend/internal/repository"
 	"backend/internal/service"
 )
@@ -21,7 +21,8 @@ type App struct {
 }
 
 func New(v *viper.Viper) (*App, error) {
-	store, err := initStore(v, readAccounts(v))
+	accounts := readAccounts(v)
+	store, err := initStore(v, accounts)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +37,7 @@ func New(v *viper.Viper) (*App, error) {
 	if err != nil || tokenTTL <= 0 {
 		tokenTTL = 0 // falls back to defaultTokenTTL in NewAuthService
 	}
-	authService := service.NewAuthService(store, v.GetString("http.jwt_secret"), tokenTTL, initBlacklist(v))
+	authService := service.NewAuthService(store, v.GetString("http.jwt_secret"), tokenTTL, accounts, initBlacklist(v))
 	handler := api.NewHandler(v, authService, documentService)
 
 	return &App{
@@ -47,14 +48,19 @@ func New(v *viper.Viper) (*App, error) {
 
 func readAccounts(v *viper.Viper) []repository.AccountSeed {
 	var raw []struct {
-		Username string `mapstructure:"username"`
-		Password string `mapstructure:"password"`
+		Username    string   `mapstructure:"username"`
+		Password    string   `mapstructure:"password"`
+		Permissions []string `mapstructure:"permissions"`
 	}
 	_ = v.UnmarshalKey("accounts", &raw)
 	out := make([]repository.AccountSeed, 0, len(raw))
 	for _, a := range raw {
 		if a.Username != "" && a.Password != "" {
-			out = append(out, repository.AccountSeed{Username: a.Username, Password: a.Password})
+			out = append(out, repository.AccountSeed{
+				Username:    a.Username,
+				Password:    a.Password,
+				Permissions: append([]string(nil), a.Permissions...),
+			})
 		}
 	}
 	return out

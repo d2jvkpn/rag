@@ -20,6 +20,7 @@ export default {
   nav: {
     documents: 'Documents',
     search: 'Knowledge Base',
+    users: 'Users',
   },
   user: {
     changePassword: 'Change Password',
@@ -27,6 +28,38 @@ export default {
     disableTOTP: 'Disable 2FA',
     logout: 'Sign Out',
     language: 'Language',
+  },
+  users: {
+    refresh: 'Refresh',
+    pageSummary: 'Page {page} / {pages} · {start}–{end} of {total}',
+    updatedAt: 'Updated at {time}',
+    enabled: 'Enabled',
+    disabled: 'Disabled',
+    table: {
+      username: 'Username',
+      status: 'Status',
+      permissions: 'Permissions',
+      totp: '2FA',
+      lastLogin: 'Last Login',
+      createdAt: 'Created At',
+      actions: 'Actions',
+    },
+    actions: {
+      disable: 'Disable',
+      enable: 'Enable',
+      cancel: 'Cancel',
+    },
+    dialog: {
+      disableTitle: 'Disable User',
+      disableContent: 'Disable "{name}"? Their current session will also stop working.',
+      enableTitle: 'Enable User',
+      enableContent: 'Enable "{name}"?',
+    },
+    messages: {
+      disableSuccess: '{name} disabled',
+      enableSuccess: '{name} enabled',
+      actionFailed: 'Action failed',
+    },
   },
   logout: {
     title: 'Sign Out',
@@ -70,6 +103,7 @@ export default {
     upload: 'Upload Document',
     kbFilter: 'Filter by KB',
     statusFilter: 'Filter by Status',
+    pageSummary: 'Page {page} / {pages} · {start}–{end} of {total}',
     updatedAt: 'Updated at {time}',
     table: {
       filename: 'Document',
