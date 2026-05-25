@@ -13,7 +13,7 @@ import (
 	"backend/internal/repository"
 )
 
-const tokenExpiry = 24 * time.Hour
+const defaultTokenTTL = 8 * time.Hour
 
 type claims struct {
 	UserID string `json:"user_id"`
@@ -23,11 +23,15 @@ type claims struct {
 type AuthService struct {
 	store     repository.Store
 	jwtSecret []byte
+	tokenTTL  time.Duration
 	blacklist TokenBlacklist
 }
 
-func NewAuthService(store repository.Store, jwtSecret string, bl ...TokenBlacklist) *AuthService {
-	svc := &AuthService{store: store, jwtSecret: []byte(jwtSecret)}
+func NewAuthService(store repository.Store, jwtSecret string, tokenTTL time.Duration, bl ...TokenBlacklist) *AuthService {
+	if tokenTTL <= 0 {
+		tokenTTL = defaultTokenTTL
+	}
+	svc := &AuthService{store: store, jwtSecret: []byte(jwtSecret), tokenTTL: tokenTTL}
 	if len(bl) > 0 && bl[0] != nil {
 		svc.blacklist = bl[0]
 	} else {
@@ -35,6 +39,8 @@ func NewAuthService(store repository.Store, jwtSecret string, bl ...TokenBlackli
 	}
 	return svc
 }
+
+func (s *AuthService) TokenTTL() time.Duration { return s.tokenTTL }
 
 func (s *AuthService) Login(username, password string) (model.User, string, error) {
 	user, err := s.store.FindUserByUsername(username)
@@ -105,7 +111,7 @@ func (s *AuthService) issueToken(userID string) (string, error) {
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        uuid.Must(uuid.NewV7()).String(),
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(tokenExpiry)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(s.tokenTTL)),
 		},
 	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, c).SignedString(s.jwtSecret)

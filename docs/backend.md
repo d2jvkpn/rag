@@ -209,9 +209,10 @@ chunk 快照约定：
 
 - 使用 `JWT + HttpOnly Cookie`（HS256，`github.com/golang-jwt/jwt/v5`）
 - Cookie 属性：`HttpOnly=true`、`SameSite=Lax`、`Secure` 仅在 `--release` 模式下为 `true`
+- Token 有效期由 `http.jwt_token_ttl` 配置（默认 `8h`，支持 `time.ParseDuration` 格式），cookie `maxAge` 与 token TTL 保持一致
 - 密码使用 bcrypt 哈希（`golang.org/x/crypto/bcrypt`，`DefaultCost`）
 - 每个 token 携带 JTI（UUID）
-- `Logout` 将 JTI 写入 `TokenBlacklist`，后续请求在 `withAuth()` 中被拦截
+- `Logout` 清除客户端 cookie（`maxAge=-1`）并将 JTI 写入 `TokenBlacklist`，后续请求在 `withAuth()` 中被拦截
 - 未配置 `redis.dsn` 时使用 `MemoryBlacklist`（进程级，重启后失效）；配置后自动切换为 `RedisBlacklist`（TTL = token 剩余有效期）
 
 **账户初始化：** `local.yaml` 的 `accounts` 列表在启动时按用户名检查，不存在则插入。`password` 支持明文（启动时自动 bcrypt hash）或已有 bcrypt hash（以 `$2a$`/`$2b$`/`$2y$` 开头，直接存入）。已存在的账户不做修改。

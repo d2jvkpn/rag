@@ -45,7 +45,7 @@ func TestDocumentLifecycle(t *testing.T) {
 	}
 	defer documentService.Close()
 
-	authService := service.NewAuthService(store, "test-secret")
+	authService := service.NewAuthService(store, "test-secret", 0)
 	handler := NewHandler(v, authService, documentService).Routes()
 
 	sessionCookie := loginForTest(t, handler)
@@ -149,7 +149,7 @@ func TestAuthRequired(t *testing.T) {
 	}
 	defer documentService.Close()
 
-	authService := service.NewAuthService(store, "test-secret")
+	authService := service.NewAuthService(store, "test-secret", 0)
 	handler := NewHandler(v, authService, documentService).Routes()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/documents", nil)

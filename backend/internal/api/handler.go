@@ -85,7 +85,7 @@ func (h *Handler) handleLogin(c *gin.Context) {
 	}
 
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(h.cfg.GetString("http.session_cookie"), token, 3600*24, "/", "", gin.Mode() == gin.ReleaseMode, true)
+	c.SetCookie(h.cfg.GetString("http.session_cookie"), token, int(h.authService.TokenTTL().Seconds()), "/", "", gin.Mode() == gin.ReleaseMode, true)
 	writeData(c, 200, sanitizeUser(user))
 }
 
@@ -94,7 +94,8 @@ func (h *Handler) handleLogout(c *gin.Context) {
 	if err == nil {
 		_ = h.authService.Logout(cookie.Value)
 	}
-	c.SetCookie(h.cfg.GetString("http.session_cookie"), "", -1, "/", "", false, true)
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(h.cfg.GetString("http.session_cookie"), "", -1, "/", "", gin.Mode() == gin.ReleaseMode, true)
 	writeData(c, 200, map[string]any{"accepted": true})
 }
 

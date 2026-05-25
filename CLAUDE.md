@@ -65,7 +65,7 @@ uploaded → processing/parse → processing/chunk → review_pending
 - Old chunk versions are never overwritten; rechunk always creates a new version file.
 - Embedding vectors are written to the snapshot **before** Milvus upsert, so Milvus can be rebuilt from snapshots without re-calling the embedding API.
 
-**Auth:** JWT (HS256, `golang-jwt/jwt/v5`) stored in an HttpOnly cookie named by `http.session_cookie`. Cookie attributes: `HttpOnly=true`, `SameSite=Lax`, `Secure=true` only when `--release` flag is set (i.e. `gin.ReleaseMode`). Each token carries a JTI (UUID). `withAuth()` reads the cookie, calls `authService.Me()` which parses the token and checks the blacklist, then sets `current_user` in the gin context. `Logout` extracts the JTI and adds it to the `TokenBlacklist` (`MemoryBlacklist` by default; `RedisBlacklist` when `redis.dsn` is set). Passwords are hashed with **bcrypt** (`golang.org/x/crypto/bcrypt`, `DefaultCost`).
+**Auth:** JWT (HS256, `golang-jwt/jwt/v5`) stored in an HttpOnly cookie named by `http.session_cookie`. Cookie attributes: `HttpOnly=true`, `SameSite=Lax`, `Secure=true` only when `--release` flag is set. Token TTL is configured via `http.jwt_token_ttl` (default `8h`); cookie `maxAge` is always set to the same value. `Logout` clears the cookie (`maxAge=-1`) and adds the token JTI to the `TokenBlacklist` (`MemoryBlacklist` by default; `RedisBlacklist` when `redis.dsn` is set). Passwords are hashed with **bcrypt** (`golang.org/x/crypto/bcrypt`, `DefaultCost`).
 
 **Account seeding:** `accounts` in `local.yaml` is a list of `{username, password}`. On startup, each entry whose username does not exist in the users table is inserted. `password` may be plaintext (auto-hashed on insert) or a pre-computed bcrypt hash (detected by `$2a$`/`$2b$`/`$2y$` prefix, stored as-is). Existing accounts are never modified.
 
@@ -82,7 +82,7 @@ Error codes: `validation_error`, `unauthorized`, `forbidden`, `not_found`, `conf
 
 **Migrations** live in `migrations/sql/` as numbered pairs (`*.up.sql` / `*.down.sql`). gorm auto-migrate is not used; schema changes always require a new migration file. Primary keys use `UUID PRIMARY KEY DEFAULT uuidv7()`.
 
-**Config** reads `backend/configs/local.yaml` via viper. Key fields: `http_addr`, `data_dir`, `state_path`, `database.dsn`, `redis.dsn`, `http.jwt_secret`, `http.session_cookie`, `accounts[].{username,password}`, `embedder.{base_url,api_key,model}`, `milvus.{addr,db,collections[].{collection,dim,chunk_size,chunk_overlap,min_chunks,analyzer}}`. All optional sections fall back to Noop implementations.
+**Config** reads `backend/configs/local.yaml` via viper. Key fields: `http_addr`, `data_dir`, `state_path`, `database.dsn`, `redis.dsn`, `http.jwt_secret`, `http.jwt_token_ttl` (default `8h`, any `time.ParseDuration` string), `http.session_cookie`, `accounts[].{username,password}`, `embedder.{base_url,api_key,model}`, `milvus.{addr,db,collections[].{collection,dim,chunk_size,chunk_overlap,min_chunks,analyzer}}`. All optional sections fall back to Noop implementations.
 
 ### Milvus / VectorStore
 

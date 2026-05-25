@@ -2,6 +2,7 @@ package app
 
 import (
 	"path/filepath"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/viper"
@@ -31,7 +32,11 @@ func New(v *viper.Viper) (*App, error) {
 		return nil, err
 	}
 
-	authService := service.NewAuthService(store, v.GetString("http.jwt_secret"), initBlacklist(v))
+	tokenTTL, err := time.ParseDuration(v.GetString("http.jwt_token_ttl"))
+	if err != nil || tokenTTL <= 0 {
+		tokenTTL = 0 // falls back to defaultTokenTTL in NewAuthService
+	}
+	authService := service.NewAuthService(store, v.GetString("http.jwt_secret"), tokenTTL, initBlacklist(v))
 	handler := api.NewHandler(v, authService, documentService)
 
 	return &App{
