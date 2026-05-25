@@ -119,6 +119,19 @@ func (s *JSONStore) GetUser(userID string) (model.User, error) {
 	return user, nil
 }
 
+func (s *JSONStore) ListUsers() []model.User {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	users := make([]model.User, 0, len(s.data.Users))
+	for _, u := range s.data.Users {
+		users = append(users, u)
+	}
+	sort.Slice(users, func(i, j int) bool {
+		return users[i].CreatedAt.Before(users[j].CreatedAt)
+	})
+	return users
+}
+
 func (s *JSONStore) CreateDocument(document model.Document) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

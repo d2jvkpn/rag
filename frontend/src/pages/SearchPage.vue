@@ -9,7 +9,7 @@
             <n-select
               v-model:value="knowledgeBaseId"
               :options="kbOptions"
-              placeholder="选择知识库"
+              :placeholder="t('search.selectKb')"
               filterable
               style="width:200px;flex-shrink:0"
               @update:value="onKbChange"
@@ -42,7 +42,7 @@
               style="margin-left:auto;color:var(--n-text-color-disabled)"
               @click="showAdvanced = !showAdvanced"
             >
-              {{ showAdvanced ? '收起参数 ▲' : '高级参数 ▼' }}
+              {{ showAdvanced ? t('search.collapseParams') : t('search.advancedParams') }}
             </n-button>
           </div>
 
@@ -67,7 +67,7 @@
           <div v-if="showAdvanced" style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;padding:8px 0 0;border-top:1px solid var(--n-border-color)">
             <n-form-item
               v-if="searchMode !== 'bm25'"
-              label="EF（HNSW 搜索精度）"
+              :label="t('search.ef')"
               :show-feedback="false"
               style="margin-bottom:0;min-width:180px"
             >
@@ -75,7 +75,7 @@
             </n-form-item>
             <n-form-item
               v-if="searchMode === 'bm25' || searchMode === 'hybrid'"
-              label="Drop Ratio（BM25 剪枝）"
+              :label="t('search.dropRatio')"
               :show-feedback="false"
               style="margin-bottom:0;min-width:180px"
             >
@@ -83,7 +83,7 @@
             </n-form-item>
             <n-form-item
               v-if="searchMode === 'hybrid'"
-              label="RRF K"
+              :label="t('search.rrfK')"
               :show-feedback="false"
               style="margin-bottom:0;min-width:140px"
             >
@@ -96,7 +96,7 @@
             <n-input
               v-model:value="queryText"
               type="textarea"
-              placeholder="输入查询内容… (Ctrl+Enter 搜索)"
+              :placeholder="t('search.searchPlaceholder')"
               :autosize="{ minRows: 2, maxRows: 8 }"
               style="flex:1"
               @keydown.ctrl.enter="handleSearch"
@@ -110,10 +110,10 @@
                 style="width:72px"
                 @click="handleSearch"
               >
-                搜索
+                {{ t('search.search') }}
               </n-button>
               <n-text v-if="searched && !loading" depth="3" style="font-size:11px;white-space:nowrap">
-                {{ results.length > 0 ? `${results.length} 条` : '无结果' }}
+                {{ results.length > 0 ? t('search.results', { n: results.length }) : t('search.noResults') }}
               </n-text>
             </div>
           </div>
@@ -131,7 +131,7 @@
         size="small"
       >
         <template #header>
-          <n-text style="font-size:13px;font-weight:600">AI 回答</n-text>
+          <n-text style="font-size:13px;font-weight:600">{{ t('search.aiAnswer') }}</n-text>
         </template>
         <pre style="white-space:pre-wrap;font-size:14px;font-family:inherit;margin:0;line-height:1.7">{{ answer }}</pre>
       </n-card>
@@ -139,7 +139,7 @@
       <!-- No results -->
       <n-empty
         v-if="searched && results.length === 0 && !loading && !error"
-        description="未找到相关内容，请尝试不同查询词或确认文档已完成入库"
+        :description="t('search.emptyResult')"
       />
 
       <!-- Result cards -->
@@ -150,7 +150,7 @@
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <n-text style="font-size:13px;font-weight:600">{{ idx + 1 }}.</n-text>
                 <n-text style="font-size:13px">{{ item.filename }}</n-text>
-                <n-tag size="tiny">{{ SOURCE_TYPE_LABEL[item.source_type] || item.source_type }}</n-tag>
+                <n-tag size="tiny">{{ t(`sourceType.${item.source_type}`) || item.source_type }}</n-tag>
                 <n-text v-if="item.section_title" depth="3" style="font-size:12px">{{ item.section_title }}</n-text>
                 <n-text v-if="item.page_start" depth="3" style="font-size:12px">
                   p{{ item.page_start }}<span v-if="item.page_end && item.page_end !== item.page_start">–{{ item.page_end }}</span>
@@ -166,7 +166,7 @@
             <div style="display:flex;align-items:center;gap:8px">
               <n-text depth="3" style="font-size:11px">{{ item.knowledge_base_id }}</n-text>
               <n-button text size="tiny" @click="router.push(`/documents/${item.document_id}`)">
-                查看文档
+                {{ t('search.viewDocument') }}
               </n-button>
             </div>
           </template>
@@ -177,13 +177,13 @@
 
   <!-- Document selection drawer -->
   <n-drawer v-model:show="drawerVisible" width="460" placement="right">
-    <n-drawer-content title="选择文档" closable>
+    <n-drawer-content :title="t('search.drawer.title')" closable>
       <template #default>
         <div style="display:flex;flex-direction:column;height:100%;gap:12px">
           <!-- Search input -->
           <n-input
             v-model:value="docSearchText"
-            placeholder="搜索文件名…"
+            :placeholder="t('search.drawer.searchPlaceholder')"
             clearable
             size="small"
           />
@@ -195,10 +195,10 @@
               :indeterminate="someSelected"
               @update:checked="toggleSelectAll"
             >
-              全选（{{ filteredDocs.length }} 篇）
+              {{ t('search.drawer.selectAll', { n: filteredDocs.length }) }}
             </n-checkbox>
             <n-text depth="3" style="font-size:12px">
-              已选 {{ tempSelectedDocIds.length }} / {{ docOptions.length }}
+              {{ t('search.drawer.selectedCount', { selected: tempSelectedDocIds.length, total: docOptions.length }) }}
             </n-text>
           </div>
 
@@ -206,7 +206,7 @@
           <div style="flex:1;overflow-y:auto">
             <n-empty
               v-if="filteredDocs.length === 0"
-              description="无匹配文档"
+              :description="t('search.drawer.empty')"
               style="padding:32px 0"
             />
             <n-checkbox-group v-model:value="tempSelectedDocIds">
@@ -219,7 +219,7 @@
                 <n-text style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" :title="doc.label">
                   {{ doc.label }}
                 </n-text>
-                <n-tag size="tiny" style="flex-shrink:0">{{ SOURCE_TYPE_LABEL[doc.sourceType] || doc.sourceType }}</n-tag>
+                <n-tag size="tiny" style="flex-shrink:0">{{ t(`sourceType.${doc.sourceType}`) || doc.sourceType }}</n-tag>
                 <n-text v-if="doc.uploaderName" depth="3" style="font-size:11px;flex-shrink:0;max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
                   {{ doc.uploaderName }}
                 </n-text>
@@ -231,8 +231,8 @@
 
       <template #footer>
         <div style="display:flex;gap:8px;justify-content:flex-end">
-          <n-button size="small" @click="resetDocSelection">重置</n-button>
-          <n-button type="primary" size="small" @click="confirmDocSelection">确认</n-button>
+          <n-button size="small" @click="resetDocSelection">{{ t('search.drawer.reset') }}</n-button>
+          <n-button type="primary" size="small" @click="confirmDocSelection">{{ t('search.drawer.confirm') }}</n-button>
         </div>
       </template>
     </n-drawer-content>
@@ -244,9 +244,10 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { searchService } from '../services/search.js'
 import { documentsService } from '../services/documents.js'
-import { SOURCE_TYPE_LABEL } from '../utils/status.js'
+import { useI18n } from '../i18n/index.js'
 
 const router = useRouter()
+const { t } = useI18n()
 
 const knowledgeBaseId = ref(null)
 const queryText = ref('')
@@ -291,8 +292,8 @@ const someSelected = computed(() =>
 )
 
 const docButtonLabel = computed(() => {
-  if (selectedDocIds.value.length === 0) return '全部文档'
-  return `已选 ${selectedDocIds.value.length} 篇`
+  if (selectedDocIds.value.length === 0) return t('search.allDocs')
+  return t('search.selectedDocs', { n: selectedDocIds.value.length })
 })
 
 function openDocDrawer() {
@@ -330,28 +331,28 @@ const topKOptions = [
   { label: 'Top 20', value: 20 },
 ]
 
-const efOptions = [
-  { label: '默认', value: 0 },
+const efOptions = computed(() => [
+  { label: t('search.efDefault'), value: 0 },
   { label: '64', value: 64 },
   { label: '128', value: 128 },
   { label: '256', value: 256 },
   { label: '512', value: 512 },
-]
+])
 
-const dropRatioOptions = [
-  { label: '默认 (0)', value: 0 },
+const dropRatioOptions = computed(() => [
+  { label: t('search.dropRatioDefault'), value: 0 },
   { label: '0.1', value: 0.1 },
   { label: '0.2', value: 0.2 },
   { label: '0.3', value: 0.3 },
   { label: '0.5', value: 0.5 },
-]
+])
 
-const rrfKOptions = [
-  { label: '默认 (60)', value: 0 },
+const rrfKOptions = computed(() => [
+  { label: t('search.rrfKDefault'), value: 0 },
   { label: '20', value: 20 },
   { label: '60', value: 60 },
   { label: '100', value: 100 },
-]
+])
 
 function formatScore(score) {
   if (!searchMode.value) return (score * 100).toFixed(1) + '%'

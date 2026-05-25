@@ -31,32 +31,32 @@
       </n-dropdown>
     </n-layout-sider>
 
-    <n-modal v-model:show="showPasswordModal" preset="card" title="修改密码" style="width:360px" :mask-closable="false">
-      <n-form ref="pwFormRef" :model="pwForm" :rules="pwRules" label-placement="left" label-width="80">
-        <n-form-item label="当前密码" path="oldPassword">
-          <n-input v-model:value="pwForm.oldPassword" type="password" show-password-on="click" placeholder="当前密码" />
+    <n-modal v-model:show="showPasswordModal" preset="card" :title="t('password.title')" style="width:360px" :mask-closable="false">
+      <n-form ref="pwFormRef" :model="pwForm" :rules="pwRules" label-placement="left" label-width="auto">
+        <n-form-item :label="t('password.oldPassword')" path="oldPassword">
+          <n-input v-model:value="pwForm.oldPassword" type="password" show-password-on="click" :placeholder="t('password.oldPlaceholder')" />
         </n-form-item>
-        <n-form-item label="新密码" path="newPassword">
-          <n-input v-model:value="pwForm.newPassword" type="password" show-password-on="click" placeholder="新密码" />
+        <n-form-item :label="t('password.newPassword')" path="newPassword">
+          <n-input v-model:value="pwForm.newPassword" type="password" show-password-on="click" :placeholder="t('password.newPlaceholder')" />
         </n-form-item>
-        <n-form-item label="确认新密码" path="confirmPassword">
-          <n-input v-model:value="pwForm.confirmPassword" type="password" show-password-on="click" placeholder="再次输入新密码" />
+        <n-form-item :label="t('password.confirmPassword')" path="confirmPassword">
+          <n-input v-model:value="pwForm.confirmPassword" type="password" show-password-on="click" :placeholder="t('password.confirmPlaceholder')" />
         </n-form-item>
       </n-form>
       <template #footer>
         <div style="display:flex;justify-content:flex-end;gap:8px">
-          <n-button @click="cancelPasswordModal">取消</n-button>
-          <n-button type="primary" :loading="pwLoading" @click="submitPasswordChange">确认修改</n-button>
+          <n-button @click="cancelPasswordModal">{{ t('password.cancel') }}</n-button>
+          <n-button type="primary" :loading="pwLoading" @click="submitPasswordChange">{{ t('password.submit') }}</n-button>
         </div>
       </template>
     </n-modal>
 
-    <n-modal v-model:show="showTOTPModal" preset="card" title="两步验证" style="width:400px" :mask-closable="false">
+    <n-modal v-model:show="showTOTPModal" preset="card" :title="t('totp.title')" style="width:400px" :mask-closable="false">
       <div v-if="totpStep === 'setup'">
         <div style="text-align:center;margin-bottom:12px">
           <img v-if="totpQRDataUrl" :src="totpQRDataUrl" alt="QR Code" style="width:200px;height:200px" />
         </div>
-        <n-text depth="3" style="font-size:12px;display:block;margin-bottom:4px">用身份验证器 App 扫描二维码，或手动输入密钥：</n-text>
+        <n-text depth="3" style="font-size:12px;display:block;margin-bottom:4px">{{ t('totp.setupHint') }}</n-text>
         <n-text code style="font-size:13px;word-break:break-all;display:block;margin-bottom:16px">{{ totpSecret }}</n-text>
         <n-input
           v-model:value="totpCode"
@@ -69,7 +69,7 @@
       </div>
 
       <div v-else-if="totpStep === 'disable'">
-        <n-text depth="3" style="display:block;margin-bottom:16px">关闭两步验证后，登录时将不再需要动态验证码。请输入当前验证码以确认操作。</n-text>
+        <n-text depth="3" style="display:block;margin-bottom:16px">{{ t('totp.disableHint') }}</n-text>
         <n-input
           v-model:value="totpCode"
           placeholder="000000"
@@ -82,19 +82,19 @@
 
       <template #footer>
         <div style="display:flex;justify-content:flex-end;gap:8px">
-          <n-button @click="showTOTPModal = false">取消</n-button>
+          <n-button @click="showTOTPModal = false">{{ t('totp.cancel') }}</n-button>
           <n-button
             v-if="totpStep === 'setup'"
             type="primary"
             :loading="totpLoading"
             @click="confirmTOTPEnable"
-          >确认启用</n-button>
+          >{{ t('totp.confirmEnable') }}</n-button>
           <n-button
             v-else-if="totpStep === 'disable'"
             type="error"
             :loading="totpLoading"
             @click="confirmTOTPDisable"
-          >确认关闭</n-button>
+          >{{ t('totp.confirmDisable') }}</n-button>
         </div>
       </template>
     </n-modal>
@@ -111,19 +111,22 @@
 import { computed, h, ref, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { NIcon, useDialog, useMessage } from 'naive-ui'
-import { DocumentOutline, SearchOutline, LogOutOutline as LogOutIcon, KeyOutline as KeyIcon, PersonCircleOutline as PersonIcon, ShieldCheckmarkOutline as ShieldIcon } from '@vicons/ionicons5'
+import { DocumentOutline, SearchOutline, LogOutOutline as LogOutIcon, KeyOutline as KeyIcon, PersonCircleOutline as PersonIcon, ShieldCheckmarkOutline as ShieldIcon, LanguageOutline as LangIcon } from '@vicons/ionicons5'
 import QRCode from 'qrcode'
 import { useAuthStore } from '../stores/auth.js'
 import { getConfig } from '../config/app-config.js'
 import { authService } from '../services/auth.js'
+import { useI18n } from '../i18n/index.js'
+import { LOCALES } from '../stores/locale.js'
 
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
-const appTitle = getConfig().appTitle
+const appTitle = computed(() => t('appTitle'))
 const dialog = useDialog()
 const message = useMessage()
 const collapsed = ref(false)
+const { t, locale, setLocale } = useI18n()
 
 const activeKey = computed(() => {
   const p = route.path
@@ -136,20 +139,26 @@ function icon(component) {
   return () => h(NIcon, null, { default: () => h(component) })
 }
 
-const menuOptions = [
-  { label: '文档管理', key: 'documents', icon: icon(DocumentOutline) },
-  { label: '知识库查询', key: 'search', icon: icon(SearchOutline) },
-]
+const menuOptions = computed(() => [
+  { label: t('nav.documents'), key: 'documents', icon: icon(DocumentOutline) },
+  { label: t('nav.search'), key: 'search', icon: icon(SearchOutline) },
+])
 
 const userMenuOptions = computed(() => [
-  { label: '修改密码', key: 'change-password', icon: () => h(NIcon, null, { default: () => h(KeyIcon) }) },
+  { label: t('user.changePassword'), key: 'change-password', icon: () => h(NIcon, null, { default: () => h(KeyIcon) }) },
   {
-    label: auth.user?.totp_enabled ? '关闭两步验证' : '开启两步验证',
+    label: auth.user?.totp_enabled ? t('user.disableTOTP') : t('user.enableTOTP'),
     key: 'totp',
     icon: () => h(NIcon, null, { default: () => h(ShieldIcon) }),
   },
+  {
+    label: t('user.language'),
+    key: 'language',
+    icon: () => h(NIcon, null, { default: () => h(LangIcon) }),
+    children: LOCALES.map(l => ({ label: l.label, key: `lang-${l.value}` })),
+  },
   { type: 'divider', key: 'd1' },
-  { label: '退出登录', key: 'logout', icon: () => h(NIcon, null, { default: () => h(LogOutIcon) }) },
+  { label: t('user.logout'), key: 'logout', icon: () => h(NIcon, null, { default: () => h(LogOutIcon) }) },
 ])
 
 function handleUserMenuSelect(key) {
@@ -157,6 +166,8 @@ function handleUserMenuSelect(key) {
     showPasswordModal.value = true
   } else if (key === 'totp') {
     openTOTPModal()
+  } else if (key.startsWith('lang-')) {
+    setLocale(key.slice(5))
   } else if (key === 'logout') {
     handleLogout()
   }
@@ -164,10 +175,10 @@ function handleUserMenuSelect(key) {
 
 function handleLogout() {
   dialog.warning({
-    title: '退出登录',
-    content: '确认退出吗？',
-    positiveText: '退出',
-    negativeText: '取消',
+    title: t('logout.title'),
+    content: t('logout.message'),
+    positiveText: t('logout.confirm'),
+    negativeText: t('logout.cancel'),
     onPositiveClick: async () => {
       await auth.logout()
       router.push('/login')
@@ -180,18 +191,18 @@ const pwLoading = ref(false)
 const pwFormRef = ref(null)
 const pwForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
 
-const pwRules = {
-  oldPassword: [{ required: true, message: '请输入当前密码', trigger: 'blur' }],
-  newPassword: [{ required: true, message: '请输入新密码', trigger: 'blur' }],
+const pwRules = computed(() => ({
+  oldPassword: [{ required: true, message: t('password.rules.old'), trigger: 'blur' }],
+  newPassword: [{ required: true, message: t('password.rules.new'), trigger: 'blur' }],
   confirmPassword: [
-    { required: true, message: '请确认新密码', trigger: 'blur' },
+    { required: true, message: t('password.rules.confirm'), trigger: 'blur' },
     {
       validator: (_, value) => value === pwForm.newPassword,
-      message: '两次输入的密码不一致',
+      message: t('password.rules.mismatch'),
       trigger: 'blur',
     },
   ],
-}
+}))
 
 function cancelPasswordModal() {
   showPasswordModal.value = false
@@ -209,10 +220,10 @@ async function submitPasswordChange() {
   pwLoading.value = true
   try {
     await authService.changePassword(pwForm.oldPassword, pwForm.newPassword)
-    message.success('密码修改成功')
+    message.success(t('password.success'))
     cancelPasswordModal()
   } catch (e) {
-    message.error(e.message || '密码修改失败')
+    message.error(e.message || t('password.failed'))
   } finally {
     pwLoading.value = false
   }
@@ -250,23 +261,23 @@ async function startTOTPSetup() {
     totpQRDataUrl.value = await QRCode.toDataURL(data.qr_url, { width: 200, margin: 1 })
     totpStep.value = 'setup'
   } catch (e) {
-    totpError.value = e.message || '初始化失败'
+    totpError.value = e.message || t('totp.initFailed')
   } finally {
     totpLoading.value = false
   }
 }
 
 async function confirmTOTPEnable() {
-  if (!totpCode.value) { totpError.value = '请输入验证码'; return }
+  if (!totpCode.value) { totpError.value = t('totp.codeRequired'); return }
   totpLoading.value = true
   totpError.value = ''
   try {
     await authService.totpEnable(totpCode.value)
     auth.user = { ...auth.user, totp_enabled: true }
-    message.success('两步验证已开启')
+    message.success(t('totp.enableSuccess'))
     showTOTPModal.value = false
   } catch (e) {
-    totpError.value = e.message || '验证失败'
+    totpError.value = e.message || t('totp.verifyFailed')
     totpCode.value = ''
   } finally {
     totpLoading.value = false
@@ -274,16 +285,16 @@ async function confirmTOTPEnable() {
 }
 
 async function confirmTOTPDisable() {
-  if (!totpCode.value) { totpError.value = '请输入验证码'; return }
+  if (!totpCode.value) { totpError.value = t('totp.codeRequired'); return }
   totpLoading.value = true
   totpError.value = ''
   try {
     await authService.totpDisable(totpCode.value)
     auth.user = { ...auth.user, totp_enabled: false }
-    message.success('两步验证已关闭')
+    message.success(t('totp.disableSuccess'))
     showTOTPModal.value = false
   } catch (e) {
-    totpError.value = e.message || '验证失败'
+    totpError.value = e.message || t('totp.verifyFailed')
     totpCode.value = ''
   } finally {
     totpLoading.value = false

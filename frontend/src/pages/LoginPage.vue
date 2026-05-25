@@ -1,38 +1,43 @@
 <template>
   <div class="login-wrapper">
+    <div class="lang-switcher">
+      <n-dropdown :options="langOptions" trigger="click" @select="setLocale">
+        <n-button text size="small">{{ currentLangLabel }}</n-button>
+      </n-dropdown>
+    </div>
     <n-card class="login-card" :title="appTitle">
       <n-form ref="formRef" :model="form" :rules="activeRules" @keydown.enter="submit">
         <template v-if="!totpStep">
-          <n-form-item label="用户名" path="username">
-            <n-input v-model:value="form.username" placeholder="用户名" />
+          <n-form-item :label="t('login.username')" path="username">
+            <n-input v-model:value="form.username" :placeholder="t('login.username')" />
           </n-form-item>
-          <n-form-item label="密码" path="password">
+          <n-form-item :label="t('login.password')" path="password">
             <n-input
               v-model:value="form.password"
               type="password"
-              placeholder="密码"
+              :placeholder="t('login.password')"
               show-password-on="click"
             />
           </n-form-item>
         </template>
         <template v-else>
-          <n-form-item label="验证码" path="totpCode">
+          <n-form-item :label="t('login.totpCode')" path="totpCode">
             <n-input
               v-model:value="form.totpCode"
-              placeholder="请输入 6 位动态验证码"
+              :placeholder="t('login.totpPlaceholder')"
               maxlength="6"
               :allow-input="(v) => /^\d*$/.test(v)"
             />
           </n-form-item>
           <n-text depth="3" style="font-size:12px;display:block;margin-bottom:12px">
-            请打开您的身份验证器 App，输入当前显示的 6 位验证码
+            {{ t('login.totpHint') }}
           </n-text>
         </template>
         <n-alert v-if="errorMsg" type="error" style="margin-bottom:12px">{{ errorMsg }}</n-alert>
         <div style="display:flex;gap:8px">
-          <n-button v-if="totpStep" style="flex:1" @click="backToPassword">返回</n-button>
+          <n-button v-if="totpStep" style="flex:1" @click="backToPassword">{{ t('login.back') }}</n-button>
           <n-button type="primary" :style="totpStep ? 'flex:2' : 'width:100%'" :loading="loading" @click="submit">
-            {{ totpStep ? '验证' : '登录' }}
+            {{ totpStep ? t('login.verify') : t('login.login') }}
           </n-button>
         </div>
       </n-form>
@@ -45,12 +50,18 @@ import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
 import { getConfig } from '../config/app-config.js'
+import { useI18n } from '../i18n/index.js'
+import { LOCALES } from '../stores/locale.js'
 
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
+const { t, locale, setLocale } = useI18n()
 
-const appTitle = getConfig().appTitle
+const appTitle = computed(() => t('appTitle'))
+
+const langOptions = LOCALES.map(l => ({ label: l.label, key: l.value }))
+const currentLangLabel = computed(() => LOCALES.find(l => l.value === locale.value)?.label ?? locale.value)
 
 const formRef = ref(null)
 const loading = ref(false)
@@ -59,10 +70,15 @@ const totpStep = ref(false)
 const form = ref({ username: '', password: '', totpCode: '' })
 
 const activeRules = computed(() => totpStep.value
-  ? { totpCode: [{ required: true, message: '请输入验证码', trigger: 'blur' }, { len: 6, message: '验证码为 6 位数字', trigger: 'blur' }] }
+  ? {
+      totpCode: [
+        { required: true, message: t('login.rules.totpCode'), trigger: 'blur' },
+        { len: 6, message: t('login.rules.totpLen'), trigger: 'blur' },
+      ],
+    }
   : {
-      username: { required: true, message: '请输入用户名', trigger: 'blur' },
-      password: { required: true, message: '请输入密码', trigger: 'blur' },
+      username: { required: true, message: t('login.rules.username'), trigger: 'blur' },
+      password: { required: true, message: t('login.rules.password'), trigger: 'blur' },
     }
 )
 
@@ -88,7 +104,7 @@ async function submit() {
     }
     router.push(route.query.redirect || '/documents')
   } catch (e) {
-    errorMsg.value = e.message || '登录失败'
+    errorMsg.value = e.message || t('login.failed')
     if (totpStep.value) form.value.totpCode = ''
   } finally {
     loading.value = false
@@ -106,5 +122,10 @@ async function submit() {
 }
 .login-card {
   width: 360px;
+}
+.lang-switcher {
+  position: fixed;
+  top: 16px;
+  right: 20px;
 }
 </style>

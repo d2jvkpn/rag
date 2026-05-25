@@ -117,6 +117,16 @@ func (s *PostgresStore) UpdateUser(user model.User) error {
 	return s.db.Save(userToRow(user)).Error
 }
 
+func (s *PostgresStore) ListUsers() []model.User {
+	var rows []userRow
+	s.db.Order("created_at asc").Find(&rows)
+	users := make([]model.User, len(rows))
+	for i, r := range rows {
+		users[i] = userFromRow(r)
+	}
+	return users
+}
+
 func (s *PostgresStore) CreateDocument(document model.Document) error {
 	var count int64
 	s.db.Model(&documentRow{}).

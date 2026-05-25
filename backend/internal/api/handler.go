@@ -53,6 +53,7 @@ func (h *Handler) Routes() http.Handler {
 	apiGroup.POST("/documents/:document_id/chunks/:chunk_id/reject", h.withAuth(), h.withDocumentOwner(), h.handleRejectChunk)
 	apiGroup.POST("/documents/:document_id/chunks/:chunk_id/restore", h.withAuth(), h.withDocumentOwner(), h.handleRestoreChunk)
 	apiGroup.POST("/documents/:document_id/index", h.withAuth(), h.withDocumentOwner(), h.handleIndexDocument)
+	apiGroup.GET("/users", h.withAuth(), h.handleListUsers)
 	apiGroup.POST("/query", h.withAuth(), h.handleQuery)
 	apiGroup.GET("/knowledge-bases", h.withAuth(), h.handleListKnowledgeBases)
 	apiGroup.GET("/knowledge-bases/available", h.withAuth(), h.handleListAvailableKnowledgeBases)
@@ -110,6 +111,15 @@ func (h *Handler) handleLogout(c *gin.Context) {
 func (h *Handler) handleMe(c *gin.Context) {
 	user := c.MustGet("current_user").(model.User)
 	writeData(c, 200, sanitizeUser(user))
+}
+
+func (h *Handler) handleListUsers(c *gin.Context) {
+	users := h.authService.ListUsers()
+	items := make([]map[string]any, len(users))
+	for i, u := range users {
+		items[i] = sanitizeUser(u)
+	}
+	writeData(c, 200, map[string]any{"items": items, "total": len(items)})
 }
 
 func (h *Handler) handleChangePassword(c *gin.Context) {

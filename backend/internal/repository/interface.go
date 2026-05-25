@@ -6,6 +6,7 @@ type Store interface {
 	FindUserByUsername(username string) (model.User, error)
 	GetUser(userID string) (model.User, error)
 	UpdateUser(user model.User) error
+	ListUsers() []model.User
 
 	CreateDocument(document model.Document) error
 	UpdateDocument(document model.Document) error
