@@ -20,7 +20,7 @@ type App struct {
 }
 
 func New(v *viper.Viper) (*App, error) {
-	store, err := initStore(v)
+	store, err := initStore(v, readAccounts(v))
 	if err != nil {
 		return nil, err
 	}
@@ -40,17 +40,32 @@ func New(v *viper.Viper) (*App, error) {
 	}, nil
 }
 
-func initStore(v *viper.Viper) (repository.Store, error) {
+func readAccounts(v *viper.Viper) []repository.AccountSeed {
+	var raw []struct {
+		Username string `mapstructure:"username"`
+		Password string `mapstructure:"password"`
+	}
+	_ = v.UnmarshalKey("accounts", &raw)
+	out := make([]repository.AccountSeed, 0, len(raw))
+	for _, a := range raw {
+		if a.Username != "" && a.Password != "" {
+			out = append(out, repository.AccountSeed{Username: a.Username, Password: a.Password})
+		}
+	}
+	return out
+}
+
+func initStore(v *viper.Viper, accounts []repository.AccountSeed) (repository.Store, error) {
 	if dsn := v.GetString("database.dsn"); dsn != "" {
 		infra.L.Info("store: postgres")
-		return repository.NewPostgresStore(dsn, v.GetString("admin.username"), v.GetString("admin.password"))
+		return repository.NewPostgresStore(dsn, accounts)
 	}
 	statePath := v.GetString("app.state_path")
 	if statePath == "" {
 		statePath = filepath.Join(v.GetString("app.data_dir"), "app-state.json")
 	}
 	infra.L.Info("store: json file", zap.String("path", statePath))
-	return repository.NewJSONStore(statePath, v.GetString("admin.username"), v.GetString("admin.password"))
+	return repository.NewJSONStore(statePath, accounts)
 }
 
 func initBlacklist(v *viper.Viper) service.TokenBlacklist {
@@ -87,6 +102,7 @@ func buildServiceOpts(v *viper.Viper) []func(*service.DocumentService) {
 			ChunkSize    int    `mapstructure:"chunk_size"`
 			ChunkOverlap int    `mapstructure:"chunk_overlap"`
 			MinChunks    int    `mapstructure:"min_chunks"`
+			Analyzer     string `mapstructure:"analyzer"`
 		}
 		if err := v.UnmarshalKey("milvus.collections", &rawCols); err != nil || len(rawCols) == 0 {
 			infra.L.Fatal("milvus.collections is required and must be a non-empty list")
@@ -102,12 +118,17 @@ func buildServiceOpts(v *viper.Viper) []func(*service.DocumentService) {
 			if c.MinChunks == 0 {
 				c.MinChunks = service.DefaultMinChunks
 			}
+			analyzer := c.Analyzer
+			if analyzer == "" {
+				analyzer = "chinese"
+			}
 			cols[i] = llm.CollectionConfig{
 				Name:         c.Collection,
 				Dim:          c.Dim,
 				ChunkSize:    c.ChunkSize,
 				ChunkOverlap: c.ChunkOverlap,
 				MinChunks:    c.MinChunks,
+				Analyzer:     analyzer,
 			}
 			infra.L.Info("vectorstore: milvus collection",
 				zap.String("collection", c.Collection),
@@ -115,6 +136,7 @@ func buildServiceOpts(v *viper.Viper) []func(*service.DocumentService) {
 				zap.Int("chunk_size", c.ChunkSize),
 				zap.Int("chunk_overlap", c.ChunkOverlap),
 				zap.Int("min_chunks", c.MinChunks),
+				zap.String("analyzer", analyzer),
 			)
 		}
 		vs, err := llm.NewMilvus(addr, db, cols)

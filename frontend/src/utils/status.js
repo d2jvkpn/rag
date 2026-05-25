@@ -29,10 +29,10 @@ export const STAGE_LABEL = {
 }
 
 export const SOURCE_TYPE_LABEL = {
-  pdf: 'PDF',
-  docx: 'Word',
-  pptx: 'PowerPoint',
-  markdown: 'Markdown',
+  pdf: 'pdf',
+  docx: 'docx',
+  pptx: 'pptx',
+  markdown: 'md',
 }
 
 export const CHUNK_STATUS_LABEL = {

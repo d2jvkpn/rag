@@ -115,7 +115,7 @@ func (s *DocumentService) Close() {
 	s.indexWg.Wait()
 }
 
-func (s *DocumentService) CreateDocument(file multipart.File, header *multipart.FileHeader, knowledgeBaseID, title string, tags []string, humanReview bool) (model.Document, error) {
+func (s *DocumentService) CreateDocument(file multipart.File, header *multipart.FileHeader, knowledgeBaseID, title string, tags []string, humanReview bool, uploaderID, uploaderName string) (model.Document, error) {
 	if knowledgeBaseID == "" {
 		return model.Document{}, errors.New("knowledge_base_id is required")
 	}
@@ -165,6 +165,8 @@ func (s *DocumentService) CreateDocument(file multipart.File, header *multipart.
 		Status:          "uploaded",
 		Stage:           "upload",
 		HumanReview:     humanReview,
+		UploaderID:      uploaderID,
+		UploaderName:    uploaderName,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
@@ -178,8 +180,17 @@ func (s *DocumentService) CreateDocument(file multipart.File, header *multipart.
 	return document, nil
 }
 
-func (s *DocumentService) ListAvailableKnowledgeBases() []string {
-	return s.vectorStore.ListKnowledgeBases()
+func (s *DocumentService) ListAvailableKnowledgeBases() []llm.CollectionConfig {
+	names := s.vectorStore.ListKnowledgeBases()
+	out := make([]llm.CollectionConfig, 0, len(names))
+	for _, name := range names {
+		if cfg, ok := s.collectionCfgs[name]; ok {
+			out = append(out, cfg)
+		} else {
+			out = append(out, llm.CollectionConfig{Name: name})
+		}
+	}
+	return out
 }
 
 func (s *DocumentService) ListDocuments(knowledgeBaseID string) []model.Document {
@@ -646,6 +657,9 @@ type QueryOptions struct {
 }
 
 func (s *DocumentService) Query(knowledgeBaseID, queryText string, topK int, opts QueryOptions) (QueryResult, error) {
+	if strings.TrimSpace(knowledgeBaseID) == "" {
+		return QueryResult{}, errors.New("knowledge_base_id is required")
+	}
 	if strings.TrimSpace(queryText) == "" {
 		return QueryResult{}, errors.New("query is required")
 	}

@@ -35,6 +35,8 @@ type Document struct {
 	StartedAt         *time.Time `json:"started_at,omitempty"`
 	FinishedAt        *time.Time `json:"finished_at,omitempty"`
 	HumanReview       bool       `json:"human_review"`
+	UploaderID        string     `json:"uploader_id,omitempty"`
+	UploaderName      string     `json:"uploader_name,omitempty"`
 }
 
 type ResourceRef struct {

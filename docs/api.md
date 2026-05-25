@@ -123,6 +123,7 @@
 - 创建文档记录（同步），投递异步解析任务
 - `documents.status` 初始值为 `uploaded`
 - 返回 `202 Accepted`（文档已创建，处理异步进行）
+- 自动记录 `uploader_id` 和 `uploader_name`（取自当前登录用户）
 
 字段建议：
 
@@ -130,6 +131,21 @@
 - `knowledge_base_id`
 - `title` 可选
 - `tags` 可选
+
+### 文档所有权
+
+所有用户均可查看所有文档，但以下操作仅限文档上传者（返回 `403 forbidden`）：
+
+- `DELETE /api/documents/:id`
+- `POST /api/documents/:id/chunks/rechunk`
+- `POST /api/documents/:id/chunks/approve`
+- `POST /api/documents/:id/chunks/merge`
+- `POST /api/documents/:id/chunks/:chunk_id/edit`
+- `POST /api/documents/:id/chunks/:chunk_id/reject`
+- `POST /api/documents/:id/chunks/:chunk_id/restore`
+- `POST /api/documents/:id/index`
+
+注：`uploader_id` 为空的文档（存量数据）不受所有权限制。
 
 ### `GET /api/documents`
 
@@ -176,18 +192,54 @@
 
 如果未开启人工审核，系统可在自动切分完成后直接触发 embedding 和入库，不必等待 `approve`。
 
+## 知识库接口
+
+### `GET /api/knowledge-bases/available`
+
+- 返回已配置的 Milvus collection 列表及其参数
+
+响应：
+
+```json
+{
+  "data": {
+    "items": [
+      {
+        "knowledge_base_id": "public",
+        "dim": 1024,
+        "analyzer": "chinese",
+        "chunk_size": 512,
+        "chunk_overlap": 64
+      }
+    ]
+  }
+}
+```
+
+### `GET /api/knowledge-bases`
+
+- 返回各知识库的文档数量（从 DB 扫描，不查询 Milvus）
+
 ## 语义检索接口
 
 ### `POST /api/query`
 
-- 输入查询文本，返回语义相似的 chunk 列表
-- 使用与入库相同的 Embedder 对查询文本进行向量化，然后在 Milvus 中检索
+- 输入查询文本，在指定知识库中检索相似 chunk
+- 不支持跨知识库检索，`knowledge_base_id` 为必填项
+- `search_mode` 为空时使用 dense（纯向量语义搜索）；`bm25` 时跳过 Embedder，仅做全文检索；`hybrid` 时两路并行后 RRF 重排
 
 请求字段：
 
-- `knowledge_base_id`：可选，不传则跨所有知识库检索
-- `query`：查询文本（必填）
-- `top_k`：返回条数，默认 5，最大 50
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `knowledge_base_id` | string | 必填 |
+| `query` | string | 查询文本，必填 |
+| `top_k` | int | 返回条数，默认 5，最大 50 |
+| `search_mode` | string | `""`（dense）/ `"bm25"` / `"hybrid"` |
+| `document_ids` | []string | 可选，限定搜索范围内的文档 ID 列表 |
+| `ef` | int | HNSW 搜索精度参数，0 = Milvus 默认 |
+| `drop_ratio` | float | BM25 稀疏向量剪枝比例，0 = 不剪枝 |
+| `rrf_k` | int | Hybrid RRF 重排 k 值，0 = 默认 60 |
 
 响应：
 
@@ -195,27 +247,30 @@
 {
   "data": {
     "query": "...",
-    "knowledge_base_id": "...",
+    "knowledge_base_id": "public",
+    "answer": "...",
     "items": [
       {
-        "ChunkID": "...",
-        "DocumentID": "...",
-        "KnowledgeBaseID": "...",
-        "Filename": "...",
-        "SourceType": "pdf",
-        "SectionTitle": "...",
-        "PageStart": 3,
-        "PageEnd": 4,
-        "ChunkIndex": 2,
-        "Text": "...",
-        "Score": 0.92
+        "chunk_id": "...",
+        "document_id": "...",
+        "knowledge_base_id": "public",
+        "filename": "report.pdf",
+        "source_type": "pdf",
+        "section_title": "...",
+        "page_start": 3,
+        "page_end": 4,
+        "chunk_index": 2,
+        "text": "...",
+        "score": 0.92
       }
     ]
   }
 }
 ```
 
-注意：未配置 `embedder.base_url` 和 `embedder.api_key` 时，接口返回 500 错误（Noop embedder 无法生成有效向量）。
+- `answer`：LLM 基于 chunk 上下文生成的回答，未配置 LLM 时为 `""`
+- `score`：dense 模式为余弦相似度（0~1），bm25/hybrid 模式为原始分值
+- dense/hybrid 模式未配置 `embedder.base_url` + `embedder.api_key` 时返回 500
 
 ## 状态查询建议
 

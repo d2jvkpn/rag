@@ -23,7 +23,7 @@ type PostgresStore struct {
 	db *gorm.DB
 }
 
-func NewPostgresStore(dsn, adminUsername, adminPassword string) (*PostgresStore, error) {
+func NewPostgresStore(dsn string, accounts []AccountSeed) (*PostgresStore, error) {
 	sqlDB, err := sql.Open("postgres", dsn)
 	if err != nil {
 		return nil, err
@@ -41,7 +41,7 @@ func NewPostgresStore(dsn, adminUsername, adminPassword string) (*PostgresStore,
 	}
 
 	store := &PostgresStore{db: db}
-	if err := store.ensureAdmin(adminUsername, adminPassword); err != nil {
+	if err := store.ensureAccounts(accounts); err != nil {
 		return nil, err
 	}
 	return store, nil
@@ -66,24 +66,29 @@ func runMigrations(sqlDB *sql.DB) error {
 	return nil
 }
 
-func (s *PostgresStore) ensureAdmin(username, password string) error {
-	var count int64
-	if err := s.db.Model(&userRow{}).Count(&count).Error; err != nil {
-		return err
+func (s *PostgresStore) ensureAccounts(accounts []AccountSeed) error {
+	for _, acc := range accounts {
+		var count int64
+		if err := s.db.Model(&userRow{}).Where("username = ?", acc.Username).Count(&count).Error; err != nil {
+			return err
+		}
+		if count > 0 {
+			continue
+		}
+		now := time.Now().UTC()
+		row := userRow{
+			UserID:       uuid.Must(uuid.NewV7()).String(),
+			Username:     acc.Username,
+			PasswordHash: resolvePasswordHash(acc.Password),
+			Status:       "active",
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		}
+		if err := s.db.Create(&row).Error; err != nil {
+			return err
+		}
 	}
-	if count > 0 {
-		return nil
-	}
-	now := time.Now().UTC()
-	row := userRow{
-		UserID:       uuid.Must(uuid.NewV7()).String(),
-		Username:     username,
-		PasswordHash: hashPassword(password),
-		Status:       "active",
-		CreatedAt:    now,
-		UpdatedAt:    now,
-	}
-	return s.db.Create(&row).Error
+	return nil
 }
 
 func (s *PostgresStore) FindUserByUsername(username string) (model.User, error) {
@@ -267,6 +272,8 @@ type documentRow struct {
 	StartedAt         *time.Time     `gorm:"column:started_at"`
 	FinishedAt        *time.Time     `gorm:"column:finished_at"`
 	HumanReview       bool           `gorm:"column:human_review"`
+	UploaderID        string         `gorm:"column:uploader_id"`
+	UploaderName      string         `gorm:"column:uploader_name"`
 }
 
 func (documentRow) TableName() string { return "documents" }
@@ -348,6 +355,8 @@ func documentFromRow(r documentRow) model.Document {
 		StartedAt:         r.StartedAt,
 		FinishedAt:        r.FinishedAt,
 		HumanReview:       r.HumanReview,
+		UploaderID:        r.UploaderID,
+		UploaderName:      r.UploaderName,
 	}
 }
 
@@ -379,6 +388,8 @@ func documentToRow(d model.Document) documentRow {
 		StartedAt:         d.StartedAt,
 		FinishedAt:        d.FinishedAt,
 		HumanReview:       d.HumanReview,
+		UploaderID:        d.UploaderID,
+		UploaderName:      d.UploaderName,
 	}
 }
 

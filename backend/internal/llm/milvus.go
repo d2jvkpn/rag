@@ -22,7 +22,7 @@ var searchOutputFields = []string{
 // Requires Milvus 2.5+ for BM25 full-text search support.
 type Milvus struct {
 	client      *milvusclient.Client
-	collections map[string]int // collection name → vector dim
+	collections map[string]CollectionConfig
 }
 
 func NewMilvus(addr, db string, cols []CollectionConfig) (*Milvus, error) {
@@ -40,10 +40,10 @@ func NewMilvus(addr, db string, cols []CollectionConfig) (*Milvus, error) {
 
 	m := &Milvus{
 		client:      c,
-		collections: make(map[string]int, len(cols)),
+		collections: make(map[string]CollectionConfig, len(cols)),
 	}
 	for _, col := range cols {
-		m.collections[col.Name] = col.Dim
+		m.collections[col.Name] = col
 	}
 
 	if db != "" {
@@ -53,7 +53,7 @@ func NewMilvus(addr, db string, cols []CollectionConfig) (*Milvus, error) {
 		}
 	}
 	for _, col := range cols {
-		if err := m.ensureCollection(ctx, col.Name, col.Dim); err != nil {
+		if err := m.ensureCollection(ctx, col); err != nil {
 			_ = c.Close(ctx)
 			return nil, err
 		}
@@ -88,7 +88,7 @@ func (m *Milvus) Upsert(ctx context.Context, records []VectorRecord) error {
 	if err := m.ValidateKnowledgeBase(collection); err != nil {
 		return err
 	}
-	dim := m.collections[collection]
+	dim := m.collections[collection].Dim
 
 	ids := make([]string, len(records))
 	kbIDs := make([]string, len(records))
@@ -273,18 +273,55 @@ func (m *Milvus) ensureDatabase(ctx context.Context, db string) error {
 	return nil
 }
 
-func (m *Milvus) ensureCollection(ctx context.Context, name string, dim int) error {
+func (m *Milvus) ensureCollection(ctx context.Context, cfg CollectionConfig) error {
+	name := cfg.Name
+	analyzer := cfg.Analyzer
+	if analyzer == "" {
+		analyzer = "chinese"
+	}
+
 	has, err := m.client.HasCollection(ctx, milvusclient.NewHasCollectionOption(name))
 	if err != nil {
 		return fmt.Errorf("milvus has_collection %q: %w", name, err)
 	}
 	if has {
-		task, err := m.client.LoadCollection(ctx, milvusclient.NewLoadCollectionOption(name))
+		col, err := m.client.DescribeCollection(ctx, milvusclient.NewDescribeCollectionOption(name))
 		if err != nil {
-			return fmt.Errorf("milvus load_collection %q: %w", name, err)
+			return fmt.Errorf("milvus describe_collection %q: %w", name, err)
 		}
-		return task.Await(ctx)
+		hasSparse := false
+		existingAnalyzer := ""
+		for _, f := range col.Schema.Fields {
+			if f.Name == "sparse" {
+				hasSparse = true
+			}
+			if f.Name == "text" {
+				if p, ok := f.TypeParams["analyzer_params"]; ok {
+					existingAnalyzer = p
+				}
+			}
+		}
+		wantAnalyzer := fmt.Sprintf(`{"type":"%s"}`, analyzer)
+		schemaOK := hasSparse && (existingAnalyzer == "" || existingAnalyzer == wantAnalyzer)
+		if schemaOK {
+			task, err := m.client.LoadCollection(ctx, milvusclient.NewLoadCollectionOption(name))
+			if err != nil {
+				return fmt.Errorf("milvus load_collection %q: %w", name, err)
+			}
+			return task.Await(ctx)
+		}
+		// Schema mismatch (missing sparse or different analyzer) — drop and recreate
+		if err := m.client.DropCollection(ctx, milvusclient.NewDropCollectionOption(name)); err != nil {
+			return fmt.Errorf("milvus drop_collection %q: %w", name, err)
+		}
 	}
+
+	textField := entity.NewField().
+		WithName("text").
+		WithDataType(entity.FieldTypeVarChar).
+		WithMaxLength(65535).
+		WithEnableAnalyzer(true).
+		WithAnalyzerParams(map[string]any{"type": analyzer})
 
 	schema := entity.NewSchema().
 		WithName(name).
@@ -298,8 +335,8 @@ func (m *Milvus) ensureCollection(ctx context.Context, name string, dim int) err
 		WithField(entity.NewField().WithName("page_start").WithDataType(entity.FieldTypeInt32)).
 		WithField(entity.NewField().WithName("page_end").WithDataType(entity.FieldTypeInt32)).
 		WithField(entity.NewField().WithName("chunk_index").WithDataType(entity.FieldTypeInt32)).
-		WithField(entity.NewField().WithName("text").WithDataType(entity.FieldTypeVarChar).WithMaxLength(65535).WithEnableAnalyzer(true)).
-		WithField(entity.NewField().WithName("embedding").WithDataType(entity.FieldTypeFloatVector).WithDim(int64(dim))).
+		WithField(textField).
+		WithField(entity.NewField().WithName("embedding").WithDataType(entity.FieldTypeFloatVector).WithDim(int64(cfg.Dim))).
 		WithField(entity.NewField().WithName("sparse").WithDataType(entity.FieldTypeSparseVector)).
 		WithFunction(entity.NewFunction().
 			WithName("bm25").

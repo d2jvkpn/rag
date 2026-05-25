@@ -45,6 +45,7 @@
 
 - HTTP 服务使用 `gin`
 - 鉴权使用 `JWT`（HS256，`github.com/golang-jwt/jwt/v5`），令牌存 `HttpOnly Cookie`
+- 密码哈希使用 **bcrypt**（`golang.org/x/crypto/bcrypt`，`DefaultCost`）
 - 配置文件固定使用 `backend/configs/local.yaml`
 - 配置读取使用 `viper`，统一通过 `viper.GetString/GetXX` 获取
 - 启动参数使用命令行 flag，不使用环境变量
@@ -207,9 +208,21 @@ chunk 快照约定：
 当前实现：
 
 - 使用 `JWT + HttpOnly Cookie`（HS256，`github.com/golang-jwt/jwt/v5`）
+- Cookie 属性：`HttpOnly=true`、`SameSite=Lax`、`Secure` 仅在 `--release` 模式下为 `true`
+- 密码使用 bcrypt 哈希（`golang.org/x/crypto/bcrypt`，`DefaultCost`）
 - 每个 token 携带 JTI（UUID）
 - `Logout` 将 JTI 写入 `TokenBlacklist`，后续请求在 `withAuth()` 中被拦截
 - 未配置 `redis.dsn` 时使用 `MemoryBlacklist`（进程级，重启后失效）；配置后自动切换为 `RedisBlacklist`（TTL = token 剩余有效期）
+
+**账户初始化：** `local.yaml` 的 `accounts` 列表在启动时按用户名检查，不存在则插入。`password` 支持明文（启动时自动 bcrypt hash）或已有 bcrypt hash（以 `$2a$`/`$2b$`/`$2y$` 开头，直接存入）。已存在的账户不做修改。
+
+```yaml
+accounts:
+  - username: admin
+    password: "changeme"          # 明文，启动时自动 hash
+  - username: ops
+    password: "$2a$10$Xyz..."     # 已有 hash，直接写入
+```
 
 接口详见 [API 设计](./api.md)。
 
@@ -295,31 +308,33 @@ backend/
 
 ## 当前完成情况
 
-当前已完成（第一、二阶段）：
+当前已完成：
 
 - `backend/` Go 模块和最小目录骨架
 - `gin` 路由与鉴权中间件骨架
 - `configs/local.yaml` + `viper` 配置加载
 - `--release`、`--addr`、`--config` 启动参数
 - `users`、`documents`、`document_chunks` 初版 migration（000001）
-- `sessions` migration（000002）
+- `sessions` migration（000002，未使用）
+- `documents` 新增 `uploader_id`、`uploader_name` 列 migration（000003）
 - `repository.Store` 接口；`JSONStore` 和 `PostgresStore` 双实现
 - `PostgresStore`：`gorm` + `lib/pq` driver，支持 `TEXT[]` tags 和 `JSONB` resource_refs
 - 启动时根据 `database.dsn` 配置自动选择 store
-- 登录、退出、当前用户接口
-- 文档上传、列表、详情、删除接口
+- 登录、退出、当前用户接口；密码使用 bcrypt 哈希
+- 文档上传（记录 uploader）、列表、详情、删除接口
+- 文档所有权中间件 `withDocumentOwner()`：非上传者操作变更接口返回 403
 - `markdown`、`docx`、`pptx` 基础解析
 - 简化版文本型 `pdf` 解析
 - chunk 切分和 chunk JSON 快照写入
 - `rechunk` 接口和 chunk 版本递增
 - chunk 列表查询接口
-- chunk 审核接口：approve / reject / merge / index
+- chunk 审核接口：approve / reject / merge / edit / index
 - 结构化日志（zap + lumberjack，同时输出控制台和 backend/logs/app.log）
-- `Embedder` 接口 + Noop 实现 + OpenAI-compatible 实现（`embedder/openai.go`）
-- `VectorStore` 接口 + Noop 实现 + Milvus REST API 实现（`vectorstore/milvus.go`）
+- `Embedder` 接口 + Noop 实现 + OpenAI-compatible 实现
+- `VectorStore` 接口 + Noop 实现 + Milvus 官方 Go SDK v2 实现（gRPC，Milvus 2.5+）
+  - 支持 dense / BM25 / hybrid 三种搜索模式
+  - 支持 HNSW ef、BM25 drop_ratio、RRF k 调参
+  - 支持按 document_ids 过滤
+  - 每个 collection 可独立配置 analyzer（默认 `chinese`），启动时自动检测 schema 并按需重建
 - `TaskQueue` 接口 + GoroutineQueue 实现（默认，无额外依赖）+ AsynqQueue 实现（需 Redis）
 - 启动时根据 `redis.dsn`、`embedder.*`、`milvus.*` 配置自动选择实现
-
-当前未完成：
-
-- （第一版全部已完成）

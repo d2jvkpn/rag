@@ -65,7 +65,11 @@ uploaded → processing/parse → processing/chunk → review_pending
 - Old chunk versions are never overwritten; rechunk always creates a new version file.
 - Embedding vectors are written to the snapshot **before** Milvus upsert, so Milvus can be rebuilt from snapshots without re-calling the embedding API.
 
-**Auth:** JWT (HS256, `golang-jwt/jwt/v5`) stored in HttpOnly cookie `rag_session`. Each token carries a JTI (UUID). `withAuth()` reads the cookie, calls `authService.Me()` which parses the token and checks the blacklist, then sets `current_user` in the gin context. `Logout` extracts the JTI and adds it to the `TokenBlacklist` (`MemoryBlacklist` by default; `RedisBlacklist` when `redis.dsn` is set).
+**Auth:** JWT (HS256, `golang-jwt/jwt/v5`) stored in an HttpOnly cookie named by `http.session_cookie`. Cookie attributes: `HttpOnly=true`, `SameSite=Lax`, `Secure=true` only when `--release` flag is set (i.e. `gin.ReleaseMode`). Each token carries a JTI (UUID). `withAuth()` reads the cookie, calls `authService.Me()` which parses the token and checks the blacklist, then sets `current_user` in the gin context. `Logout` extracts the JTI and adds it to the `TokenBlacklist` (`MemoryBlacklist` by default; `RedisBlacklist` when `redis.dsn` is set). Passwords are hashed with **bcrypt** (`golang.org/x/crypto/bcrypt`, `DefaultCost`).
+
+**Account seeding:** `accounts` in `local.yaml` is a list of `{username, password}`. On startup, each entry whose username does not exist in the users table is inserted. `password` may be plaintext (auto-hashed on insert) or a pre-computed bcrypt hash (detected by `$2a$`/`$2b$`/`$2y$` prefix, stored as-is). Existing accounts are never modified.
+
+**Document ownership:** `documents.uploader_id` and `documents.uploader_name` are set at upload time from the authenticated user. `withDocumentOwner()` middleware (applied to DELETE, rechunk, approve, merge, edit, reject, restore, index) returns 403 if `doc.uploader_id != ""` and the current user is not the uploader. All users can read all documents.
 
 **API response envelope:**
 - Success: `{"data": <payload>}`
@@ -78,7 +82,7 @@ Error codes: `validation_error`, `unauthorized`, `forbidden`, `not_found`, `conf
 
 **Migrations** live in `migrations/sql/` as numbered pairs (`*.up.sql` / `*.down.sql`). gorm auto-migrate is not used; schema changes always require a new migration file. Primary keys use `UUID PRIMARY KEY DEFAULT uuidv7()`.
 
-**Config** reads `backend/configs/local.yaml` via viper. Key fields: `http_addr`, `data_dir`, `state_path`, `database.dsn`, `redis.dsn`, `jwt.secret`, `session_cookie`, `admin.username`, `admin.password`, `embedder.{base_url,api_key,model}`, `milvus.{addr,db,collections[].{collection,dim}}`. All optional sections fall back to Noop implementations.
+**Config** reads `backend/configs/local.yaml` via viper. Key fields: `http_addr`, `data_dir`, `state_path`, `database.dsn`, `redis.dsn`, `http.jwt_secret`, `http.session_cookie`, `accounts[].{username,password}`, `embedder.{base_url,api_key,model}`, `milvus.{addr,db,collections[].{collection,dim,chunk_size,chunk_overlap,min_chunks,analyzer}}`. All optional sections fall back to Noop implementations.
 
 ### Milvus / VectorStore
 
@@ -91,13 +95,17 @@ milvus:
   collections:
   - collection: public
     dim: 1024
+    analyzer: chinese   # BM25 分词器，默认 chinese（Jieba），可选 english/standard
+    chunk_size: 512
+    chunk_overlap: 64
 ```
 
-- On startup, `NewMilvus` calls `ensureDatabase` (creates `db` if absent, ignores already-exists) then `ensureCollection` for each configured collection.
+- Uses the official Milvus Go SDK v2 (`github.com/milvus-io/milvus/client/v2`), gRPC transport. Requires Milvus 2.5+.
+- Each collection schema contains: dense float vector field `embedding`, sparse vector field `sparse` (BM25 auto-generated from `text` via built-in BM25 function), plus metadata fields.
+- On startup, `NewMilvus` calls `ensureDatabase` then `ensureCollection` for each configured collection. `ensureCollection` calls `DescribeCollection` on existing collections to check for `sparse` field presence and analyzer match; drops and recreates if schema is stale (e.g. pre-BM25 collection or changed analyzer). **Data loss on recreate — documents must be re-indexed.**
 - `knowledge_base_id` on a document must match a configured collection name; validated at upload time.
-- `GET /api/knowledge-bases/available` returns the configured collection list (used by frontend dropdowns).
+- `GET /api/knowledge-bases/available` returns the configured collection list with full config (`dim`, `analyzer`, `chunk_size`, `chunk_overlap`). Used by frontend dropdowns and to display collection parameters in upload modal and search page.
 - `GET /api/knowledge-bases` returns KB IDs with document counts (from DB scan, not Milvus).
-- All Milvus API calls include `dbName` in the request body.
 - `DeleteByDocument` is called on document delete only when `status=indexed`.
 
 ### Frontend
@@ -114,6 +122,20 @@ milvus:
 
 **Runtime config** lives in `frontend/public/app.json`. The frontend never reads build-time environment variables. Fields: `apiBase`, `appTitle`, `pollIntervalMs`, `humanReviewEnabled`.
 
+## Documentation Sync
+
+Any change that affects system behavior, API contracts, configuration, or architectural decisions **must** be reflected in the relevant docs before the task is considered complete:
+
+| Change type | Files to update |
+|---|---|
+| New / changed API endpoint | `docs/api.md` |
+| Backend architecture, middleware, auth, data model | `docs/backend.md`, `CLAUDE.md` |
+| Frontend page, component behavior, UI design decision | `docs/frontend-business.md`, `docs/frontend.md` |
+| Config field added / changed | `CLAUDE.md` (Config section), relevant backend/frontend doc |
+| Cross-cutting (auth, ownership, search modes, etc.) | `CLAUDE.md` Key Conventions + relevant domain doc |
+
+Do not add placeholder text or "TODO: document later" — write the actual description at the time of the change.
+
 ## Key Conventions
 
 - `knowledge_base_id` must match a configured `milvus.collections[*].collection` name. Validated at `CreateDocument`. Scopes file storage paths and chunk snapshot paths.
@@ -123,8 +145,8 @@ milvus:
 - Frontend does not use TypeScript. Do not introduce it.
 - `logger.L` defaults to `zap.NewNop()` at package level so tests that skip `logger.Init()` never panic. `Init()` is called only in `main.go`.
 - `Embedder` (`internal/embedder/`) has `Noop` (default) and `OpenAI` implementations. `OpenAI` works against any OpenAI-compatible endpoint. Wire via `WithEmbedder()`. Activated when `embedder.base_url` + `embedder.api_key` are set in config. DashScope model: `text-embedding-v3` (dim=1024).
-- `VectorStore` (`internal/vectorstore/`) has `Noop` (default) and `Milvus` implementations. `Milvus` uses the Milvus REST API v2 (Milvus 2.4+, no SDK dependency). Interface includes `ValidateKnowledgeBase`, `ListKnowledgeBases`, `Upsert`, `DeleteByDocument`, `Search`.
+- `VectorStore` (`internal/llm/`) has `Noop` (default) and `Milvus` implementations. `Milvus` uses the official Go SDK v2 (gRPC, Milvus 2.5+). Interface: `ValidateKnowledgeBase`, `ListKnowledgeBases`, `Upsert`, `DeleteByDocument`, `Search(ctx, SearchRequest)`. `SearchRequest` carries `KnowledgeBaseID`, `Embedding`, `Query`, `TopK`, `DocumentIDs`, `Mode` (`""` dense / `"bm25"` / `"hybrid"`), `EF`, `DropRatio`, `RRFK`.
 - `TaskQueue` (`internal/queue/`) has `GoroutineQueue` (default, single worker goroutine) and `AsynqQueue` (Redis-backed, activated when `redis.dsn` is set). Wire via `WithTaskQueue()`. Queue selection happens inside `NewDocumentService`.
-- `POST /api/query` embeds the query, calls `VectorStore.Search`, then optionally calls `LLM.Complete` to generate an answer from the retrieved context. Returns `{ items, answer, query, knowledge_base_id }`. `answer` is `""` when LLM is Noop.
+- `POST /api/query` requires `knowledge_base_id` (cross-collection search is not supported). Request fields: `knowledge_base_id` (required), `query`, `top_k`, `search_mode` (`""` dense / `"bm25"` / `"hybrid"`), `document_ids` (optional filter), `ef`, `drop_ratio`, `rrf_k`. BM25-only mode skips the embedder. Embeds the query (dense/hybrid), calls `VectorStore.Search`, then optionally calls `LLM.Complete`. Returns `{ items, answer, query, knowledge_base_id }`. `answer` is `""` when LLM is Noop.
 - `LLM` interface (`internal/llm/`) has `Noop` (default) and `OpenAI` implementations. Wire via `WithLLM()`. Activated when `llm.base_url` + `llm.api_key` are set in config.
 - DOCX/PPTX parsing: `extractParagraphText` in `parser.go` groups `<w:t>` runs within the same `<w:p>` paragraph without separators — preserves words split across runs by mixed formatting.

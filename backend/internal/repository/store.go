@@ -1,20 +1,26 @@
 package repository
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 
 	"backend/internal/model"
 )
+
+// AccountSeed describes an account to ensure exists on startup.
+type AccountSeed struct {
+	Username string
+	Password string // plaintext or bcrypt hash (detected automatically)
+}
 
 var ErrNotFound = errors.New("not found")
 
@@ -30,7 +36,7 @@ type JSONStore struct {
 	data State
 }
 
-func NewJSONStore(path, adminUsername, adminPassword string) (*JSONStore, error) {
+func NewJSONStore(path string, accounts []AccountSeed) (*JSONStore, error) {
 	store := &JSONStore{
 		path: path,
 		data: State{
@@ -52,17 +58,31 @@ func NewJSONStore(path, adminUsername, adminPassword string) (*JSONStore, error)
 		return nil, err
 	}
 
-	if len(store.data.Users) == 0 {
+	changed := false
+	for _, acc := range accounts {
+		exists := false
+		for _, u := range store.data.Users {
+			if u.Username == acc.Username {
+				exists = true
+				break
+			}
+		}
+		if exists {
+			continue
+		}
 		now := time.Now().UTC()
 		user := model.User{
 			UserID:       uuid.Must(uuid.NewV7()).String(),
-			Username:     adminUsername,
-			PasswordHash: hashPassword(adminPassword),
+			Username:     acc.Username,
+			PasswordHash: resolvePasswordHash(acc.Password),
 			Status:       "active",
 			CreatedAt:    now,
 			UpdatedAt:    now,
 		}
 		store.data.Users[user.UserID] = user
+		changed = true
+	}
+	if changed {
 		if err := store.persistLocked(); err != nil {
 			return nil, err
 		}
@@ -212,8 +232,22 @@ func (s *JSONStore) GetChunks(documentID string) ([]model.DocumentChunk, error) 
 }
 
 func hashPassword(password string) string {
-	sum := sha256.Sum256([]byte(password))
-	return hex.EncodeToString(sum[:])
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		panic("bcrypt: " + err.Error())
+	}
+	return string(hash)
+}
+
+func isBcryptHash(s string) bool {
+	return strings.HasPrefix(s, "$2a$") || strings.HasPrefix(s, "$2b$") || strings.HasPrefix(s, "$2y$")
+}
+
+func resolvePasswordHash(password string) string {
+	if isBcryptHash(password) {
+		return password
+	}
+	return hashPassword(password)
 }
 
 func (s *JSONStore) persistLocked() error {

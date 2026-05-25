@@ -93,6 +93,7 @@ type CollectionConfig struct {
 	ChunkSize    int
 	ChunkOverlap int
 	MinChunks    int
+	Analyzer     string // BM25 text analyzer; defaults to "chinese" if empty
 }
 
 // BuildRecords converts document chunks + embeddings into VectorRecords.

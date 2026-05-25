@@ -28,7 +28,7 @@ func TestCreateDocumentDuplicateDoesNotLeaveFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 	v := testConfig(tmpDir)
 
-	store, err := repository.NewJSONStore(v.GetString("app.state_path"), v.GetString("admin.username"), v.GetString("admin.password"))
+	store, err := repository.NewJSONStore(v.GetString("app.state_path"), []repository.AccountSeed{{Username: "admin", Password: "admin123"}})
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}
@@ -46,6 +46,8 @@ func TestCreateDocumentDuplicateDoesNotLeaveFiles(t *testing.T) {
 		"Sample",
 		nil,
 		false,
+		"user-1",
+		"testuser",
 	)
 	if err != nil {
 		t.Fatalf("create first document: %v", err)
@@ -58,6 +60,8 @@ func TestCreateDocumentDuplicateDoesNotLeaveFiles(t *testing.T) {
 		"Sample",
 		nil,
 		false,
+		"user-1",
+		"testuser",
 	)
 	if err == nil {
 		t.Fatalf("expected duplicate upload error, got second document %+v", second)

@@ -58,12 +58,26 @@
           </n-upload>
         </n-form-item>
         <n-form-item label="知识库" path="knowledgeBaseId">
-          <n-select
-            v-model:value="uploadForm.knowledgeBaseId"
-            :options="kbOptions"
-            placeholder="选择知识库"
-            style="width:100%"
-          />
+          <div style="width:100%;display:flex;flex-direction:column;gap:6px">
+            <n-select
+              v-model:value="uploadForm.knowledgeBaseId"
+              :options="kbOptions"
+              placeholder="选择知识库"
+              style="width:100%"
+            />
+            <div v-if="currentUploadKbConfig" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+              <n-text depth="3" style="font-size:12px">
+                dim <n-tag size="tiny" :bordered="false">{{ currentUploadKbConfig.dim }}</n-tag>
+              </n-text>
+              <n-text depth="3" style="font-size:12px">
+                analyzer <n-tag size="tiny" :bordered="false">{{ currentUploadKbConfig.analyzer || 'chinese' }}</n-tag>
+              </n-text>
+              <n-text depth="3" style="font-size:12px">
+                chunk <n-tag size="tiny" :bordered="false">{{ currentUploadKbConfig.chunk_size }}</n-tag>
+                overlap <n-tag size="tiny" :bordered="false">{{ currentUploadKbConfig.chunk_overlap }}</n-tag>
+              </n-text>
+            </div>
+          </div>
         </n-form-item>
         <n-form-item label="标题（可选）">
           <n-input v-model:value="uploadForm.title" placeholder="留空则使用文件名" />
@@ -110,6 +124,7 @@ const lastRefreshed = ref('')
 const showUpload = ref(false)
 const uploading = ref(false)
 const kbOptions = ref([])
+const kbConfigs = ref({})
 const uploadFormRef = ref(null)
 const selectedFile = ref(null)
 const uploadForm = ref({ knowledgeBaseId: '', title: '', tags: [], humanReview: true })
@@ -125,13 +140,16 @@ const filteredDocuments = computed(() => {
   return documents.value.filter(d => d.status === filters.statusFilter)
 })
 
+const currentUploadKbConfig = computed(() => kbConfigs.value[uploadForm.value.knowledgeBaseId] || null)
+
 async function loadKbOptions() {
   try {
     const data = await searchService.listAvailableKnowledgeBases()
-    kbOptions.value = (data?.items || []).map(kb => ({
-      label: kb.knowledge_base_id,
-      value: kb.knowledge_base_id,
-    }))
+    const items = data?.items || []
+    kbOptions.value = items.map(kb => ({ label: kb.knowledge_base_id, value: kb.knowledge_base_id }))
+    const map = {}
+    for (const kb of items) map[kb.knowledge_base_id] = kb
+    kbConfigs.value = map
   } catch { /* non-critical */ }
 }
 
@@ -263,6 +281,12 @@ const columns = [
     key: 'chunk_count',
     width: 70,
     render: (row) => row.chunk_count || '—',
+  },
+  {
+    title: '上传者',
+    key: 'uploader_name',
+    width: 90,
+    render: (row) => h(NText, { depth: 3, style: 'font-size:12px' }, { default: () => row.uploader_name || '—' }),
   },
   {
     title: '更新',

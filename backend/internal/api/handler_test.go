@@ -34,7 +34,7 @@ func TestDocumentLifecycle(t *testing.T) {
 	tmpDir := t.TempDir()
 	v := testConfig(tmpDir)
 
-	store, err := repository.NewJSONStore(v.GetString("app.state_path"), v.GetString("admin.username"), v.GetString("admin.password"))
+	store, err := repository.NewJSONStore(v.GetString("app.state_path"), []repository.AccountSeed{{Username: "admin", Password: "admin123"}})
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestAuthRequired(t *testing.T) {
 	tmpDir := t.TempDir()
 	v := testConfig(tmpDir)
 
-	store, err := repository.NewJSONStore(v.GetString("app.state_path"), v.GetString("admin.username"), v.GetString("admin.password"))
+	store, err := repository.NewJSONStore(v.GetString("app.state_path"), []repository.AccountSeed{{Username: "admin", Password: "admin123"}})
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}

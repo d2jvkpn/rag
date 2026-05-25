@@ -1,14 +1,13 @@
 package service
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 
 	"backend/internal/model"
 	"backend/internal/repository"
@@ -42,7 +41,7 @@ func (s *AuthService) Login(username, password string) (model.User, string, erro
 	if err != nil {
 		return model.User{}, "", errors.New("invalid username or password")
 	}
-	if user.PasswordHash != hashPassword(password) {
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
 		return model.User{}, "", errors.New("invalid username or password")
 	}
 
@@ -79,10 +78,14 @@ func (s *AuthService) ChangePassword(userID, oldPassword, newPassword string) er
 	if err != nil {
 		return err
 	}
-	if user.PasswordHash != hashPassword(oldPassword) {
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(oldPassword)); err != nil {
 		return errors.New("incorrect current password")
 	}
-	user.PasswordHash = hashPassword(newPassword)
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	user.PasswordHash = string(hash)
 	user.UpdatedAt = time.Now().UTC()
 	return s.store.UpdateUser(user)
 }
@@ -145,7 +148,3 @@ func (s *AuthService) parseToken(tokenStr string) (*claims, error) {
 	return c, nil
 }
 
-func hashPassword(password string) string {
-	sum := sha256.Sum256([]byte(password))
-	return hex.EncodeToString(sum[:])
-}

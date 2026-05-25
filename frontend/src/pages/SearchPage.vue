@@ -4,17 +4,28 @@
       <n-card style="margin-bottom:16px">
         <n-space vertical size="medium">
 
-          <!-- Row 1: KB + TopK + Mode -->
+          <!-- Row 1: KB + Doc filter + TopK + Mode -->
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
             <n-select
               v-model:value="knowledgeBaseId"
               :options="kbOptions"
-              placeholder="知识库（留空搜全部）"
-              clearable
+              placeholder="选择知识库"
               filterable
               style="width:200px;flex-shrink:0"
               @update:value="onKbChange"
             />
+            <n-button
+              :disabled="!knowledgeBaseId"
+              :loading="docsLoading"
+              size="small"
+              style="flex-shrink:0"
+              @click="openDocDrawer"
+            >
+              {{ docButtonLabel }}
+              <template v-if="selectedDocIds.length > 0">
+                <n-badge :value="selectedDocIds.length" style="margin-left:6px" />
+              </template>
+            </n-button>
             <n-select
               v-model:value="topK"
               :options="topKOptions"
@@ -33,6 +44,23 @@
             >
               {{ showAdvanced ? '收起参数 ▲' : '高级参数 ▼' }}
             </n-button>
+          </div>
+
+          <!-- KB config info -->
+          <div
+            v-if="currentKbConfig"
+            style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:4px 2px 0"
+          >
+            <n-text depth="3" style="font-size:12px">
+              dim <n-tag size="tiny" :bordered="false">{{ currentKbConfig.dim }}</n-tag>
+            </n-text>
+            <n-text depth="3" style="font-size:12px">
+              analyzer <n-tag size="tiny" :bordered="false">{{ currentKbConfig.analyzer || 'chinese' }}</n-tag>
+            </n-text>
+            <n-text depth="3" style="font-size:12px">
+              chunk <n-tag size="tiny" :bordered="false">{{ currentKbConfig.chunk_size }}</n-tag>
+              overlap <n-tag size="tiny" :bordered="false">{{ currentKbConfig.chunk_overlap }}</n-tag>
+            </n-text>
           </div>
 
           <!-- Advanced params -->
@@ -63,20 +91,7 @@
             </n-form-item>
           </div>
 
-          <!-- Row 2: Document filter -->
-          <n-select
-            v-if="knowledgeBaseId"
-            v-model:value="selectedDocIds"
-            :options="docOptions"
-            :loading="docsLoading"
-            multiple
-            clearable
-            filterable
-            placeholder="筛选文档（留空则搜全部已入库文档）"
-            max-tag-count="responsive"
-          />
-
-          <!-- Row 3: Textarea + Button -->
+          <!-- Row 2: Textarea + Button -->
           <div style="display:flex;gap:10px;align-items:flex-end">
             <n-input
               v-model:value="queryText"
@@ -91,7 +106,7 @@
               <n-button
                 type="primary"
                 :loading="loading"
-                :disabled="!queryText.trim()"
+                :disabled="!knowledgeBaseId || !queryText.trim()"
                 style="width:72px"
                 @click="handleSearch"
               >
@@ -159,10 +174,73 @@
       </div>
     </div>
   </div>
+
+  <!-- Document selection drawer -->
+  <n-drawer v-model:show="drawerVisible" width="460" placement="right">
+    <n-drawer-content title="选择文档" closable>
+      <template #default>
+        <div style="display:flex;flex-direction:column;height:100%;gap:12px">
+          <!-- Search input -->
+          <n-input
+            v-model:value="docSearchText"
+            placeholder="搜索文件名…"
+            clearable
+            size="small"
+          />
+
+          <!-- Select all -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:8px;border-bottom:1px solid var(--n-border-color)">
+            <n-checkbox
+              :checked="allSelected"
+              :indeterminate="someSelected"
+              @update:checked="toggleSelectAll"
+            >
+              全选（{{ filteredDocs.length }} 篇）
+            </n-checkbox>
+            <n-text depth="3" style="font-size:12px">
+              已选 {{ tempSelectedDocIds.length }} / {{ docOptions.length }}
+            </n-text>
+          </div>
+
+          <!-- Document list -->
+          <div style="flex:1;overflow-y:auto">
+            <n-empty
+              v-if="filteredDocs.length === 0"
+              description="无匹配文档"
+              style="padding:32px 0"
+            />
+            <n-checkbox-group v-model:value="tempSelectedDocIds">
+              <div
+                v-for="doc in filteredDocs"
+                :key="doc.value"
+                style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--n-border-color)"
+              >
+                <n-checkbox :value="doc.value" style="flex-shrink:0" />
+                <n-text style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" :title="doc.label">
+                  {{ doc.label }}
+                </n-text>
+                <n-tag size="tiny" style="flex-shrink:0">{{ SOURCE_TYPE_LABEL[doc.sourceType] || doc.sourceType }}</n-tag>
+                <n-text v-if="doc.uploaderName" depth="3" style="font-size:11px;flex-shrink:0;max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                  {{ doc.uploaderName }}
+                </n-text>
+              </div>
+            </n-checkbox-group>
+          </div>
+        </div>
+      </template>
+
+      <template #footer>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <n-button size="small" @click="resetDocSelection">重置</n-button>
+          <n-button type="primary" size="small" @click="confirmDocSelection">确认</n-button>
+        </div>
+      </template>
+    </n-drawer-content>
+  </n-drawer>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { searchService } from '../services/search.js'
 import { documentsService } from '../services/documents.js'
@@ -187,7 +265,64 @@ const results = ref([])
 const answer = ref('')
 const searched = ref(false)
 const kbOptions = ref([])
+const kbConfigs = ref({})
 const docOptions = ref([])
+
+const currentKbConfig = computed(() => kbConfigs.value[knowledgeBaseId.value] || null)
+
+// Drawer state
+const drawerVisible = ref(false)
+const docSearchText = ref('')
+const tempSelectedDocIds = ref([])
+
+const filteredDocs = computed(() => {
+  const q = docSearchText.value.toLowerCase()
+  if (!q) return docOptions.value
+  return docOptions.value.filter(d => d.label.toLowerCase().includes(q))
+})
+
+const allSelected = computed(() =>
+  filteredDocs.value.length > 0 &&
+  filteredDocs.value.every(d => tempSelectedDocIds.value.includes(d.value))
+)
+
+const someSelected = computed(() =>
+  filteredDocs.value.some(d => tempSelectedDocIds.value.includes(d.value)) && !allSelected.value
+)
+
+const docButtonLabel = computed(() => {
+  if (selectedDocIds.value.length === 0) return '全部文档'
+  return `已选 ${selectedDocIds.value.length} 篇`
+})
+
+function openDocDrawer() {
+  tempSelectedDocIds.value = [...selectedDocIds.value]
+  docSearchText.value = ''
+  drawerVisible.value = true
+}
+
+function confirmDocSelection() {
+  selectedDocIds.value = [...tempSelectedDocIds.value]
+  drawerVisible.value = false
+}
+
+function resetDocSelection() {
+  tempSelectedDocIds.value = []
+}
+
+function toggleSelectAll() {
+  if (allSelected.value) {
+    const filteredIds = new Set(filteredDocs.value.map(d => d.value))
+    tempSelectedDocIds.value = tempSelectedDocIds.value.filter(id => !filteredIds.has(id))
+  } else {
+    const filteredIds = filteredDocs.value.map(d => d.value)
+    const existing = new Set(tempSelectedDocIds.value)
+    tempSelectedDocIds.value = [
+      ...tempSelectedDocIds.value,
+      ...filteredIds.filter(id => !existing.has(id)),
+    ]
+  }
+}
 
 const topKOptions = [
   { label: 'Top 5', value: 5 },
@@ -226,10 +361,14 @@ function formatScore(score) {
 async function loadKnowledgeBases() {
   try {
     const resp = await searchService.listAvailableKnowledgeBases()
-    kbOptions.value = (resp?.items || []).map(kb => ({
+    const items = resp?.items || []
+    kbOptions.value = items.map(kb => ({
       label: kb.knowledge_base_id,
       value: kb.knowledge_base_id,
     }))
+    const map = {}
+    for (const kb of items) map[kb.knowledge_base_id] = kb
+    kbConfigs.value = map
   } catch { /* non-critical */ }
 }
 
@@ -242,7 +381,12 @@ async function loadDocuments(kbId) {
     const resp = await documentsService.list(kbId)
     docOptions.value = (resp?.items || [])
       .filter(d => d.status === 'indexed')
-      .map(d => ({ label: d.filename, value: d.document_id }))
+      .map(d => ({
+        label: d.filename,
+        value: d.document_id,
+        sourceType: d.source_type,
+        uploaderName: d.uploader_name,
+      }))
   } catch { /* non-critical */ } finally {
     docsLoading.value = false
   }
