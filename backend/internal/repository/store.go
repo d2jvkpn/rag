@@ -37,6 +37,10 @@ type JSONStore struct {
 	data State
 }
 
+func (s *JSONStore) Close() error {
+	return nil
+}
+
 func NewJSONStore(path string, accounts []AccountSeed) (*JSONStore, error) {
 	store := &JSONStore{
 		path: path,

@@ -99,6 +99,10 @@ func WithCollectionConfigs(cols []llm.CollectionConfig) func(*DocumentService) {
 	}
 }
 
+func (s *DocumentService) VectorStore() llm.VectorStore {
+	return s.vectorStore
+}
+
 func (s *DocumentService) collectionCfg(kbID string) llm.CollectionConfig {
 	if c, ok := s.collectionCfgs[kbID]; ok {
 		return c
@@ -113,6 +117,21 @@ func (s *DocumentService) collectionCfg(kbID string) llm.CollectionConfig {
 func (s *DocumentService) Close() {
 	s.taskQueue.Shutdown()
 	s.indexWg.Wait()
+}
+
+func (s *DocumentService) Shutdown(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		s.Close()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (s *DocumentService) CreateDocument(file multipart.File, header *multipart.FileHeader, knowledgeBaseID, title string, tags []string, humanReview bool, uploaderID, uploaderName string) (model.Document, error) {

@@ -1,6 +1,8 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"path/filepath"
 	"time"
 
@@ -18,6 +20,9 @@ import (
 type App struct {
 	Handler         *api.Handler
 	DocumentService *service.DocumentService
+	store           repository.Store
+	blacklist       service.TokenBlacklist
+	vectorStore     llm.VectorStore
 }
 
 func New(v *viper.Viper) (*App, error) {
@@ -37,13 +42,36 @@ func New(v *viper.Viper) (*App, error) {
 	if err != nil || tokenTTL <= 0 {
 		tokenTTL = 0 // falls back to defaultTokenTTL in NewAuthService
 	}
-	authService := service.NewAuthService(store, v.GetString("http.jwt_secret"), tokenTTL, accounts, initBlacklist(v))
+	blacklist := initBlacklist(v)
+	authService := service.NewAuthService(store, v.GetString("http.jwt_secret"), tokenTTL, accounts, blacklist)
 	handler := api.NewHandler(v, authService, documentService)
 
 	return &App{
 		Handler:         handler,
 		DocumentService: documentService,
+		store:           store,
+		blacklist:       blacklist,
+		vectorStore:     documentService.VectorStore(),
 	}, nil
+}
+
+func (a *App) Shutdown(ctx context.Context) error {
+	var err error
+
+	if a.DocumentService != nil {
+		err = errors.Join(err, a.DocumentService.Shutdown(ctx))
+	}
+	if c, ok := a.vectorStore.(interface{ Close(context.Context) error }); ok {
+		err = errors.Join(err, c.Close(ctx))
+	}
+	if c, ok := a.blacklist.(interface{ Close() error }); ok {
+		err = errors.Join(err, c.Close())
+	}
+	if c, ok := a.store.(interface{ Close() error }); ok {
+		err = errors.Join(err, c.Close())
+	}
+
+	return err
 }
 
 func readAccounts(v *viper.Viper) []repository.AccountSeed {

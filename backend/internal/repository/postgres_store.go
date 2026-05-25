@@ -23,6 +23,14 @@ type PostgresStore struct {
 	db *gorm.DB
 }
 
+func (s *PostgresStore) Close() error {
+	sqlDB, err := s.db.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.Close()
+}
+
 func NewPostgresStore(dsn string, accounts []AccountSeed) (*PostgresStore, error) {
 	sqlDB, err := sql.Open("postgres", dsn)
 	if err != nil {

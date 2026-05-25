@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
-	"log"
 	"net/http"
 	"os/signal"
 	"path/filepath"
@@ -39,7 +39,6 @@ func main() {
 	if err != nil {
 		infra.L.Fatal("init app", zap.Error(err))
 	}
-	defer application.DocumentService.Close()
 
 	server := &http.Server{
 		Addr:              v.GetString("http.addr"),
@@ -54,7 +53,9 @@ func main() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = server.Shutdown(shutdownCtx)
+		if err := server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, context.Canceled) {
+			infra.L.Warn("http server shutdown", zap.Error(err))
+		}
 	}()
 
 	infra.L.Info("server starting",
@@ -63,6 +64,17 @@ func main() {
 		zap.String("config", *configPath),
 	)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("listen: %v", err)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if shutdownErr := application.Shutdown(shutdownCtx); shutdownErr != nil {
+			infra.L.Warn("application shutdown after listen failure", zap.Error(shutdownErr))
+		}
+		infra.L.Fatal("listen", zap.Error(err))
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := application.Shutdown(shutdownCtx); err != nil && !errors.Is(err, context.Canceled) {
+		infra.L.Warn("application shutdown", zap.Error(err))
 	}
 }

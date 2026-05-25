@@ -60,6 +60,13 @@
 - `--addr string`
 - `--config configs/local.yaml`
 
+当前退出行为：
+
+- 监听 `SIGINT` / `SIGTERM`
+- 先对 HTTP 服务执行 `http.Server.Shutdown`，超时 `5s`
+- 再执行应用级 shutdown，等待文档任务队列和进行中的索引任务结束，超时 `10s`
+- 若启用了对应后端，退出时同时关闭 Milvus、Redis blacklist、Postgres 连接
+
 当前实现取舍（第一阶段历史记录）：
 
 - 先验证”上传 -> 解析 -> 切分 -> 快照 -> 查询 -> 删除”闭环
