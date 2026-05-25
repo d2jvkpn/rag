@@ -8,8 +8,8 @@ type LLM interface {
 	Model() string
 }
 
-// Noop returns empty answers; used until a real LLM is configured.
-type Noop struct{}
+// NoopLLM returns empty answers; used until a real LLM is configured.
+type NoopLLM struct{}
 
-func (Noop) Complete(_ context.Context, _, _ string) (string, error) { return "", nil }
-func (Noop) Model() string                                           { return "noop" }
+func (NoopLLM) Complete(_ context.Context, _, _ string) (string, error) { return "", nil }
+func (NoopLLM) Model() string                                            { return "noop" }

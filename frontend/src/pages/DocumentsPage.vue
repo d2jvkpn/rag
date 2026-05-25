@@ -4,9 +4,10 @@
       <!-- Toolbar -->
       <div class="toolbar">
         <n-button type="primary" @click="showUpload = true">上传文档</n-button>
-        <n-input
+        <n-select
           v-model:value="filters.knowledgeBaseId"
-          placeholder="知识库 ID 筛选"
+          :options="kbOptions"
+          placeholder="知识库筛选"
           clearable
           style="width:200px"
           @update:value="loadDocuments"
@@ -60,9 +61,7 @@
           <n-select
             v-model:value="uploadForm.knowledgeBaseId"
             :options="kbOptions"
-            filterable
-            tag
-            placeholder="选择已有知识库或输入新 ID"
+            placeholder="选择知识库"
             style="width:100%"
           />
         </n-form-item>
@@ -113,7 +112,7 @@ const uploading = ref(false)
 const kbOptions = ref([])
 const uploadFormRef = ref(null)
 const selectedFile = ref(null)
-const uploadForm = ref({ knowledgeBaseId: '', title: '', tags: [], humanReview: false })
+const uploadForm = ref({ knowledgeBaseId: '', title: '', tags: [], humanReview: true })
 
 const uploadRules = {
   knowledgeBaseId: { required: true, message: '请填写知识库 ID', trigger: 'blur' },
@@ -128,9 +127,9 @@ const filteredDocuments = computed(() => {
 
 async function loadKbOptions() {
   try {
-    const data = await searchService.listKnowledgeBases()
+    const data = await searchService.listAvailableKnowledgeBases()
     kbOptions.value = (data?.items || []).map(kb => ({
-      label: `${kb.knowledge_base_id} (${kb.document_count})`,
+      label: kb.knowledge_base_id,
       value: kb.knowledge_base_id,
     }))
   } catch { /* non-critical */ }
@@ -170,13 +169,23 @@ async function handleUpload() {
     await documentsService.upload(fd)
     message.success('上传成功，正在处理')
     showUpload.value = false
-    uploadForm.value = { knowledgeBaseId: '', title: '', tags: [], humanReview: false }
+    uploadForm.value = { knowledgeBaseId: '', title: '', tags: [], humanReview: true }
     selectedFile.value = null
     await loadDocuments()
   } catch (e) {
     message.error(e.message || '上传失败')
   } finally {
     uploading.value = false
+  }
+}
+
+async function handleRetry(doc) {
+  try {
+    await documentsService.index(doc.document_id)
+    message.success('重试已提交')
+    await loadDocuments()
+  } catch (e) {
+    message.error(e.message)
   }
 }
 
@@ -269,7 +278,8 @@ const columns = [
       default: () => [
         h(NButton, { size: 'tiny', onClick: () => router.push(`/documents/${row.document_id}`) }, { default: () => '详情' }),
         h(NButton, { size: 'tiny', onClick: () => router.push(`/documents/${row.document_id}/chunks`) }, { default: () => 'Chunks' }),
-        h(NButton, { size: 'tiny', onClick: () => handleRechunk(row) }, { default: () => '重切分' }),
+        row.status !== 'indexed' && h(NButton, { size: 'tiny', onClick: () => handleRechunk(row) }, { default: () => '重切分' }),
+        row.status === 'failed' && h(NButton, { size: 'tiny', type: 'warning', onClick: () => handleRetry(row) }, { default: () => '重试' }),
         h(NButton, { size: 'tiny', type: 'error', onClick: () => handleDelete(row) }, { default: () => '删除' }),
       ],
     }),

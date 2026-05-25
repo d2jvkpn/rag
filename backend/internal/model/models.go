@@ -67,6 +67,7 @@ type DocumentChunk struct {
 	ReviewComment  string        `json:"review_comment,omitempty"`
 	Filename       string        `json:"filename"`
 	EmbeddingModel string        `json:"embedding_model,omitempty"`
+	Embedding      []float32     `json:"embedding,omitempty"`
 	ResourceRefs   []ResourceRef `json:"resource_refs"`
 }
 

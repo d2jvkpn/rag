@@ -1,4 +1,4 @@
-package vectorstore
+package llm
 
 import (
 	"context"
@@ -39,6 +39,10 @@ type SearchResult struct {
 
 // VectorStore persists and retrieves embedding vectors.
 type VectorStore interface {
+	// ValidateKnowledgeBase returns an error if kbID is not a known collection.
+	ValidateKnowledgeBase(kbID string) error
+	// ListKnowledgeBases returns all configured collection names.
+	ListKnowledgeBases() []string
 	// Upsert inserts or replaces records.
 	Upsert(ctx context.Context, records []VectorRecord) error
 	// DeleteByDocument removes all vectors belonging to a document.
@@ -47,13 +51,24 @@ type VectorStore interface {
 	Search(ctx context.Context, knowledgeBaseID string, embedding []float32, topK int) ([]SearchResult, error)
 }
 
-// Noop discards all writes and returns empty search results.
-type Noop struct{}
+// NoopVectorStore discards all writes and returns empty search results.
+type NoopVectorStore struct{}
 
-func (Noop) Upsert(_ context.Context, _ []VectorRecord) error      { return nil }
-func (Noop) DeleteByDocument(_ context.Context, _, _ string) error { return nil }
-func (Noop) Search(_ context.Context, _ string, _ []float32, _ int) ([]SearchResult, error) {
+func (NoopVectorStore) ValidateKnowledgeBase(_ string) error                   { return nil }
+func (NoopVectorStore) ListKnowledgeBases() []string                           { return nil }
+func (NoopVectorStore) Upsert(_ context.Context, _ []VectorRecord) error       { return nil }
+func (NoopVectorStore) DeleteByDocument(_ context.Context, _, _ string) error  { return nil }
+func (NoopVectorStore) Search(_ context.Context, _ string, _ []float32, _ int) ([]SearchResult, error) {
 	return nil, nil
+}
+
+// CollectionConfig holds per-collection settings read from config.
+type CollectionConfig struct {
+	Name         string
+	Dim          int
+	ChunkSize    int
+	ChunkOverlap int
+	MinChunks    int
 }
 
 // BuildRecords converts document chunks + embeddings into VectorRecords.

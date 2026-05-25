@@ -118,9 +118,9 @@ const topKOptions = [
 
 async function loadKnowledgeBases() {
   try {
-    const resp = await searchService.listKnowledgeBases()
+    const resp = await searchService.listAvailableKnowledgeBases()
     kbOptions.value = (resp?.items || []).map(kb => ({
-      label: `${kb.knowledge_base_id} (${kb.document_count})`,
+      label: kb.knowledge_base_id,
       value: kb.knowledge_base_id,
     }))
   } catch { /* non-critical */ }

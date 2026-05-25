@@ -1,4 +1,4 @@
-package parser
+package llm
 
 import (
 	"archive/zip"
@@ -14,12 +14,12 @@ import (
 	"unicode"
 )
 
-type Result struct {
+type ParseResult struct {
 	Text      string
 	PageCount int
 }
 
-func Parse(path, sourceType string) (Result, error) {
+func Parse(path, sourceType string) (ParseResult, error) {
 	switch sourceType {
 	case "markdown":
 		return parseMarkdown(path)
@@ -30,26 +30,26 @@ func Parse(path, sourceType string) (Result, error) {
 	case "pdf":
 		return parsePDF(path)
 	default:
-		return Result{}, errors.New("unsupported file type")
+		return ParseResult{}, errors.New("unsupported file type")
 	}
 }
 
-func parseMarkdown(path string) (Result, error) {
+func parseMarkdown(path string) (ParseResult, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return Result{}, err
+		return ParseResult{}, err
 	}
 	text := strings.TrimSpace(string(raw))
 	if text == "" {
-		return Result{}, errors.New("markdown content is empty")
+		return ParseResult{}, errors.New("markdown content is empty")
 	}
-	return Result{Text: text, PageCount: 1}, nil
+	return ParseResult{Text: text, PageCount: 1}, nil
 }
 
-func parseDocx(path string) (Result, error) {
+func parseDocx(path string) (ParseResult, error) {
 	reader, err := zip.OpenReader(path)
 	if err != nil {
-		return Result{}, err
+		return ParseResult{}, err
 	}
 	defer reader.Close()
 
@@ -60,22 +60,22 @@ func parseDocx(path string) (Result, error) {
 		}
 		content, err := readZipFile(file)
 		if err != nil {
-			return Result{}, err
+			return ParseResult{}, err
 		}
-		texts = append(texts, extractXMLText(string(content), []string{"w:t"}))
+		texts = append(texts, extractParagraphText(string(content), "w:p", "w:t"))
 	}
 
 	text := strings.TrimSpace(strings.Join(texts, "\n"))
 	if text == "" {
-		return Result{}, errors.New("docx content is empty")
+		return ParseResult{}, errors.New("docx content is empty")
 	}
-	return Result{Text: text, PageCount: 1}, nil
+	return ParseResult{Text: text, PageCount: 1}, nil
 }
 
-func parsePptx(path string) (Result, error) {
+func parsePptx(path string) (ParseResult, error) {
 	reader, err := zip.OpenReader(path)
 	if err != nil {
-		return Result{}, err
+		return ParseResult{}, err
 	}
 	defer reader.Close()
 
@@ -87,20 +87,20 @@ func parsePptx(path string) (Result, error) {
 		case strings.HasPrefix(file.Name, "ppt/slides/slide") && strings.HasSuffix(file.Name, ".xml"):
 			content, err := readZipFile(file)
 			if err != nil {
-				return Result{}, err
+				return ParseResult{}, err
 			}
-			slideText[file.Name] = extractXMLText(string(content), []string{"a:t"})
+			slideText[file.Name] = extractParagraphText(string(content), "a:p", "a:t")
 		case strings.HasPrefix(file.Name, "ppt/notesSlides/notesSlide") && strings.HasSuffix(file.Name, ".xml"):
 			content, err := readZipFile(file)
 			if err != nil {
-				return Result{}, err
+				return ParseResult{}, err
 			}
-			noteText[file.Name] = extractXMLText(string(content), []string{"a:t"})
+			noteText[file.Name] = extractParagraphText(string(content), "a:p", "a:t")
 		}
 	}
 
 	if len(slideText) == 0 {
-		return Result{}, errors.New("pptx content is empty")
+		return ParseResult{}, errors.New("pptx content is empty")
 	}
 
 	slideNames := make([]string, 0, len(slideText))
@@ -124,15 +124,15 @@ func parsePptx(path string) (Result, error) {
 
 	text := strings.TrimSpace(strings.Join(sections, "\n\n"))
 	if text == "" {
-		return Result{}, errors.New("pptx content is empty")
+		return ParseResult{}, errors.New("pptx content is empty")
 	}
-	return Result{Text: text, PageCount: len(sections)}, nil
+	return ParseResult{Text: text, PageCount: len(sections)}, nil
 }
 
-func parsePDF(path string) (Result, error) {
+func parsePDF(path string) (ParseResult, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return Result{}, err
+		return ParseResult{}, err
 	}
 
 	matches := regexp.MustCompile(`\(([^()]*)\)\s*Tj`).FindAllSubmatch(raw, -1)
@@ -148,14 +148,14 @@ func parsePDF(path string) (Result, error) {
 	}
 
 	if len(fragments) == 0 {
-		return Result{}, errors.New("pdf text extraction failed: only simple text PDFs are supported in the current scaffold")
+		return ParseResult{}, errors.New("pdf text extraction failed: only simple text PDFs are supported in the current scaffold")
 	}
 
 	text := strings.TrimSpace(strings.Join(fragments, "\n"))
 	if text == "" {
-		return Result{}, errors.New("pdf content is empty")
+		return ParseResult{}, errors.New("pdf content is empty")
 	}
-	return Result{Text: text, PageCount: max(1, bytes.Count(raw, []byte("/Type /Page")))}, nil
+	return ParseResult{Text: text, PageCount: max(1, bytes.Count(raw, []byte("/Type /Page")))}, nil
 }
 
 func CleanText(input string) string {
@@ -197,22 +197,29 @@ func readZipFile(file *zip.File) ([]byte, error) {
 	return io.ReadAll(reader)
 }
 
-func extractXMLText(content string, tags []string) string {
-	text := content
-	text = strings.NewReplacer("<w:p>", "\n", "</w:p>", "\n", "<a:p>", "\n", "</a:p>", "\n").Replace(text)
-	for _, tag := range tags {
-		re := regexp.MustCompile(`<` + regexp.QuoteMeta(tag) + `[^>]*>(.*?)</` + regexp.QuoteMeta(tag) + `>`)
-		values := re.FindAllStringSubmatch(text, -1)
-		lines := make([]string, 0, len(values))
-		for _, value := range values {
-			if len(value) < 2 {
-				continue
+// extractParagraphText splits XML by paragraph tag (e.g. "w:p" or "a:p"), then
+// concatenates all run tags (e.g. "w:t" or "a:t") within each paragraph without
+// separators. Paragraphs are joined with newlines. This preserves words that Word
+// splits across multiple runs due to mixed formatting.
+func extractParagraphText(content, paraTag, runTag string) string {
+	paraRe := regexp.MustCompile(`(?s)<` + regexp.QuoteMeta(paraTag) + `[\s>].*?</` + regexp.QuoteMeta(paraTag) + `>`)
+	runRe := regexp.MustCompile(`(?s)<` + regexp.QuoteMeta(runTag) + `[^>]*>(.*?)</` + regexp.QuoteMeta(runTag) + `>`)
+
+	paras := paraRe.FindAllString(content, -1)
+	lines := make([]string, 0, len(paras))
+	for _, para := range paras {
+		runs := runRe.FindAllStringSubmatch(para, -1)
+		var sb strings.Builder
+		for _, r := range runs {
+			if len(r) >= 2 {
+				sb.WriteString(htmlUnescape(stripXML(r[1])))
 			}
-			lines = append(lines, htmlUnescape(stripXML(value[1])))
 		}
-		text = strings.Join(lines, "\n")
+		if line := strings.TrimSpace(sb.String()); line != "" {
+			lines = append(lines, line)
+		}
 	}
-	return strings.TrimSpace(text)
+	return strings.Join(lines, "\n")
 }
 
 func stripXML(input string) string {

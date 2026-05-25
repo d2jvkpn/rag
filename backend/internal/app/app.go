@@ -8,12 +8,10 @@ import (
 	"go.uber.org/zap"
 
 	"backend/internal/api"
-	"backend/internal/embedder"
 	"backend/internal/llm"
-	"backend/internal/logger"
+	"backend/internal/infra"
 	"backend/internal/repository"
 	"backend/internal/service"
-	"backend/internal/vectorstore"
 )
 
 type App struct {
@@ -44,27 +42,27 @@ func New(v *viper.Viper) (*App, error) {
 
 func initStore(v *viper.Viper) (repository.Store, error) {
 	if dsn := v.GetString("database.dsn"); dsn != "" {
-		logger.L.Info("store: postgres")
+		infra.L.Info("store: postgres")
 		return repository.NewPostgresStore(dsn, v.GetString("admin.username"), v.GetString("admin.password"))
 	}
 	statePath := v.GetString("app.state_path")
 	if statePath == "" {
 		statePath = filepath.Join(v.GetString("app.data_dir"), "app-state.json")
 	}
-	logger.L.Info("store: json file", zap.String("path", statePath))
+	infra.L.Info("store: json file", zap.String("path", statePath))
 	return repository.NewJSONStore(statePath, v.GetString("admin.username"), v.GetString("admin.password"))
 }
 
 func initBlacklist(v *viper.Viper) service.TokenBlacklist {
 	if dsn := v.GetString("redis.dsn"); dsn != "" {
-		logger.L.Info("token blacklist: redis", zap.String("dsn", dsn))
+		infra.L.Info("token blacklist: redis", zap.String("dsn", dsn))
 		opt, err := redis.ParseURL(dsn)
 		if err != nil {
-			logger.L.Fatal("parse redis dsn", zap.Error(err))
+			infra.L.Fatal("parse redis dsn", zap.Error(err))
 		}
 		return service.NewRedisBlacklist(redis.NewClient(opt))
 	}
-	logger.L.Info("token blacklist: memory")
+	infra.L.Info("token blacklist: memory")
 	return service.NewMemoryBlacklist()
 }
 
@@ -75,33 +73,68 @@ func buildServiceOpts(v *viper.Viper) []func(*service.DocumentService) {
 	embedAPIKey := v.GetString("embedder.api_key")
 	if embedBaseURL != "" && embedAPIKey != "" {
 		model := v.GetString("embedder.model")
-		logger.L.Info("embedder: openai-compatible", zap.String("model", model))
-		opts = append(opts, service.WithEmbedder(embedder.NewOpenAI(embedBaseURL, embedAPIKey, model)))
+		infra.L.Info("embedder: openai-compatible", zap.String("model", model))
+		opts = append(opts, service.WithEmbedder(llm.NewOpenAIEmbedder(embedBaseURL, embedAPIKey, model)))
 	} else {
-		logger.L.Info("embedder: noop")
+		infra.L.Info("embedder: noop")
 	}
 
 	if addr := v.GetString("milvus.addr"); addr != "" {
-		collection := v.GetString("milvus.collection")
-		dim := v.GetInt("milvus.dim")
-		logger.L.Info("vectorstore: milvus", zap.String("addr", addr), zap.String("collection", collection))
-		vs, err := vectorstore.NewMilvus(addr, collection, dim)
+		db := v.GetString("milvus.db")
+		var rawCols []struct {
+			Collection   string `mapstructure:"collection"`
+			Dim          int    `mapstructure:"dim"`
+			ChunkSize    int    `mapstructure:"chunk_size"`
+			ChunkOverlap int    `mapstructure:"chunk_overlap"`
+			MinChunks    int    `mapstructure:"min_chunks"`
+		}
+		if err := v.UnmarshalKey("milvus.collections", &rawCols); err != nil || len(rawCols) == 0 {
+			infra.L.Fatal("milvus.collections is required and must be a non-empty list")
+		}
+		cols := make([]llm.CollectionConfig, len(rawCols))
+		for i, c := range rawCols {
+			if c.ChunkSize == 0 {
+				c.ChunkSize = service.DefaultChunkSize
+			}
+			if c.ChunkOverlap == 0 {
+				c.ChunkOverlap = service.DefaultChunkOverlap
+			}
+			if c.MinChunks == 0 {
+				c.MinChunks = service.DefaultMinChunks
+			}
+			cols[i] = llm.CollectionConfig{
+				Name:         c.Collection,
+				Dim:          c.Dim,
+				ChunkSize:    c.ChunkSize,
+				ChunkOverlap: c.ChunkOverlap,
+				MinChunks:    c.MinChunks,
+			}
+			infra.L.Info("vectorstore: milvus collection",
+				zap.String("collection", c.Collection),
+				zap.Int("dim", c.Dim),
+				zap.Int("chunk_size", c.ChunkSize),
+				zap.Int("chunk_overlap", c.ChunkOverlap),
+				zap.Int("min_chunks", c.MinChunks),
+			)
+		}
+		vs, err := llm.NewMilvus(addr, db, cols)
 		if err != nil {
-			logger.L.Fatal("init milvus", zap.Error(err))
+			infra.L.Fatal("init milvus", zap.Error(err))
 		}
 		opts = append(opts, service.WithVectorStore(vs))
+		opts = append(opts, service.WithCollectionConfigs(cols))
 	} else {
-		logger.L.Info("vectorstore: noop")
+		infra.L.Info("vectorstore: noop")
 	}
 
 	llmBaseURL := v.GetString("llm.base_url")
 	llmAPIKey := v.GetString("llm.api_key")
 	if llmBaseURL != "" && llmAPIKey != "" {
 		model := v.GetString("llm.model")
-		logger.L.Info("llm: openai-compatible", zap.String("model", model))
-		opts = append(opts, service.WithLLM(llm.NewOpenAI(llmBaseURL, llmAPIKey, model)))
+		infra.L.Info("llm: openai-compatible", zap.String("model", model))
+		opts = append(opts, service.WithLLM(llm.NewOpenAILLM(llmBaseURL, llmAPIKey, model)))
 	} else {
-		logger.L.Info("llm: noop (no answer generation)")
+		infra.L.Info("llm: noop (no answer generation)")
 	}
 
 	return opts

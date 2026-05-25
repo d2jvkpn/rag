@@ -11,4 +11,7 @@ export const searchService = {
   listKnowledgeBases() {
     return http.get('/api/knowledge-bases')
   },
+  listAvailableKnowledgeBases() {
+    return http.get('/api/knowledge-bases/available')
+  },
 }

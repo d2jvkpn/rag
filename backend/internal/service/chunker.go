@@ -3,6 +3,7 @@ package service
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"strings"
 	"time"
 
@@ -12,26 +13,28 @@ import (
 )
 
 const (
-	defaultChunkSize    = 1000
-	defaultChunkOverlap = 150
+	DefaultChunkSize    = 1000
+	DefaultChunkOverlap = 150
+	DefaultMinChunks    = 3
 )
 
-func chunkConfigHash() string {
-	sum := sha256.Sum256([]byte("strategy=structure-first;chunk_size=1000;chunk_overlap=150"))
+func chunkConfigHash(chunkSize, overlap, minChunks int) string {
+	s := fmt.Sprintf("strategy=structure-first;chunk_size=%d;chunk_overlap=%d;min_chunks=%d", chunkSize, overlap, minChunks)
+	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
 }
 
-func BuildChunks(documentID, filename, text string, chunkVersion int) []model.DocumentChunk {
+func BuildChunks(documentID, filename, text string, chunkVersion, chunkSize, overlap, minChunks int) []model.DocumentChunk {
 	normalized := strings.TrimSpace(text)
 	if normalized == "" {
 		return nil
 	}
 
 	var segments []string
-	if len([]rune(normalized)) <= 3000 {
+	if len([]rune(normalized)) <= minChunks*chunkSize {
 		segments = []string{normalized}
 	} else {
-		segments = splitByLength(normalized, defaultChunkSize, defaultChunkOverlap)
+		segments = splitByLength(normalized, chunkSize, overlap)
 	}
 
 	now := time.Now().UTC()

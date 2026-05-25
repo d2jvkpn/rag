@@ -21,24 +21,22 @@ import (
 
 	"github.com/google/uuid"
 
-	"backend/internal/embedder"
 	"backend/internal/llm"
-	"backend/internal/logger"
+	"backend/internal/infra"
 	"backend/internal/model"
-	"backend/internal/parser"
 	"backend/internal/queue"
 	"backend/internal/repository"
-	"backend/internal/vectorstore"
 )
 
 type DocumentService struct {
-	cfg         *viper.Viper
-	store       repository.Store
-	embedder    embedder.Embedder
-	vectorStore vectorstore.VectorStore
-	llm         llm.LLM
-	taskQueue   queue.TaskQueue
-	indexWg     sync.WaitGroup
+	cfg            *viper.Viper
+	store          repository.Store
+	embedder       llm.Embedder
+	vectorStore    llm.VectorStore
+	llm            llm.LLM
+	taskQueue      queue.TaskQueue
+	indexWg        sync.WaitGroup
+	collectionCfgs map[string]llm.CollectionConfig
 }
 
 func NewDocumentService(cfg *viper.Viper, store repository.Store, opts ...func(*DocumentService)) (*DocumentService, error) {
@@ -52,34 +50,34 @@ func NewDocumentService(cfg *viper.Viper, store repository.Store, opts ...func(*
 	svc := &DocumentService{
 		cfg:         cfg,
 		store:       store,
-		embedder:    embedder.Noop{},
-		vectorStore: vectorstore.Noop{},
-		llm:         llm.Noop{},
+		embedder:    llm.NoopEmbedder{},
+		vectorStore: llm.NoopVectorStore{},
+		llm:         llm.NoopLLM{},
 	}
 	for _, opt := range opts {
 		opt(svc)
 	}
 	if svc.taskQueue == nil {
 		if redisDSN := cfg.GetString("redis.dsn"); redisDSN != "" {
-			logger.L.Info("task queue: asynq", zap.String("redis", redisDSN))
+			infra.L.Info("task queue: asynq", zap.String("redis", redisDSN))
 			tq, err := queue.NewAsynqQueue(redisDSN, 2, svc.processDocument)
 			if err != nil {
 				return nil, err
 			}
 			svc.taskQueue = tq
 		} else {
-			logger.L.Info("task queue: goroutine")
+			infra.L.Info("task queue: goroutine")
 			svc.taskQueue = queue.NewGoroutineQueue(1, svc.processDocument)
 		}
 	}
 	return svc, nil
 }
 
-func WithEmbedder(e embedder.Embedder) func(*DocumentService) {
+func WithEmbedder(e llm.Embedder) func(*DocumentService) {
 	return func(s *DocumentService) { s.embedder = e }
 }
 
-func WithVectorStore(vs vectorstore.VectorStore) func(*DocumentService) {
+func WithVectorStore(vs llm.VectorStore) func(*DocumentService) {
 	return func(s *DocumentService) { s.vectorStore = vs }
 }
 
@@ -91,6 +89,27 @@ func WithLLM(l llm.LLM) func(*DocumentService) {
 	return func(s *DocumentService) { s.llm = l }
 }
 
+func WithCollectionConfigs(cols []llm.CollectionConfig) func(*DocumentService) {
+	return func(s *DocumentService) {
+		m := make(map[string]llm.CollectionConfig, len(cols))
+		for _, c := range cols {
+			m[c.Name] = c
+		}
+		s.collectionCfgs = m
+	}
+}
+
+func (s *DocumentService) collectionCfg(kbID string) llm.CollectionConfig {
+	if c, ok := s.collectionCfgs[kbID]; ok {
+		return c
+	}
+	return llm.CollectionConfig{
+		ChunkSize:    DefaultChunkSize,
+		ChunkOverlap: DefaultChunkOverlap,
+		MinChunks:    DefaultMinChunks,
+	}
+}
+
 func (s *DocumentService) Close() {
 	s.taskQueue.Shutdown()
 	s.indexWg.Wait()
@@ -99,6 +118,9 @@ func (s *DocumentService) Close() {
 func (s *DocumentService) CreateDocument(file multipart.File, header *multipart.FileHeader, knowledgeBaseID, title string, tags []string, humanReview bool) (model.Document, error) {
 	if knowledgeBaseID == "" {
 		return model.Document{}, errors.New("knowledge_base_id is required")
+	}
+	if err := s.vectorStore.ValidateKnowledgeBase(knowledgeBaseID); err != nil {
+		return model.Document{}, err
 	}
 	if header == nil || header.Filename == "" {
 		return model.Document{}, errors.New("file is required")
@@ -156,6 +178,10 @@ func (s *DocumentService) CreateDocument(file multipart.File, header *multipart.
 	return document, nil
 }
 
+func (s *DocumentService) ListAvailableKnowledgeBases() []string {
+	return s.vectorStore.ListKnowledgeBases()
+}
+
 func (s *DocumentService) ListDocuments(knowledgeBaseID string) []model.Document {
 	return s.store.ListDocuments(knowledgeBaseID)
 }
@@ -204,7 +230,33 @@ func (s *DocumentService) ApproveChunks(documentID string) error {
 	}
 	document.Status = "approved"
 	document.UpdatedAt = now
-	return s.store.UpdateDocument(document)
+	if err := s.store.UpdateDocument(document); err != nil {
+		return err
+	}
+	return s.IndexDocument(document.DocumentID)
+}
+
+func (s *DocumentService) EditChunk(documentID, chunkID, text string) error {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return errors.New("chunk text cannot be empty")
+	}
+	chunk, err := s.store.GetChunk(chunkID)
+	if err != nil {
+		return err
+	}
+	if chunk.DocumentID != documentID {
+		return repository.ErrNotFound
+	}
+	if chunk.Status == "rejected" {
+		return errors.New("cannot edit a rejected chunk")
+	}
+	now := time.Now().UTC()
+	chunk.Text = text
+	chunk.NormalizedText = text
+	chunk.Source = "manual"
+	chunk.UpdatedAt = now
+	return s.store.UpdateChunk(chunk)
 }
 
 func (s *DocumentService) RejectChunk(documentID, chunkID string) error {
@@ -218,6 +270,24 @@ func (s *DocumentService) RejectChunk(documentID, chunkID string) error {
 	now := time.Now().UTC()
 	chunk.Status = "rejected"
 	chunk.IsCurrent = false
+	chunk.UpdatedAt = now
+	return s.store.UpdateChunk(chunk)
+}
+
+func (s *DocumentService) RestoreChunk(documentID, chunkID string) error {
+	chunk, err := s.store.GetChunk(chunkID)
+	if err != nil {
+		return err
+	}
+	if chunk.DocumentID != documentID {
+		return repository.ErrNotFound
+	}
+	if chunk.Status != "rejected" {
+		return errors.New("chunk is not rejected")
+	}
+	now := time.Now().UTC()
+	chunk.Status = "draft"
+	chunk.IsCurrent = true
 	chunk.UpdatedAt = now
 	return s.store.UpdateChunk(chunk)
 }
@@ -311,8 +381,8 @@ func (s *DocumentService) IndexDocument(documentID string) error {
 	if err != nil {
 		return err
 	}
-	if document.Status != "approved" {
-		return errors.New("document must be approved before indexing")
+	if document.Status != "approved" && document.Status != "failed" {
+		return errors.New("document must be in approved or failed state to trigger indexing")
 	}
 
 	now := time.Now().UTC()
@@ -333,7 +403,7 @@ func (s *DocumentService) IndexDocument(documentID string) error {
 }
 
 func (s *DocumentService) runIndex(document model.Document) {
-	logger.L.Info("indexing document", zap.String("document_id", document.DocumentID))
+	infra.L.Info("indexing document", zap.String("document_id", document.DocumentID))
 
 	chunks, err := s.store.GetChunks(document.DocumentID)
 	if err != nil {
@@ -366,6 +436,7 @@ func (s *DocumentService) runIndex(document model.Document) {
 	now := time.Now().UTC()
 	for i := range approved {
 		approved[i].EmbeddingModel = s.embedder.Model()
+		approved[i].Embedding = embeddings[i]
 		approved[i].UpdatedAt = now
 		if err := s.store.UpdateChunk(approved[i]); err != nil {
 			s.failDocument(document, "embed", err)
@@ -373,11 +444,15 @@ func (s *DocumentService) runIndex(document model.Document) {
 		}
 	}
 
+	if err := s.writeEmbeddingSnapshot(document, approved); err != nil {
+		infra.L.Warn("write embedding snapshot failed", zap.String("document_id", document.DocumentID), zap.Error(err))
+	}
+
 	document.Stage = "index"
 	document.UpdatedAt = now
 	_ = s.store.UpdateDocument(document)
 
-	records := vectorstore.BuildRecords(document, approved, embeddings)
+	records := llm.BuildRecords(document, approved, embeddings)
 	if err := s.vectorStore.Upsert(context.Background(), records); err != nil {
 		s.failDocument(document, "index", err)
 		return
@@ -390,7 +465,7 @@ func (s *DocumentService) runIndex(document model.Document) {
 	document.UpdatedAt = done
 	_ = s.store.UpdateDocument(document)
 
-	logger.L.Info("document indexed",
+	infra.L.Info("document indexed",
 		zap.String("document_id", document.DocumentID),
 		zap.Int("vectors", len(records)),
 		zap.String("model", s.embedder.Model()),
@@ -401,6 +476,9 @@ func (s *DocumentService) RechunkDocument(documentID string) error {
 	document, err := s.store.GetDocument(documentID)
 	if err != nil {
 		return err
+	}
+	if document.Status == "indexed" {
+		return errors.New("document is already indexed; delete and re-upload to reprocess")
 	}
 
 	now := time.Now().UTC()
@@ -435,20 +513,20 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 	document.ErrorMessage = ""
 	_ = s.store.UpdateDocument(document)
 
-	logger.L.Info("processing document",
+	infra.L.Info("processing document",
 		zap.String("document_id", document.DocumentID),
 		zap.String("source_type", document.SourceType),
 		zap.Bool("rechunk", rechunk),
 	)
 
-	parsed, err := parser.Parse(document.StoragePath, document.SourceType)
+	parsed, err := llm.Parse(document.StoragePath, document.SourceType)
 	if err != nil {
-		logger.L.Warn("parse failed", zap.String("document_id", document.DocumentID), zap.Error(err))
+		infra.L.Warn("parse failed", zap.String("document_id", document.DocumentID), zap.Error(err))
 		s.failDocument(document, "parse", err)
 		return
 	}
 
-	cleaned := parser.CleanText(parsed.Text)
+	cleaned := llm.CleanText(parsed.Text)
 	if cleaned == "" {
 		s.failDocument(document, "chunk", errors.New("document content is empty after cleanup"))
 		return
@@ -463,13 +541,15 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 		chunkVersion = document.ChunkVersion + 1
 	}
 
-	chunks := BuildChunks(document.DocumentID, document.Filename, cleaned, chunkVersion)
+	colCfg := s.collectionCfg(document.KnowledgeBaseID)
+	cfgHash := chunkConfigHash(colCfg.ChunkSize, colCfg.ChunkOverlap, colCfg.MinChunks)
+	chunks := BuildChunks(document.DocumentID, document.Filename, cleaned, chunkVersion, colCfg.ChunkSize, colCfg.ChunkOverlap, colCfg.MinChunks)
 	if len(chunks) == 0 {
 		s.failDocument(document, "chunk", errors.New("chunk result is empty"))
 		return
 	}
 
-	snapshotPath, err := s.writeSnapshot(document, chunks, chunkVersion)
+	snapshotPath, err := s.writeSnapshot(document, chunks, chunkVersion, cfgHash)
 	if err != nil {
 		s.failDocument(document, "chunk", err)
 		return
@@ -480,7 +560,7 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 		return
 	}
 
-	logger.L.Info("document processed",
+	infra.L.Info("document processed",
 		zap.String("document_id", document.DocumentID),
 		zap.Int("chunks", len(chunks)),
 		zap.Int("chunk_version", chunkVersion),
@@ -492,14 +572,43 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 	document.PageCount = parsed.PageCount
 	document.ChunkCount = len(chunks)
 	document.ChunkVersion = chunkVersion
-	document.ChunkConfigHash = chunkConfigHash()
+	document.ChunkConfigHash = cfgHash
 	document.ChunkSnapshotPath = snapshotPath
 	document.FinishedAt = &done
 	document.UpdatedAt = done
 	_ = s.store.UpdateDocument(document)
 }
 
-func (s *DocumentService) writeSnapshot(document model.Document, chunks []model.DocumentChunk, chunkVersion int) (string, error) {
+func (s *DocumentService) writeEmbeddingSnapshot(document model.Document, chunks []model.DocumentChunk) error {
+	if document.ChunkSnapshotPath == "" {
+		return nil
+	}
+	raw, err := os.ReadFile(document.ChunkSnapshotPath)
+	if err != nil {
+		return err
+	}
+	var snapshot model.ChunkSnapshot
+	if err := json.Unmarshal(raw, &snapshot); err != nil {
+		return err
+	}
+	embMap := make(map[string][]float32, len(chunks))
+	for _, c := range chunks {
+		embMap[c.ChunkID] = c.Embedding
+	}
+	for i := range snapshot.Chunks {
+		if emb, ok := embMap[snapshot.Chunks[i].ChunkID]; ok {
+			snapshot.Chunks[i].Embedding = emb
+			snapshot.Chunks[i].EmbeddingModel = chunks[0].EmbeddingModel
+		}
+	}
+	updated, err := json.MarshalIndent(snapshot, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(document.ChunkSnapshotPath, updated, 0o644)
+}
+
+func (s *DocumentService) writeSnapshot(document model.Document, chunks []model.DocumentChunk, chunkVersion int, cfgHash string) (string, error) {
 	dir := filepath.Join(s.cfg.GetString("app.data_dir"), "chunks", document.KnowledgeBaseID, document.DocumentID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
@@ -510,7 +619,7 @@ func (s *DocumentService) writeSnapshot(document model.Document, chunks []model.
 		KnowledgeBaseID: document.KnowledgeBaseID,
 		ChunkVersion:    chunkVersion,
 		SourceSHA256:    document.SHA256,
-		ChunkConfigHash: chunkConfigHash(),
+		ChunkConfigHash: cfgHash,
 		CreatedAt:       time.Now().UTC(),
 		Chunks:          chunks,
 	}
@@ -523,7 +632,7 @@ func (s *DocumentService) writeSnapshot(document model.Document, chunks []model.
 
 // QueryResult bundles semantic search hits with an optional LLM-generated answer.
 type QueryResult struct {
-	Items  []vectorstore.SearchResult
+	Items  []llm.SearchResult
 	Answer string
 }
 
@@ -553,7 +662,7 @@ func (s *DocumentService) Query(knowledgeBaseID, queryText string, topK int) (Qu
 
 	answer, err := s.generateAnswer(queryText, hits)
 	if err != nil {
-		logger.L.Warn("llm answer generation failed", zap.Error(err))
+		infra.L.Warn("llm answer generation failed", zap.Error(err))
 		// non-fatal: return hits without answer
 	}
 
@@ -564,7 +673,7 @@ const ragSystemPrompt = `You are a helpful assistant. Answer the user's question
 If the context does not contain enough information to answer the question, say so clearly.
 Be concise and accurate.`
 
-func (s *DocumentService) generateAnswer(query string, hits []vectorstore.SearchResult) (string, error) {
+func (s *DocumentService) generateAnswer(query string, hits []llm.SearchResult) (string, error) {
 	if len(hits) == 0 {
 		return "", nil
 	}

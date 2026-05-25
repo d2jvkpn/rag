@@ -1,4 +1,4 @@
-package embedder
+package llm
 
 import "context"
 
@@ -10,10 +10,10 @@ type Embedder interface {
 	Model() string
 }
 
-// Noop silently skips embedding; used until a real provider is configured.
-type Noop struct{}
+// NoopEmbedder silently skips embedding; used until a real provider is configured.
+type NoopEmbedder struct{}
 
-func (Noop) Embed(_ context.Context, texts []string) ([][]float32, error) {
+func (NoopEmbedder) Embed(_ context.Context, texts []string) ([][]float32, error) {
 	out := make([][]float32, len(texts))
 	for i := range out {
 		out[i] = []float32{}
@@ -21,4 +21,4 @@ func (Noop) Embed(_ context.Context, texts []string) ([][]float32, error) {
 	return out, nil
 }
 
-func (Noop) Model() string { return "noop" }
+func (NoopEmbedder) Model() string { return "noop" }

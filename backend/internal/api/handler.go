@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
 
+	"backend/internal/infra"
 	"backend/internal/model"
 	"backend/internal/repository"
 	"backend/internal/service"
@@ -30,7 +31,7 @@ func NewHandler(cfg *viper.Viper, authService *service.AuthService, documentServ
 
 func (h *Handler) Routes() http.Handler {
 	router := gin.New()
-	router.Use(gin.Recovery(), RequestLogger())
+	router.Use(gin.Recovery(), infra.RequestLogger())
 
 	apiGroup := router.Group("/api")
 	apiGroup.POST("/login", h.handleLogin)
@@ -45,10 +46,13 @@ func (h *Handler) Routes() http.Handler {
 	apiGroup.POST("/documents/:document_id/chunks/rechunk", h.withAuth(), h.handleRechunk)
 	apiGroup.POST("/documents/:document_id/chunks/approve", h.withAuth(), h.handleApproveChunks)
 	apiGroup.POST("/documents/:document_id/chunks/merge", h.withAuth(), h.handleMergeChunks)
+	apiGroup.PUT("/documents/:document_id/chunks/:chunk_id", h.withAuth(), h.handleEditChunk)
 	apiGroup.POST("/documents/:document_id/chunks/:chunk_id/reject", h.withAuth(), h.handleRejectChunk)
+	apiGroup.POST("/documents/:document_id/chunks/:chunk_id/restore", h.withAuth(), h.handleRestoreChunk)
 	apiGroup.POST("/documents/:document_id/index", h.withAuth(), h.handleIndexDocument)
 	apiGroup.POST("/query", h.withAuth(), h.handleQuery)
 	apiGroup.GET("/knowledge-bases", h.withAuth(), h.handleListKnowledgeBases)
+	apiGroup.GET("/knowledge-bases/available", h.withAuth(), h.handleListAvailableKnowledgeBases)
 
 	return router
 }
@@ -209,14 +213,13 @@ func (h *Handler) handleDeleteDocument(c *gin.Context) {
 
 func (h *Handler) handleGetChunks(c *gin.Context) {
 	documentID := c.Param("document_id")
-	if _, err := h.documentService.GetDocument(documentID); err != nil {
-		h.writeStoreError(c, err)
-		return
-	}
 	chunks, err := h.documentService.GetChunks(documentID)
 	if err != nil {
 		h.writeStoreError(c, err)
 		return
+	}
+	if chunks == nil {
+		chunks = []model.DocumentChunk{}
 	}
 	writeData(c, 200, map[string]any{
 		"items":     chunks,
@@ -244,10 +247,37 @@ func (h *Handler) handleApproveChunks(c *gin.Context) {
 	writeData(c, 200, map[string]any{"accepted": true})
 }
 
+func (h *Handler) handleEditChunk(c *gin.Context) {
+	documentID := c.Param("document_id")
+	chunkID := c.Param("chunk_id")
+	var body struct {
+		Text string `json:"text"`
+	}
+	if err := json.NewDecoder(c.Request.Body).Decode(&body); err != nil {
+		writeError(c, 400, "validation_error", "invalid request body", nil)
+		return
+	}
+	if err := h.documentService.EditChunk(documentID, chunkID, body.Text); err != nil {
+		h.writeStoreError(c, err)
+		return
+	}
+	writeData(c, 200, map[string]any{"accepted": true})
+}
+
 func (h *Handler) handleRejectChunk(c *gin.Context) {
 	documentID := c.Param("document_id")
 	chunkID := c.Param("chunk_id")
 	if err := h.documentService.RejectChunk(documentID, chunkID); err != nil {
+		h.writeStoreError(c, err)
+		return
+	}
+	writeData(c, 200, map[string]any{"accepted": true})
+}
+
+func (h *Handler) handleRestoreChunk(c *gin.Context) {
+	documentID := c.Param("document_id")
+	chunkID := c.Param("chunk_id")
+	if err := h.documentService.RestoreChunk(documentID, chunkID); err != nil {
 		h.writeStoreError(c, err)
 		return
 	}
@@ -292,6 +322,15 @@ func (h *Handler) handleListKnowledgeBases(c *gin.Context) {
 	items := make([]any, 0, len(counts))
 	for kb, n := range counts {
 		items = append(items, kbItem{KnowledgeBaseID: kb, DocumentCount: n})
+	}
+	writeData(c, 200, map[string]any{"items": items})
+}
+
+func (h *Handler) handleListAvailableKnowledgeBases(c *gin.Context) {
+	names := h.documentService.ListAvailableKnowledgeBases()
+	items := make([]any, 0, len(names))
+	for _, name := range names {
+		items = append(items, map[string]any{"knowledge_base_id": name})
 	}
 	writeData(c, 200, map[string]any{"items": items})
 }

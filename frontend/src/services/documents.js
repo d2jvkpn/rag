@@ -8,4 +8,5 @@ export const documentsService = {
   get: (id) => http.get(`/api/documents/${id}`),
   upload: (formData) => http.postForm('/api/documents', formData),
   delete: (id) => http.delete(`/api/documents/${id}`),
+  index: (id) => http.post(`/api/documents/${id}/index`),
 }

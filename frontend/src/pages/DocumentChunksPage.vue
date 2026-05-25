@@ -11,7 +11,7 @@
             {{ STATUS_LABEL[doc.status] || doc.status }}
           </n-tag>
           <n-button v-if="doc?.human_review && (doc?.status === 'review_pending' || doc?.status === 'approved')" size="small" type="primary" :loading="approving" @click="handleApprove">
-            批准全部
+            批准
           </n-button>
           <n-button v-if="doc?.human_review && doc?.status === 'approved'" size="small" type="info" :loading="indexing" @click="handleIndex">
             触发入库
@@ -19,7 +19,7 @@
           <n-button v-if="selectedIds.length >= 2" size="small" @click="handleMerge" :loading="merging">
             合并选中 ({{ selectedIds.length }})
           </n-button>
-          <n-button size="small" :loading="rechunking" @click="handleRechunk">重新切分</n-button>
+          <n-button v-if="doc?.status !== 'indexed'" size="small" :loading="rechunking" @click="handleRechunk">重新切分</n-button>
         </n-space>
       </div>
       <n-alert v-if="error" type="error" style="margin-bottom:12px" closable @close="error=''">{{ error }}</n-alert>
@@ -71,6 +71,14 @@
                         title="拒绝此 Chunk"
                         @click.stop="handleReject(chunk)"
                       >✕</n-button>
+                      <n-button
+                        v-if="doc?.human_review && chunk.status === 'rejected'"
+                        text
+                        size="tiny"
+                        type="success"
+                        title="恢复此 Chunk"
+                        @click.stop="handleRestore(chunk)"
+                      >↩</n-button>
                     </n-space>
                   </div>
                   <div v-if="chunk.section_title" class="chunk-item__section">{{ chunk.section_title }}</div>
@@ -89,7 +97,7 @@
           <div class="split-view__right">
             <n-card v-if="selectedChunk" size="small" style="height:100%">
               <template #header>
-                <div style="display:flex;align-items:center;gap:8px">
+                <div style="display:flex;align-items:center;gap:8px;flex:1">
                   <n-text>Chunk #{{ selectedChunk.chunk_index + 1 }}</n-text>
                   <n-tag size="small" :type="CHUNK_STATUS_TYPE[selectedChunk.status] || 'default'">
                     {{ CHUNK_STATUS_LABEL[selectedChunk.status] || selectedChunk.status }}
@@ -97,20 +105,33 @@
                   <n-text v-if="selectedChunk.section_title" depth="3" style="font-size:12px">
                     {{ selectedChunk.section_title }}
                   </n-text>
+                  <div style="margin-left:auto">
+                    <template v-if="!editing">
+                      <n-button v-if="selectedChunk.status !== 'rejected'" text size="tiny" @click="startEdit">编辑</n-button>
+                    </template>
+                    <template v-else>
+                      <n-button size="tiny" type="primary" :loading="saving" @click="saveEdit" style="margin-right:4px">保存</n-button>
+                      <n-button size="tiny" @click="cancelEdit">取消</n-button>
+                    </template>
+                  </div>
                 </div>
               </template>
 
               <n-scrollbar style="max-height:calc(100vh - 180px)">
-                <n-descriptions :column="3" size="small" style="margin-bottom:12px">
-                  <n-descriptions-item label="版本">v{{ selectedChunk.chunk_version }}</n-descriptions-item>
-                  <n-descriptions-item label="来源">{{ selectedChunk.source }}</n-descriptions-item>
-                  <n-descriptions-item v-if="selectedChunk.page_start" label="页码">
-                    {{ selectedChunk.page_start }}{{ selectedChunk.page_end && selectedChunk.page_end !== selectedChunk.page_start ? '–' + selectedChunk.page_end : '' }}
-                  </n-descriptions-item>
-                </n-descriptions>
+                <div style="display:flex;gap:16px;margin-bottom:12px;font-size:12px;color:#666">
+                  <span>版本: <strong>v{{ selectedChunk.chunk_version }}</strong></span>
+                  <span>来源: <strong>{{ selectedChunk.source }}</strong></span>
+                  <span v-if="selectedChunk.page_start">页码: <strong>{{ selectedChunk.page_start }}{{ selectedChunk.page_end && selectedChunk.page_end !== selectedChunk.page_start ? '–' + selectedChunk.page_end : '' }}</strong></span>
+                </div>
 
-                <n-text style="font-size:12px;font-weight:600;display:block;margin-bottom:6px">正文</n-text>
-                <n-card size="small" style="background:#fafafa;margin-bottom:12px">
+                <n-input
+                  v-if="editing"
+                  v-model:value="editText"
+                  type="textarea"
+                  :autosize="{ minRows: 6 }"
+                  style="font-size:13px;margin-bottom:12px;font-family:inherit"
+                />
+                <n-card v-else size="small" style="background:#fafafa;margin-bottom:12px">
                   <pre style="white-space:pre-wrap;font-size:13px;font-family:inherit;margin:0">{{ selectedChunk.text }}</pre>
                 </n-card>
 
@@ -182,8 +203,38 @@ const selectedIds = ref([])
 
 const selectedChunk = computed(() => chunks.value.find(c => c.chunk_id === selectedId.value) || null)
 
+const editing = ref(false)
+const editText = ref('')
+const saving = ref(false)
+
+function startEdit() {
+  editText.value = selectedChunk.value.text
+  editing.value = true
+}
+
+function cancelEdit() {
+  editing.value = false
+  editText.value = ''
+}
+
+async function saveEdit() {
+  saving.value = true
+  try {
+    await chunksService.edit(documentId, selectedChunk.value.chunk_id, editText.value)
+    message.success('已保存')
+    editing.value = false
+    await loadAll()
+  } catch (e) {
+    message.error(e.message)
+  } finally {
+    saving.value = false
+  }
+}
+
 function toggleSelect(chunk) {
   selectedId.value = chunk.chunk_id
+  editing.value = false
+  editText.value = ''
 }
 
 function toggleCheckbox(chunkId, checked) {
@@ -246,17 +297,27 @@ async function handleReject(chunk) {
   }
 }
 
+async function handleRestore(chunk) {
+  try {
+    await chunksService.restore(documentId, chunk.chunk_id)
+    message.success(`Chunk #${chunk.chunk_index + 1} 已恢复`)
+    await loadAll()
+  } catch (e) {
+    message.error(e.message)
+  }
+}
+
 function handleApprove() {
   dialog.warning({
-    title: '批准全部 Chunk',
-    content: '将批准所有草稿状态的 Chunk，文档状态变为"已审核"，确认吗？',
+    title: '批准',
+    content: '将批准所有草稿状态的 Chunk 并自动触发入库，确认吗？',
     positiveText: '批准',
     negativeText: '取消',
     onPositiveClick: async () => {
       approving.value = true
       try {
         await chunksService.approve(documentId)
-        message.success('已批准，可触发入库')
+        message.success('已批准，入库任务已提交')
         await loadAll()
       } catch (e) {
         message.error(e.message)
@@ -290,6 +351,16 @@ function handleIndex() {
 
 async function handleMerge() {
   if (selectedIds.value.length < 2) { message.warning('请至少选择 2 个相邻 Chunk'); return }
+
+  const selected = chunks.value.filter(c => selectedIds.value.includes(c.chunk_id))
+  selected.sort((a, b) => a.chunk_index - b.chunk_index)
+  for (let i = 1; i < selected.length; i++) {
+    if (selected[i].chunk_index !== selected[i - 1].chunk_index + 1) {
+      message.warning('只能合并连续相邻的 Chunk')
+      return
+    }
+  }
+
   merging.value = true
   try {
     await chunksService.merge(documentId, selectedIds.value)

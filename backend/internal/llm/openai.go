@@ -1,85 +1,50 @@
 package llm
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"strings"
 	"time"
+
+	"github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/option"
 )
 
-// OpenAI implements LLM against any OpenAI-compatible chat completions endpoint.
-type OpenAI struct {
-	baseURL string
-	apiKey  string
-	model   string
-	client  *http.Client
+// OpenAILLM implements LLM against any OpenAI-compatible chat completions endpoint.
+type OpenAILLM struct {
+	client openai.Client
+	model  string
 }
 
-func NewOpenAI(baseURL, apiKey, model string) *OpenAI {
-	if baseURL == "" {
-		baseURL = "https://api.openai.com/v1"
+func NewOpenAILLM(baseURL, apiKey, model string) *OpenAILLM {
+	opts := []option.RequestOption{
+		option.WithAPIKey(apiKey),
+		option.WithHTTPClient(&http.Client{Timeout: 120 * time.Second}),
 	}
-	return &OpenAI{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		apiKey:  apiKey,
-		model:   model,
-		client:  &http.Client{Timeout: 120 * time.Second},
+	if baseURL != "" {
+		opts = append(opts, option.WithBaseURL(baseURL))
+	}
+	return &OpenAILLM{
+		client: openai.NewClient(opts...),
+		model:  model,
 	}
 }
 
-func (o *OpenAI) Model() string { return o.model }
+func (o *OpenAILLM) Model() string { return o.model }
 
-func (o *OpenAI) Complete(ctx context.Context, system, userMsg string) (string, error) {
-	body, err := json.Marshal(map[string]any{
-		"model": o.model,
-		"messages": []map[string]string{
-			{"role": "system", "content": system},
-			{"role": "user", "content": userMsg},
+func (o *OpenAILLM) Complete(ctx context.Context, system, userMsg string) (string, error) {
+	resp, err := o.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Model: openai.ChatModel(o.model),
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage(system),
+			openai.UserMessage(userMsg),
 		},
 	})
 	if err != nil {
 		return "", err
 	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.baseURL+"/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if o.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+o.apiKey)
-	}
-
-	resp, err := o.client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("llm: HTTP %d: %s", resp.StatusCode, raw)
-	}
-
-	var result struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.Unmarshal(raw, &result); err != nil {
-		return "", err
-	}
-	if len(result.Choices) == 0 {
+	if len(resp.Choices) == 0 {
 		return "", fmt.Errorf("llm: empty choices in response")
 	}
-	return result.Choices[0].Message.Content, nil
+	return resp.Choices[0].Message.Content, nil
 }

@@ -8,8 +8,9 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    port: 3062,
     proxy: {
-      '/api': 'http://localhost:8080',
+      '/api': 'http://localhost:3061',
     },
   },
 })

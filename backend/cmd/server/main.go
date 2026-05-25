@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"backend/internal/app"
-	"backend/internal/logger"
+	"backend/internal/infra"
 )
 
 func main() {
@@ -28,8 +28,8 @@ func main() {
 		v.Set("http.addr", *addr)
 	}
 
-	logger.Init(filepath.Join(filepath.Dir(*configPath), "..", "logs"), *release)
-	defer logger.Sync()
+	infra.Init(filepath.Join(filepath.Dir(*configPath), "..", "logs"), *release)
+	defer infra.Sync()
 
 	if *release {
 		gin.SetMode(gin.ReleaseMode)
@@ -37,7 +37,7 @@ func main() {
 
 	application, err := app.New(v)
 	if err != nil {
-		logger.L.Fatal("init app", zap.Error(err))
+		infra.L.Fatal("init app", zap.Error(err))
 	}
 	defer application.DocumentService.Close()
 
@@ -57,7 +57,7 @@ func main() {
 		_ = server.Shutdown(shutdownCtx)
 	}()
 
-	logger.L.Info("server starting",
+	infra.L.Info("server starting",
 		zap.Bool("release", *release),
 		zap.String("addr", v.GetString("http.addr")),
 		zap.String("config", *configPath),

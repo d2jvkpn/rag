@@ -1,19 +1,17 @@
-package api
+package infra
 
 import (
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
-
-	"backend/internal/logger"
 )
 
 func RequestLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		c.Next()
-		logger.L.Info("request",
+		L.Info("request",
 			zap.String("method", c.Request.Method),
 			zap.String("path", c.Request.URL.Path),
 			zap.Int("status", c.Writer.Status()),
