@@ -43,6 +43,7 @@ func (h *Handler) Routes() http.Handler {
 	apiGroup.POST("/me/totp/disable", h.withAuth(), h.handleTOTPDisable)
 	apiGroup.POST("/documents", h.withAuth(), h.handleCreateDocument)
 	apiGroup.GET("/documents", h.withAuth(), h.handleListDocuments)
+	apiGroup.GET("/document-tags", h.withAuth(), h.handleListDocumentTags)
 	apiGroup.GET("/documents/:document_id", h.withAuth(), h.handleGetDocument)
 	apiGroup.DELETE("/documents/:document_id", h.withAuth(), h.withDocumentOwnerOrPermission("delete_documents"), h.handleDeleteDocument)
 	apiGroup.GET("/documents/:document_id/chunks", h.withAuth(), h.handleGetChunks)
@@ -229,7 +230,8 @@ func (h *Handler) handleCreateDocument(c *gin.Context) {
 
 func (h *Handler) handleListDocuments(c *gin.Context) {
 	kb := strings.TrimSpace(c.Query("knowledge_base_id"))
-	documents := h.documentService.ListDocuments(kb)
+	tag := strings.TrimSpace(c.Query("tag"))
+	documents := h.documentService.ListDocuments(kb, tag)
 	items := make([]any, 0, len(documents))
 	for _, document := range documents {
 		items = append(items, document)
@@ -250,6 +252,16 @@ func (h *Handler) handleGetDocument(c *gin.Context) {
 		return
 	}
 	writeData(c, 200, document)
+}
+
+func (h *Handler) handleListDocumentTags(c *gin.Context) {
+	kb := strings.TrimSpace(c.Query("knowledge_base_id"))
+	items := h.documentService.ListDocumentTags(kb)
+	out := make([]any, len(items))
+	for i, item := range items {
+		out[i] = item
+	}
+	writeData(c, 200, map[string]any{"items": out, "total": len(out)})
 }
 
 func (h *Handler) handleDeleteDocument(c *gin.Context) {
@@ -360,7 +372,7 @@ func (h *Handler) handleIndexDocument(c *gin.Context) {
 }
 
 func (h *Handler) handleListKnowledgeBases(c *gin.Context) {
-	all := h.documentService.ListDocuments("")
+	all := h.documentService.ListDocuments("", "")
 	counts := make(map[string]int)
 	for _, d := range all {
 		counts[d.KnowledgeBaseID]++

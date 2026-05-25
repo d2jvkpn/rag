@@ -84,3 +84,8 @@ type ChunkSnapshot struct {
 	CreatedAt       time.Time       `json:"created_at"`
 	Chunks          []DocumentChunk `json:"chunks"`
 }
+
+type DocumentTagCount struct {
+	Tag   string `json:"tag"`
+	Count int    `json:"count"`
+}

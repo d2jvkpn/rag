@@ -2,13 +2,15 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 export const useDocumentFiltersStore = defineStore('documentFilters', () => {
-  const knowledgeBaseId = ref('')
-  const statusFilter = ref('')
+  const knowledgeBaseId = ref(null)
+  const statusFilter = ref(null)
+  const tagFilter = ref(null)
 
   function reset() {
-    knowledgeBaseId.value = ''
-    statusFilter.value = ''
+    knowledgeBaseId.value = null
+    statusFilter.value = null
+    tagFilter.value = null
   }
 
-  return { knowledgeBaseId, statusFilter, reset }
+  return { knowledgeBaseId, statusFilter, tagFilter, reset }
 })

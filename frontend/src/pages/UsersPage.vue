@@ -12,12 +12,19 @@
 
       <n-data-table
         :columns="columns"
-        :data="users"
+        :data="pagedUsers"
         :loading="loading"
-        :pagination="pagination"
+        :pagination="false"
         :row-key="(row) => row.user_id"
         size="small"
       />
+      <div style="display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-top:12px">
+        <n-text depth="3" style="font-size:12px">
+          {{ t('users.pageSummary', { page: displayPage, pages: totalPages, start: pageStart, end: pageEnd, total: users.length }) }}
+        </n-text>
+        <n-button size="small" :disabled="displayPage <= 1" @click="currentPage = displayPage - 1">Prev</n-button>
+        <n-button size="small" :disabled="displayPage >= totalPages" @click="currentPage = displayPage + 1">Next</n-button>
+      </div>
     </div>
   </div>
 </template>
@@ -47,12 +54,7 @@ const totalPages = computed(() => Math.max(1, Math.ceil(users.value.length / pag
 const displayPage = computed(() => Math.min(currentPage.value, totalPages.value))
 const pageStart = computed(() => users.value.length === 0 ? 0 : (displayPage.value - 1) * pageSize + 1)
 const pageEnd = computed(() => users.value.length === 0 ? 0 : Math.min(displayPage.value * pageSize, users.value.length))
-const pagination = computed(() => ({
-  page: displayPage.value,
-  pageSize,
-  prefix: () => t('users.pageSummary', { page: displayPage.value, pages: totalPages.value, start: pageStart.value, end: pageEnd.value, total: users.value.length }),
-  onUpdatePage: (page) => { currentPage.value = page },
-}))
+const pagedUsers = computed(() => users.value.slice(pageStart.value - 1, pageEnd.value))
 
 const columns = computed(() => [
   {

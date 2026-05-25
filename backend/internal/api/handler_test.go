@@ -205,6 +205,58 @@ func TestUserListRequiresPermission(t *testing.T) {
 	}
 }
 
+func TestDocumentTagsEndpoint(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	v := testConfig(tmpDir)
+	accounts := []repository.AccountSeed{{Username: "admin", Password: "admin123"}}
+
+	store, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
+	if err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+	documentService, err := service.NewDocumentService(v, store)
+	if err != nil {
+		t.Fatalf("init document service: %v", err)
+	}
+	defer documentService.Close()
+
+	authService := service.NewAuthService(store, "test-secret", 0, accounts)
+	handler := NewHandler(v, authService, documentService).Routes()
+	sessionCookie := loginForTest(t, handler, "admin", "admin123")
+
+	createMarkdownDocumentForTestWithTagsAndContent(t, handler, sessionCookie, "kb-1", []string{"faq", "policy"}, "# One\n\nfaq")
+	createMarkdownDocumentForTestWithTagsAndContent(t, handler, sessionCookie, "kb-1", []string{"faq"}, "# Two\n\npolicy")
+	createMarkdownDocumentForTestWithTagsAndContent(t, handler, sessionCookie, "kb-2", []string{"guide"}, "# Three\n\nguide")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/document-tags?knowledge_base_id=kb-1", nil)
+	req.AddCookie(sessionCookie)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list document tags status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var response struct {
+		Data struct {
+			Items []struct {
+				Tag   string `json:"tag"`
+				Count int    `json:"count"`
+			} `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode tags response: %v", err)
+	}
+	if len(response.Data.Items) != 2 {
+		t.Fatalf("expected 2 tags, got %d", len(response.Data.Items))
+	}
+	if response.Data.Items[0].Tag != "faq" || response.Data.Items[0].Count != 2 {
+		t.Fatalf("expected faq count 2 first, got %+v", response.Data.Items[0])
+	}
+}
+
 func TestDisableUserBlocksFurtherRequests(t *testing.T) {
 	t.Parallel()
 
@@ -335,20 +387,35 @@ func loginForTest(t *testing.T, handler http.Handler, username, password string)
 
 func createMarkdownDocumentForTest(t *testing.T, handler http.Handler, sessionCookie *http.Cookie) string {
 	t.Helper()
+	return createMarkdownDocumentForTestWithTagsAndContent(t, handler, sessionCookie, "kb-1", nil, "# Title\n\nhello rag")
+}
+
+func createMarkdownDocumentForTestWithTags(t *testing.T, handler http.Handler, sessionCookie *http.Cookie, knowledgeBaseID string, tags []string) string {
+	t.Helper()
+	return createMarkdownDocumentForTestWithTagsAndContent(t, handler, sessionCookie, knowledgeBaseID, tags, "# Title\n\nhello rag")
+}
+
+func createMarkdownDocumentForTestWithTagsAndContent(t *testing.T, handler http.Handler, sessionCookie *http.Cookie, knowledgeBaseID string, tags []string, content string) string {
+	t.Helper()
 
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	if err := writer.WriteField("knowledge_base_id", "kb-1"); err != nil {
+	if err := writer.WriteField("knowledge_base_id", knowledgeBaseID); err != nil {
 		t.Fatalf("write knowledge base field: %v", err)
 	}
 	if err := writer.WriteField("title", "Sample"); err != nil {
 		t.Fatalf("write title field: %v", err)
 	}
+	for _, tag := range tags {
+		if err := writer.WriteField("tags", tag); err != nil {
+			t.Fatalf("write tag field: %v", err)
+		}
+	}
 	fileWriter, err := writer.CreateFormFile("file", "sample.md")
 	if err != nil {
 		t.Fatalf("create file field: %v", err)
 	}
-	if _, err := fileWriter.Write([]byte("# Title\n\nhello rag")); err != nil {
+	if _, err := fileWriter.Write([]byte(content)); err != nil {
 		t.Fatalf("write file content: %v", err)
 	}
 	if err := writer.Close(); err != nil {

@@ -143,7 +143,8 @@ Do not add placeholder text or "TODO: document later" — write the actual descr
 ## Key Conventions
 
 - `knowledge_base_id` must match a configured `milvus.collections[*].collection` name. Validated at `CreateDocument`. Scopes file storage paths and chunk snapshot paths.
-- `ListDocuments(knowledgeBaseID string)` — pass empty string to return all documents; the filter is pushed to the DB query, not applied in memory.
+- `ListDocuments(knowledgeBaseID, tag string)` — pass empty strings to return all documents; both filters are pushed to the DB query when supported, not applied in memory after fetch.
+- `ListDocumentTags(knowledgeBaseID string)` returns deduplicated document tags with counts for the current scope. Used by the frontend tag filter dropdown.
 - Tests use `t.TempDir()` + `JSONStore`. No database mocking; no external dependencies in tests.
 - The `sessions` table (migration 000002) is unused — auth switched to JWT before it was needed.
 - Frontend does not use TypeScript. Do not introduce it.

@@ -21,8 +21,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"backend/internal/llm"
 	"backend/internal/infra"
+	"backend/internal/llm"
 	"backend/internal/model"
 	"backend/internal/queue"
 	"backend/internal/repository"
@@ -193,8 +193,12 @@ func (s *DocumentService) ListAvailableKnowledgeBases() []llm.CollectionConfig {
 	return out
 }
 
-func (s *DocumentService) ListDocuments(knowledgeBaseID string) []model.Document {
-	return s.store.ListDocuments(knowledgeBaseID)
+func (s *DocumentService) ListDocuments(knowledgeBaseID, tag string) []model.Document {
+	return s.store.ListDocuments(knowledgeBaseID, tag)
+}
+
+func (s *DocumentService) ListDocumentTags(knowledgeBaseID string) []model.DocumentTagCount {
+	return s.store.ListDocumentTags(knowledgeBaseID)
 }
 
 func (s *DocumentService) GetDocument(documentID string) (model.Document, error) {

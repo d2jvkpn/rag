@@ -153,10 +153,13 @@ func (s *PostgresStore) GetDocument(documentID string) (model.Document, error) {
 	return documentFromRow(row), nil
 }
 
-func (s *PostgresStore) ListDocuments(knowledgeBaseID string) []model.Document {
+func (s *PostgresStore) ListDocuments(knowledgeBaseID, tag string) []model.Document {
 	q := s.db.Order("created_at desc")
 	if knowledgeBaseID != "" {
 		q = q.Where("knowledge_base_id = ?", knowledgeBaseID)
+	}
+	if tag != "" {
+		q = q.Where("tags @> ?", pq.Array([]string{tag}))
 	}
 	var rows []documentRow
 	q.Find(&rows)
@@ -165,6 +168,29 @@ func (s *PostgresStore) ListDocuments(knowledgeBaseID string) []model.Document {
 		docs[i] = documentFromRow(r)
 	}
 	return docs
+}
+
+func (s *PostgresStore) ListDocumentTags(knowledgeBaseID string) []model.DocumentTagCount {
+	type row struct {
+		Tag   string `gorm:"column:tag"`
+		Count int    `gorm:"column:count"`
+	}
+
+	var rows []row
+	sql := `
+		SELECT tag, count(*) AS count
+		FROM documents, unnest(tags) AS tag
+		WHERE ($1 = '' OR knowledge_base_id = $1) AND tag <> ''
+		GROUP BY tag
+		ORDER BY count DESC, tag ASC
+	`
+	s.db.Raw(sql, knowledgeBaseID).Scan(&rows)
+
+	items := make([]model.DocumentTagCount, len(rows))
+	for i, r := range rows {
+		items[i] = model.DocumentTagCount{Tag: r.Tag, Count: r.Count}
+	}
+	return items
 }
 
 func (s *PostgresStore) DeleteDocument(documentID string) (model.Document, []model.DocumentChunk, error) {

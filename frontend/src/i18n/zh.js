@@ -103,6 +103,7 @@ export default {
     upload: '上传文档',
     kbFilter: '知识库筛选',
     statusFilter: '状态筛选',
+    tagFilter: '标签筛选',
     pageSummary: '第 {page} / {pages} 页 · {start}–{end} / 共 {total} 条',
     updatedAt: '更新于 {time}',
     table: {
@@ -112,6 +113,7 @@ export default {
       status: '状态',
       stage: '阶段',
       chunks: 'Chunks',
+      tags: '标签',
       uploader: '上传者',
       updatedAt: '更新',
       actions: '操作',

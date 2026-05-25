@@ -20,6 +20,15 @@
           style="width:160px"
           @update:value="loadDocuments"
         />
+        <n-select
+          v-model:value="filters.tagFilter"
+          :options="tagOptions"
+          :placeholder="t('documents.tagFilter')"
+          clearable
+          filterable
+          style="width:220px"
+          @update:value="loadDocuments"
+        />
         <n-button :loading="loading" @click="loadDocuments">{{ t('documents.refresh') }}</n-button>
         <n-text v-if="lastRefreshed" depth="3" style="font-size:12px">{{ lastRefreshed }}</n-text>
       </div>
@@ -32,12 +41,19 @@
       <!-- Table -->
       <n-data-table
         :columns="columns"
-        :data="filteredDocuments"
+        :data="pagedDocuments"
         :loading="loading"
-        :pagination="pagination"
+        :pagination="false"
         :row-key="(row) => row.document_id"
         size="small"
       />
+      <div style="display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-top:12px">
+        <n-text depth="3" style="font-size:12px">
+          {{ t('documents.pageSummary', { page: displayPage, pages: totalPages, start: pageStart, end: pageEnd, total: filteredDocuments.length }) }}
+        </n-text>
+        <n-button size="small" :disabled="displayPage <= 1" @click="currentPage = displayPage - 1">Prev</n-button>
+        <n-button size="small" :disabled="displayPage >= totalPages" @click="currentPage = displayPage + 1">Next</n-button>
+      </div>
     </div>
 
     <!-- Upload Modal -->
@@ -78,7 +94,7 @@
                 chunk <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.chunk_size }}</n-tag>
                 overlap <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.chunk_overlap }}</n-tag>
               </n-text>
-              <n-text depth="3" class="upload-modal__kb-meta-item upload-modal__kb-meta-item--full">
+              <n-text depth="3" class="upload-modal__kb-meta-item">
                 min chunks <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.min_chunks }}</n-tag>
               </n-text>
             </div>
@@ -137,6 +153,7 @@ const showUpload = ref(false)
 const uploading = ref(false)
 const kbOptions = ref([])
 const kbConfigs = ref({})
+const tagOptions = ref([])
 const uploadFormRef = ref(null)
 const selectedFile = ref(null)
 const uploadForm = ref({ knowledgeBaseId: '', title: '', tags: [], humanReview: true })
@@ -158,12 +175,7 @@ const totalPages = computed(() => Math.max(1, Math.ceil(filteredDocuments.value.
 const displayPage = computed(() => Math.min(currentPage.value, totalPages.value))
 const pageStart = computed(() => filteredDocuments.value.length === 0 ? 0 : (displayPage.value - 1) * pageSize + 1)
 const pageEnd = computed(() => filteredDocuments.value.length === 0 ? 0 : Math.min(displayPage.value * pageSize, filteredDocuments.value.length))
-const pagination = computed(() => ({
-  page: displayPage.value,
-  pageSize,
-  prefix: () => t('documents.pageSummary', { page: displayPage.value, pages: totalPages.value, start: pageStart.value, end: pageEnd.value, total: filteredDocuments.value.length }),
-  onUpdatePage: (page) => { currentPage.value = page },
-}))
+const pagedDocuments = computed(() => filteredDocuments.value.slice(pageStart.value - 1, pageEnd.value))
 
 const currentUploadKbConfig = computed(() => kbConfigs.value[uploadForm.value.knowledgeBaseId] || null)
 
@@ -178,11 +190,28 @@ async function loadKbOptions() {
   } catch { /* non-critical */ }
 }
 
+async function loadTagOptions() {
+  try {
+    const data = await documentsService.listTags(filters.knowledgeBaseId)
+    const items = data?.items || []
+    tagOptions.value = items.map(item => ({
+      label: `${item.tag} (${item.count})`,
+      value: item.tag,
+    }))
+    if (filters.tagFilter && !tagOptions.value.some(item => item.value === filters.tagFilter)) {
+      filters.tagFilter = ''
+      await loadDocuments()
+    }
+  } catch {
+    tagOptions.value = []
+  }
+}
+
 async function loadDocuments() {
   loading.value = true
   error.value = ''
   try {
-    const data = await documentsService.list(filters.knowledgeBaseId)
+    const data = await documentsService.list(filters.knowledgeBaseId, filters.tagFilter)
     documents.value = data.items || []
     currentPage.value = 1
     lastRefreshed.value = t('documents.updatedAt', { time: new Date().toLocaleTimeString() })
@@ -195,6 +224,10 @@ async function loadDocuments() {
 
 watch(totalPages, (pages) => {
   if (currentPage.value > pages) currentPage.value = pages
+})
+
+watch(() => filters.knowledgeBaseId, async () => {
+  await loadTagOptions()
 })
 
 function onFileChange({ fileList }) {
@@ -312,6 +345,18 @@ const columns = computed(() => [
     render: (row) => row.chunk_count || '—',
   },
   {
+    title: t('documents.table.tags'),
+    key: 'tags',
+    width: 180,
+    render: (row) => {
+      const tags = Array.isArray(row.tags) ? row.tags : []
+      if (tags.length === 0) return '—'
+      return h(NSpace, { size: 4, wrapItem: true }, () =>
+        tags.map(tag => h(NTag, { size: 'small', bordered: false }, { default: () => tag }))
+      )
+    },
+  },
+  {
     title: t('documents.table.uploader'),
     key: 'uploader_name',
     width: 90,
@@ -339,7 +384,11 @@ const columns = computed(() => [
   },
 ])
 
-onMounted(() => { loadDocuments(); loadKbOptions() })
+onMounted(async () => {
+  await loadDocuments()
+  await loadKbOptions()
+  await loadTagOptions()
+})
 </script>
 
 <style scoped>
@@ -396,10 +445,6 @@ onMounted(() => { loadDocuments(); loadKbOptions() })
 
 .upload-modal__kb-meta-item :deep(.n-tag) {
   margin-left: 4px;
-}
-
-.upload-modal__kb-meta-item--full {
-  flex-basis: 100%;
 }
 
 .upload-modal__review {

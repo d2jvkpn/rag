@@ -162,12 +162,15 @@ func (s *JSONStore) GetDocument(documentID string) (model.Document, error) {
 	return document, nil
 }
 
-func (s *JSONStore) ListDocuments(knowledgeBaseID string) []model.Document {
+func (s *JSONStore) ListDocuments(knowledgeBaseID, tag string) []model.Document {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	documents := make([]model.Document, 0, len(s.data.Documents))
 	for _, document := range s.data.Documents {
 		if knowledgeBaseID != "" && document.KnowledgeBaseID != knowledgeBaseID {
+			continue
+		}
+		if tag != "" && !containsTag(document.Tags, tag) {
 			continue
 		}
 		documents = append(documents, document)
@@ -176,6 +179,45 @@ func (s *JSONStore) ListDocuments(knowledgeBaseID string) []model.Document {
 		return documents[i].CreatedAt.After(documents[j].CreatedAt)
 	})
 	return documents
+}
+
+func (s *JSONStore) ListDocumentTags(knowledgeBaseID string) []model.DocumentTagCount {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	counts := make(map[string]int)
+	for _, document := range s.data.Documents {
+		if knowledgeBaseID != "" && document.KnowledgeBaseID != knowledgeBaseID {
+			continue
+		}
+		for _, tag := range document.Tags {
+			if tag == "" {
+				continue
+			}
+			counts[tag]++
+		}
+	}
+
+	items := make([]model.DocumentTagCount, 0, len(counts))
+	for tag, count := range counts {
+		items = append(items, model.DocumentTagCount{Tag: tag, Count: count})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Count == items[j].Count {
+			return items[i].Tag < items[j].Tag
+		}
+		return items[i].Count > items[j].Count
+	})
+	return items
+}
+
+func containsTag(tags []string, want string) bool {
+	for _, tag := range tags {
+		if tag == want {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *JSONStore) DeleteDocument(documentID string) (model.Document, []model.DocumentChunk, error) {

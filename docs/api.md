@@ -201,6 +201,17 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 ### `GET /api/documents`
 
 - 文档列表查询
+- 支持 `knowledge_base_id` 过滤
+- 支持 `tag` 精确过滤，匹配 `documents.tags` 中的单个标签
+
+### `GET /api/document-tags`
+
+- 返回去重后的文档标签列表
+- 支持可选 `knowledge_base_id` 过滤
+- 响应项包含：
+  - `tag`
+  - `count`
+- 前端文档列表页使用该接口构建标签筛选下拉，不从当前页表格数据临时聚合
 
 ### `GET /api/documents/:document_id`
 

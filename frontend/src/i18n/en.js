@@ -103,6 +103,7 @@ export default {
     upload: 'Upload Document',
     kbFilter: 'Filter by KB',
     statusFilter: 'Filter by Status',
+    tagFilter: 'Filter by Tag',
     pageSummary: 'Page {page} / {pages} · {start}–{end} of {total}',
     updatedAt: 'Updated at {time}',
     table: {
@@ -112,6 +113,7 @@ export default {
       status: 'Status',
       stage: 'Stage',
       chunks: 'Chunks',
+      tags: 'Tags',
       uploader: 'Uploader',
       updatedAt: 'Updated',
       actions: 'Actions',
