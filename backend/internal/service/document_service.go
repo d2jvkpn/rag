@@ -636,7 +636,16 @@ type QueryResult struct {
 	Answer string
 }
 
-func (s *DocumentService) Query(knowledgeBaseID, queryText string, topK int) (QueryResult, error) {
+// QueryOptions controls search behaviour for a Query call.
+type QueryOptions struct {
+	DocumentIDs []string       // optional: restrict results to these documents
+	SearchMode  llm.SearchMode // defaults to dense when empty
+	EF          int            // HNSW ef; 0 = server default
+	DropRatio   float64        // BM25 drop_ratio_search; 0 = server default
+	RRFK        int            // RRF k (hybrid only); 0 = default (60)
+}
+
+func (s *DocumentService) Query(knowledgeBaseID, queryText string, topK int, opts QueryOptions) (QueryResult, error) {
 	if strings.TrimSpace(queryText) == "" {
 		return QueryResult{}, errors.New("query is required")
 	}
@@ -647,15 +656,29 @@ func (s *DocumentService) Query(knowledgeBaseID, queryText string, topK int) (Qu
 		topK = 50
 	}
 
-	embeddings, err := s.embedder.Embed(context.Background(), []string{queryText})
-	if err != nil {
-		return QueryResult{}, fmt.Errorf("embed query: %w", err)
-	}
-	if len(embeddings) == 0 || len(embeddings[0]) == 0 {
-		return QueryResult{}, errors.New("embedder returned no vector for query; configure embedder.base_url and embedder.api_key")
+	req := llm.SearchRequest{
+		KnowledgeBaseID: knowledgeBaseID,
+		Query:           queryText,
+		TopK:            topK,
+		DocumentIDs:     opts.DocumentIDs,
+		Mode:            opts.SearchMode,
+		EF:              opts.EF,
+		DropRatio:       opts.DropRatio,
+		RRFK:            opts.RRFK,
 	}
 
-	hits, err := s.vectorStore.Search(context.Background(), knowledgeBaseID, embeddings[0], topK)
+	if opts.SearchMode != llm.SearchModeBM25 {
+		embeddings, err := s.embedder.Embed(context.Background(), []string{queryText})
+		if err != nil {
+			return QueryResult{}, fmt.Errorf("embed query: %w", err)
+		}
+		if len(embeddings) == 0 || len(embeddings[0]) == 0 {
+			return QueryResult{}, errors.New("embedder returned no vector for query; configure embedder.base_url and embedder.api_key")
+		}
+		req.Embedding = embeddings[0]
+	}
+
+	hits, err := s.vectorStore.Search(context.Background(), req)
 	if err != nil {
 		return QueryResult{}, fmt.Errorf("vector search: %w", err)
 	}
@@ -663,7 +686,6 @@ func (s *DocumentService) Query(knowledgeBaseID, queryText string, topK int) (Qu
 	answer, err := s.generateAnswer(queryText, hits)
 	if err != nil {
 		infra.L.Warn("llm answer generation failed", zap.Error(err))
-		// non-fatal: return hits without answer
 	}
 
 	return QueryResult{Items: hits, Answer: answer}, nil

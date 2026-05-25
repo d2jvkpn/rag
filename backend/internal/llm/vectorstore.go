@@ -37,6 +37,30 @@ type SearchResult struct {
 	Score           float32 `json:"score"`
 }
 
+// SearchMode selects which retrieval method to use.
+type SearchMode = string
+
+const (
+	SearchModeDense  SearchMode = "dense"  // vector similarity (default)
+	SearchModeBM25   SearchMode = "bm25"   // full-text BM25 (Milvus 2.5+)
+	SearchModeHybrid SearchMode = "hybrid" // dense + BM25 with RRF reranking
+)
+
+// SearchRequest carries all parameters for a VectorStore search.
+type SearchRequest struct {
+	KnowledgeBaseID string
+	Embedding       []float32  // required for dense and hybrid modes
+	Query           string     // required for bm25 and hybrid modes
+	TopK            int
+	DocumentIDs     []string   // optional: restrict results to these documents
+	Mode            SearchMode // defaults to SearchModeDense when empty
+
+	// Tuning params — zero value means use server default.
+	EF        int     // HNSW ef (dense/hybrid); must be >= TopK when set
+	DropRatio float64 // BM25 drop_ratio_search (bm25/hybrid); 0.0–1.0
+	RRFK      int     // RRF k parameter (hybrid only); default 60
+}
+
 // VectorStore persists and retrieves embedding vectors.
 type VectorStore interface {
 	// ValidateKnowledgeBase returns an error if kbID is not a known collection.
@@ -47,18 +71,18 @@ type VectorStore interface {
 	Upsert(ctx context.Context, records []VectorRecord) error
 	// DeleteByDocument removes all vectors belonging to a document.
 	DeleteByDocument(ctx context.Context, knowledgeBaseID, documentID string) error
-	// Search returns the topK most similar records to the query embedding.
-	Search(ctx context.Context, knowledgeBaseID string, embedding []float32, topK int) ([]SearchResult, error)
+	// Search retrieves the topK most relevant records using the specified mode.
+	Search(ctx context.Context, req SearchRequest) ([]SearchResult, error)
 }
 
 // NoopVectorStore discards all writes and returns empty search results.
 type NoopVectorStore struct{}
 
-func (NoopVectorStore) ValidateKnowledgeBase(_ string) error                   { return nil }
-func (NoopVectorStore) ListKnowledgeBases() []string                           { return nil }
-func (NoopVectorStore) Upsert(_ context.Context, _ []VectorRecord) error       { return nil }
-func (NoopVectorStore) DeleteByDocument(_ context.Context, _, _ string) error  { return nil }
-func (NoopVectorStore) Search(_ context.Context, _ string, _ []float32, _ int) ([]SearchResult, error) {
+func (NoopVectorStore) ValidateKnowledgeBase(_ string) error                  { return nil }
+func (NoopVectorStore) ListKnowledgeBases() []string                          { return nil }
+func (NoopVectorStore) Upsert(_ context.Context, _ []VectorRecord) error      { return nil }
+func (NoopVectorStore) DeleteByDocument(_ context.Context, _, _ string) error { return nil }
+func (NoopVectorStore) Search(_ context.Context, _ SearchRequest) ([]SearchResult, error) {
 	return nil, nil
 }
 

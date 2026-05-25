@@ -1,49 +1,68 @@
 package llm
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"time"
+
+	"github.com/milvus-io/milvus/client/v2/column"
+	"github.com/milvus-io/milvus/client/v2/entity"
+	milvidx "github.com/milvus-io/milvus/client/v2/index"
+	"github.com/milvus-io/milvus/client/v2/milvusclient"
 )
 
-// Milvus implements VectorStore using the Milvus RESTful API v2 (Milvus 2.4+).
-// Each knowledge base maps to a separate collection.
+var searchOutputFields = []string{
+	"document_id", "chunk_id", "knowledge_base_id",
+	"filename", "source_type", "section_title",
+	"page_start", "page_end", "chunk_index", "text",
+}
+
+// Milvus implements VectorStore using the official Milvus gRPC client v2.
+// Requires Milvus 2.5+ for BM25 full-text search support.
 type Milvus struct {
-	baseURL     string
-	db          string
+	client      *milvusclient.Client
 	collections map[string]int // collection name → vector dim
-	client      *http.Client
 }
 
 func NewMilvus(addr, db string, cols []CollectionConfig) (*Milvus, error) {
-	base := addr
-	if !strings.HasPrefix(base, "http") {
-		base = "http://" + base
+	cfg := &milvusclient.ClientConfig{
+		Address: addr,
+		DBName:  db,
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	c, err := milvusclient.New(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("milvus connect: %w", err)
+	}
+
 	m := &Milvus{
-		baseURL:     strings.TrimRight(base, "/"),
-		db:          db,
+		client:      c,
 		collections: make(map[string]int, len(cols)),
-		client:      &http.Client{Timeout: 30 * time.Second},
 	}
-	for _, c := range cols {
-		m.collections[c.Name] = c.Dim
+	for _, col := range cols {
+		m.collections[col.Name] = col.Dim
 	}
-	ctx := context.Background()
-	if err := m.ensureDatabase(ctx); err != nil {
-		return nil, err
+
+	if db != "" {
+		if err := m.ensureDatabase(ctx, db); err != nil {
+			_ = c.Close(ctx)
+			return nil, err
+		}
 	}
-	for _, c := range cols {
-		if err := m.ensureCollection(ctx, c.Name, c.Dim); err != nil {
+	for _, col := range cols {
+		if err := m.ensureCollection(ctx, col.Name, col.Dim); err != nil {
+			_ = c.Close(ctx)
 			return nil, err
 		}
 	}
 	return m, nil
+}
+
+func (m *Milvus) Close(ctx context.Context) error {
+	return m.client.Close(ctx)
 }
 
 func (m *Milvus) ValidateKnowledgeBase(kbID string) error {
@@ -69,237 +88,250 @@ func (m *Milvus) Upsert(ctx context.Context, records []VectorRecord) error {
 	if err := m.ValidateKnowledgeBase(collection); err != nil {
 		return err
 	}
+	dim := m.collections[collection]
 
-	data := make([]map[string]any, len(records))
+	ids := make([]string, len(records))
+	kbIDs := make([]string, len(records))
+	docIDs := make([]string, len(records))
+	chunkIDs := make([]string, len(records))
+	filenames := make([]string, len(records))
+	sourceTypes := make([]string, len(records))
+	sectionTitles := make([]string, len(records))
+	pageStarts := make([]int32, len(records))
+	pageEnds := make([]int32, len(records))
+	chunkIdxs := make([]int32, len(records))
+	texts := make([]string, len(records))
+	embeddings := make([][]float32, len(records))
+
 	for i, r := range records {
-		data[i] = map[string]any{
-			"id":                r.ID,
-			"knowledge_base_id": r.KnowledgeBaseID,
-			"document_id":       r.DocumentID,
-			"chunk_id":          r.ChunkID,
-			"filename":          r.Filename,
-			"source_type":       r.SourceType,
-			"section_title":     r.SectionTitle,
-			"page_start":        r.PageStart,
-			"page_end":          r.PageEnd,
-			"chunk_index":       r.ChunkIndex,
-			"text":              r.Text,
-			"embedding":         r.Embedding,
-		}
+		ids[i] = r.ID
+		kbIDs[i] = r.KnowledgeBaseID
+		docIDs[i] = r.DocumentID
+		chunkIDs[i] = r.ChunkID
+		filenames[i] = r.Filename
+		sourceTypes[i] = r.SourceType
+		sectionTitles[i] = r.SectionTitle
+		pageStarts[i] = int32(r.PageStart)
+		pageEnds[i] = int32(r.PageEnd)
+		chunkIdxs[i] = int32(r.ChunkIndex)
+		texts[i] = r.Text
+		embeddings[i] = r.Embedding
 	}
 
-	return m.post(ctx, "/v2/vectordb/entities/upsert", map[string]any{
-		"collectionName": collection,
-		"data":           data,
-	}, nil)
+	_, err := m.client.Upsert(ctx, milvusclient.NewColumnBasedInsertOption(collection,
+		column.NewColumnVarChar("id", ids),
+		column.NewColumnVarChar("knowledge_base_id", kbIDs),
+		column.NewColumnVarChar("document_id", docIDs),
+		column.NewColumnVarChar("chunk_id", chunkIDs),
+		column.NewColumnVarChar("filename", filenames),
+		column.NewColumnVarChar("source_type", sourceTypes),
+		column.NewColumnVarChar("section_title", sectionTitles),
+		column.NewColumnInt32("page_start", pageStarts),
+		column.NewColumnInt32("page_end", pageEnds),
+		column.NewColumnInt32("chunk_index", chunkIdxs),
+		column.NewColumnVarChar("text", texts),
+		column.NewColumnFloatVector("embedding", dim, embeddings),
+	))
+	return err
 }
 
 func (m *Milvus) DeleteByDocument(ctx context.Context, knowledgeBaseID, documentID string) error {
 	if err := m.ValidateKnowledgeBase(knowledgeBaseID); err != nil {
 		return err
 	}
-	return m.post(ctx, "/v2/vectordb/entities/delete", map[string]any{
-		"collectionName": knowledgeBaseID,
-		"filter":         fmt.Sprintf(`document_id == "%s"`, documentID),
-	}, nil)
+	_, err := m.client.Delete(ctx, milvusclient.NewDeleteOption(knowledgeBaseID).
+		WithExpr(fmt.Sprintf(`document_id == "%s"`, documentID)))
+	return err
 }
 
-func (m *Milvus) Search(ctx context.Context, knowledgeBaseID string, embedding []float32, topK int) ([]SearchResult, error) {
-	if err := m.ValidateKnowledgeBase(knowledgeBaseID); err != nil {
+func (m *Milvus) Search(ctx context.Context, req SearchRequest) ([]SearchResult, error) {
+	if err := m.ValidateKnowledgeBase(req.KnowledgeBaseID); err != nil {
 		return nil, err
 	}
+	filter := buildDocFilter(req.DocumentIDs)
 
-	req := map[string]any{
-		"collectionName": knowledgeBaseID,
-		"data":           [][]float32{embedding},
-		"annsField":      "embedding",
-		"limit":          topK,
-		"outputFields": []string{
-			"id", "document_id", "chunk_id", "knowledge_base_id",
-			"filename", "source_type", "section_title",
-			"page_start", "page_end", "chunk_index", "text",
-		},
+	var annReqs []*milvusclient.AnnRequest
+	switch req.Mode {
+	case SearchModeBM25:
+		annReqs = []*milvusclient.AnnRequest{
+			bm25AnnReq(req.Query, req.TopK, req.DropRatio, filter),
+		}
+	case SearchModeHybrid:
+		annReqs = []*milvusclient.AnnRequest{
+			denseAnnReq(req.Embedding, req.TopK, req.EF, filter),
+			bm25AnnReq(req.Query, req.TopK, req.DropRatio, filter),
+		}
+	default:
+		annReqs = []*milvusclient.AnnRequest{
+			denseAnnReq(req.Embedding, req.TopK, req.EF, filter),
+		}
 	}
 
-	var resp struct {
-		Code int `json:"code"`
-		Data []struct {
-			ID              string  `json:"id"`
-			DocumentID      string  `json:"document_id"`
-			ChunkID         string  `json:"chunk_id"`
-			KnowledgeBaseID string  `json:"knowledge_base_id"`
-			Filename        string  `json:"filename"`
-			SourceType      string  `json:"source_type"`
-			SectionTitle    string  `json:"section_title"`
-			PageStart       int     `json:"page_start"`
-			PageEnd         int     `json:"page_end"`
-			ChunkIndex      int     `json:"chunk_index"`
-			Text            string  `json:"text"`
-			Distance        float32 `json:"distance"`
-		} `json:"data"`
+	opt := milvusclient.NewHybridSearchOption(req.KnowledgeBaseID, req.TopK, annReqs...).
+		WithOutputFields(searchOutputFields...)
+	if req.Mode == SearchModeHybrid {
+		rrf := milvusclient.NewRRFReranker()
+		if req.RRFK > 0 {
+			rrf = rrf.WithK(float64(req.RRFK))
+		}
+		opt = opt.WithReranker(rrf)
 	}
 
-	if err := m.post(ctx, "/v2/vectordb/entities/search", req, &resp); err != nil {
+	resultSets, err := m.client.HybridSearch(ctx, opt)
+	if err != nil {
 		return nil, err
 	}
+	if len(resultSets) == 0 {
+		return nil, nil
+	}
+	return parseResults(resultSets[0]), nil
+}
 
-	results := make([]SearchResult, 0, len(resp.Data))
-	for _, d := range resp.Data {
+func denseAnnReq(embedding []float32, topK, ef int, filter string) *milvusclient.AnnRequest {
+	r := milvusclient.NewAnnRequest("embedding", topK, entity.FloatVector(embedding))
+	if ef > 0 {
+		r = r.WithSearchParam("ef", fmt.Sprintf("%d", ef))
+	}
+	if filter != "" {
+		r = r.WithFilter(filter)
+	}
+	return r
+}
+
+func bm25AnnReq(query string, topK int, dropRatio float64, filter string) *milvusclient.AnnRequest {
+	r := milvusclient.NewAnnRequest("sparse", topK, entity.Text(query))
+	if dropRatio > 0 {
+		r = r.WithSearchParam("drop_ratio_search", fmt.Sprintf("%g", dropRatio))
+	}
+	if filter != "" {
+		r = r.WithFilter(filter)
+	}
+	return r
+}
+
+func buildDocFilter(documentIDs []string) string {
+	if len(documentIDs) == 0 {
+		return ""
+	}
+	if len(documentIDs) == 1 {
+		return fmt.Sprintf(`document_id == "%s"`, documentIDs[0])
+	}
+	quoted := make([]string, len(documentIDs))
+	for i, id := range documentIDs {
+		quoted[i] = fmt.Sprintf(`"%s"`, id)
+	}
+	return fmt.Sprintf("document_id in [%s]", strings.Join(quoted, ", "))
+}
+
+func parseResults(rs milvusclient.ResultSet) []SearchResult {
+	results := make([]SearchResult, 0, rs.ResultCount)
+	for i := range rs.ResultCount {
+		score := float32(0)
+		if i < len(rs.Scores) {
+			score = rs.Scores[i]
+		}
 		results = append(results, SearchResult{
-			ChunkID:         d.ChunkID,
-			DocumentID:      d.DocumentID,
-			KnowledgeBaseID: d.KnowledgeBaseID,
-			Filename:        d.Filename,
-			SourceType:      d.SourceType,
-			SectionTitle:    d.SectionTitle,
-			PageStart:       d.PageStart,
-			PageEnd:         d.PageEnd,
-			ChunkIndex:      d.ChunkIndex,
-			Text:            d.Text,
-			Score:           1 - d.Distance,
+			ChunkID:         colStr(rs, "chunk_id", i),
+			DocumentID:      colStr(rs, "document_id", i),
+			KnowledgeBaseID: colStr(rs, "knowledge_base_id", i),
+			Filename:        colStr(rs, "filename", i),
+			SourceType:      colStr(rs, "source_type", i),
+			SectionTitle:    colStr(rs, "section_title", i),
+			PageStart:       colInt(rs, "page_start", i),
+			PageEnd:         colInt(rs, "page_end", i),
+			ChunkIndex:      colInt(rs, "chunk_index", i),
+			Text:            colStr(rs, "text", i),
+			Score:           score,
 		})
 	}
-	return results, nil
+	return results
 }
 
-func (m *Milvus) ensureDatabase(ctx context.Context) error {
-	if m.db == "" {
-		return nil
+func colStr(rs milvusclient.ResultSet, field string, i int) string {
+	col := rs.GetColumn(field)
+	if col == nil {
+		return ""
 	}
-	raw, err := json.Marshal(map[string]any{"dbName": m.db})
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.baseURL+"/v2/vectordb/databases/create", bytes.NewReader(raw))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := m.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(resp.Body)
+	v, _ := col.GetAsString(i)
+	return v
+}
 
-	var apiResp struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
+func colInt(rs milvusclient.ResultSet, field string, i int) int {
+	col := rs.GetColumn(field)
+	if col == nil {
+		return 0
 	}
-	if err := json.Unmarshal(respBody, &apiResp); err != nil {
-		return fmt.Errorf("milvus create_database: %w", err)
-	}
-	// code 0 = created; ignore "already exists" errors
-	if apiResp.Code != 0 && !strings.Contains(strings.ToLower(apiResp.Message), "exist") {
-		return fmt.Errorf("milvus create_database %q: code %d: %s", m.db, apiResp.Code, apiResp.Message)
+	v, _ := col.GetAsInt64(i)
+	return int(v)
+}
+
+func (m *Milvus) ensureDatabase(ctx context.Context, db string) error {
+	err := m.client.CreateDatabase(ctx, milvusclient.NewCreateDatabaseOption(db))
+	if err != nil && !strings.Contains(strings.ToLower(err.Error()), "exist") {
+		return fmt.Errorf("milvus create database %q: %w", db, err)
 	}
 	return nil
 }
 
-func (m *Milvus) ensureCollection(ctx context.Context, collection string, dim int) error {
-	var hasResp struct {
-		Code int `json:"code"`
-		Data struct {
-			Has bool `json:"has"`
-		} `json:"data"`
-	}
-	if err := m.post(ctx, "/v2/vectordb/collections/has", map[string]any{
-		"collectionName": collection,
-	}, &hasResp); err != nil {
-		return fmt.Errorf("milvus has_collection %q: %w", collection, err)
-	}
-
-	if hasResp.Data.Has {
-		return m.post(ctx, "/v2/vectordb/collections/load", map[string]any{
-			"collectionName": collection,
-		}, nil)
-	}
-
-	schema := map[string]any{
-		"autoId": false,
-		"fields": []map[string]any{
-			{"fieldName": "id", "dataType": "VarChar", "isPrimary": true, "elementTypeParams": map[string]any{"max_length": "64"}},
-			{"fieldName": "knowledge_base_id", "dataType": "VarChar", "elementTypeParams": map[string]any{"max_length": "64"}},
-			{"fieldName": "document_id", "dataType": "VarChar", "elementTypeParams": map[string]any{"max_length": "64"}},
-			{"fieldName": "chunk_id", "dataType": "VarChar", "elementTypeParams": map[string]any{"max_length": "64"}},
-			{"fieldName": "filename", "dataType": "VarChar", "elementTypeParams": map[string]any{"max_length": "512"}},
-			{"fieldName": "source_type", "dataType": "VarChar", "elementTypeParams": map[string]any{"max_length": "32"}},
-			{"fieldName": "section_title", "dataType": "VarChar", "elementTypeParams": map[string]any{"max_length": "512"}},
-			{"fieldName": "page_start", "dataType": "Int32"},
-			{"fieldName": "page_end", "dataType": "Int32"},
-			{"fieldName": "chunk_index", "dataType": "Int32"},
-			{"fieldName": "text", "dataType": "VarChar", "elementTypeParams": map[string]any{"max_length": "65535"}},
-			{"fieldName": "embedding", "dataType": "FloatVector", "elementTypeParams": map[string]any{"dim": fmt.Sprintf("%d", dim)}},
-		},
-	}
-	if err := m.post(ctx, "/v2/vectordb/collections/create", map[string]any{
-		"collectionName": collection,
-		"schema":         schema,
-	}, nil); err != nil {
-		return fmt.Errorf("milvus create_collection %q: %w", collection, err)
-	}
-
-	if err := m.post(ctx, "/v2/vectordb/indexes/create", map[string]any{
-		"collectionName": collection,
-		"indexParams": []map[string]any{{
-			"fieldName":  "embedding",
-			"metricType": "L2",
-			"indexType":  "HNSW",
-			"params":     map[string]any{"M": 16, "efConstruction": 64},
-		}},
-	}, nil); err != nil {
-		return fmt.Errorf("milvus create_index %q: %w", collection, err)
-	}
-
-	return m.post(ctx, "/v2/vectordb/collections/load", map[string]any{
-		"collectionName": collection,
-	}, nil)
-}
-
-func (m *Milvus) post(ctx context.Context, path string, body map[string]any, out any) error {
-	if m.db != "" {
-		body["dbName"] = m.db
-	}
-
-	raw, err := json.Marshal(body)
+func (m *Milvus) ensureCollection(ctx context.Context, name string, dim int) error {
+	has, err := m.client.HasCollection(ctx, milvusclient.NewHasCollectionOption(name))
 	if err != nil {
-		return err
+		return fmt.Errorf("milvus has_collection %q: %w", name, err)
+	}
+	if has {
+		task, err := m.client.LoadCollection(ctx, milvusclient.NewLoadCollectionOption(name))
+		if err != nil {
+			return fmt.Errorf("milvus load_collection %q: %w", name, err)
+		}
+		return task.Await(ctx)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.baseURL+path, bytes.NewReader(raw))
+	schema := entity.NewSchema().
+		WithName(name).
+		WithField(entity.NewField().WithName("id").WithDataType(entity.FieldTypeVarChar).WithIsPrimaryKey(true).WithMaxLength(64)).
+		WithField(entity.NewField().WithName("knowledge_base_id").WithDataType(entity.FieldTypeVarChar).WithMaxLength(64)).
+		WithField(entity.NewField().WithName("document_id").WithDataType(entity.FieldTypeVarChar).WithMaxLength(64)).
+		WithField(entity.NewField().WithName("chunk_id").WithDataType(entity.FieldTypeVarChar).WithMaxLength(64)).
+		WithField(entity.NewField().WithName("filename").WithDataType(entity.FieldTypeVarChar).WithMaxLength(512)).
+		WithField(entity.NewField().WithName("source_type").WithDataType(entity.FieldTypeVarChar).WithMaxLength(32)).
+		WithField(entity.NewField().WithName("section_title").WithDataType(entity.FieldTypeVarChar).WithMaxLength(512)).
+		WithField(entity.NewField().WithName("page_start").WithDataType(entity.FieldTypeInt32)).
+		WithField(entity.NewField().WithName("page_end").WithDataType(entity.FieldTypeInt32)).
+		WithField(entity.NewField().WithName("chunk_index").WithDataType(entity.FieldTypeInt32)).
+		WithField(entity.NewField().WithName("text").WithDataType(entity.FieldTypeVarChar).WithMaxLength(65535).WithEnableAnalyzer(true)).
+		WithField(entity.NewField().WithName("embedding").WithDataType(entity.FieldTypeFloatVector).WithDim(int64(dim))).
+		WithField(entity.NewField().WithName("sparse").WithDataType(entity.FieldTypeSparseVector)).
+		WithFunction(entity.NewFunction().
+			WithName("bm25").
+			WithType(entity.FunctionTypeBM25).
+			WithInputFields("text").
+			WithOutputFields("sparse"))
+
+	if err := m.client.CreateCollection(ctx, milvusclient.NewCreateCollectionOption(name, schema)); err != nil {
+		return fmt.Errorf("milvus create_collection %q: %w", name, err)
+	}
+
+	denseTask, err := m.client.CreateIndex(ctx, milvusclient.NewCreateIndexOption(name, "embedding",
+		milvidx.NewHNSWIndex(entity.L2, 16, 64)))
 	if err != nil {
-		return err
+		return fmt.Errorf("milvus create_index embedding %q: %w", name, err)
 	}
-	req.Header.Set("Content-Type", "application/json")
+	if err := denseTask.Await(ctx); err != nil {
+		return fmt.Errorf("milvus index embedding await %q: %w", name, err)
+	}
 
-	resp, err := m.client.Do(req)
+	sparseTask, err := m.client.CreateIndex(ctx, milvusclient.NewCreateIndexOption(name, "sparse",
+		milvidx.NewSparseInvertedIndex(entity.BM25, 0.0)))
 	if err != nil {
-		return err
+		return fmt.Errorf("milvus create_index sparse %q: %w", name, err)
 	}
-	defer resp.Body.Close()
+	if err := sparseTask.Await(ctx); err != nil {
+		return fmt.Errorf("milvus index sparse await %q: %w", name, err)
+	}
 
-	respBody, err := io.ReadAll(resp.Body)
+	loadTask, err := m.client.LoadCollection(ctx, milvusclient.NewLoadCollectionOption(name))
 	if err != nil {
-		return err
+		return fmt.Errorf("milvus load_collection %q: %w", name, err)
 	}
-	if resp.StatusCode >= 300 {
-		return fmt.Errorf("milvus %s: HTTP %d: %s", path, resp.StatusCode, respBody)
-	}
-
-	var apiResp struct {
-		Code    int             `json:"code"`
-		Message string          `json:"message"`
-		Data    json.RawMessage `json:"data"`
-	}
-	if err := json.Unmarshal(respBody, &apiResp); err != nil {
-		return err
-	}
-	if apiResp.Code != 0 {
-		return fmt.Errorf("milvus %s: code %d: %s", path, apiResp.Code, apiResp.Message)
-	}
-
-	if out != nil && len(apiResp.Data) > 0 {
-		return json.Unmarshal(respBody, out)
-	}
-	return nil
+	return loadTask.Await(ctx)
 }

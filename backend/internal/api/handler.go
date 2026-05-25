@@ -54,6 +54,10 @@ func (h *Handler) Routes() http.Handler {
 	apiGroup.GET("/knowledge-bases", h.withAuth(), h.handleListKnowledgeBases)
 	apiGroup.GET("/knowledge-bases/available", h.withAuth(), h.handleListAvailableKnowledgeBases)
 
+	router.NoRoute(func(c *gin.Context) {
+		writeError(c, 404, "not_found", "route not found", nil)
+	})
+
 	return router
 }
 
@@ -337,9 +341,14 @@ func (h *Handler) handleListAvailableKnowledgeBases(c *gin.Context) {
 
 func (h *Handler) handleQuery(c *gin.Context) {
 	var body struct {
-		KnowledgeBaseID string `json:"knowledge_base_id"`
-		Query           string `json:"query"`
-		TopK            int    `json:"top_k"`
+		KnowledgeBaseID string   `json:"knowledge_base_id"`
+		Query           string   `json:"query"`
+		TopK            int      `json:"top_k"`
+		DocumentIDs     []string `json:"document_ids"`
+		SearchMode      string   `json:"search_mode"`
+		EF              int      `json:"ef"`
+		DropRatio       float64  `json:"drop_ratio"`
+		RRFK            int      `json:"rrf_k"`
 	}
 	if err := json.NewDecoder(c.Request.Body).Decode(&body); err != nil {
 		writeError(c, 400, "validation_error", "invalid request body", nil)
@@ -350,7 +359,13 @@ func (h *Handler) handleQuery(c *gin.Context) {
 		return
 	}
 
-	qr, err := h.documentService.Query(body.KnowledgeBaseID, body.Query, body.TopK)
+	qr, err := h.documentService.Query(body.KnowledgeBaseID, body.Query, body.TopK, service.QueryOptions{
+		DocumentIDs: body.DocumentIDs,
+		SearchMode:  body.SearchMode,
+		EF:          body.EF,
+		DropRatio:   body.DropRatio,
+		RRFK:        body.RRFK,
+	})
 	if err != nil {
 		writeError(c, 500, "internal_error", err.Error(), nil)
 		return
