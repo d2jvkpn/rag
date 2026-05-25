@@ -46,6 +46,7 @@
 - HTTP 服务使用 `gin`
 - 鉴权使用 `JWT`（HS256，`github.com/golang-jwt/jwt/v5`），令牌存 `HttpOnly Cookie`
 - 密码哈希使用 **bcrypt**（`golang.org/x/crypto/bcrypt`，`DefaultCost`）
+- TOTP 两步验证（`github.com/pquerna/otp/totp`，RFC 6238，30 秒窗口）
 - 配置文件固定使用 `backend/configs/local.yaml`
 - 配置读取使用 `viper`，统一通过 `viper.GetString/GetXX` 获取
 - 启动参数使用命令行 flag，不使用环境变量
@@ -65,6 +66,7 @@
 - 第一阶段未引入 `Asynq`，使用进程内 goroutine 队列；第三阶段已补充
 - 第一阶段未接入 `Milvus` 和 embedding API；第三阶段已补充
 - 第一阶段 `Logout` 为 no-op；现已实现 JTI + `TokenBlacklist`（内存/Redis 双实现）
+- TOTP 两步验证：用户可自行开启/关闭；登录时若 `totp_enabled=true` 且未提交 `totp_code`，返回 `{"totp_required": true}`（HTTP 200），前端切换到验证码输入步骤后再次提交
 
 ## 目录约定
 

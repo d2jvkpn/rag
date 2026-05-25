@@ -7,11 +7,14 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/pquerna/otp/totp"
 	"golang.org/x/crypto/bcrypt"
 
 	"backend/internal/model"
 	"backend/internal/repository"
 )
+
+var ErrTOTPRequired = errors.New("totp_required")
 
 const defaultTokenTTL = 8 * time.Hour
 
@@ -42,13 +45,22 @@ func NewAuthService(store repository.Store, jwtSecret string, tokenTTL time.Dura
 
 func (s *AuthService) TokenTTL() time.Duration { return s.tokenTTL }
 
-func (s *AuthService) Login(username, password string) (model.User, string, error) {
+func (s *AuthService) Login(username, password, totpCode string) (model.User, string, error) {
 	user, err := s.store.FindUserByUsername(username)
 	if err != nil {
 		return model.User{}, "", errors.New("invalid username or password")
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
 		return model.User{}, "", errors.New("invalid username or password")
+	}
+
+	if user.TOTPEnabled {
+		if totpCode == "" {
+			return model.User{}, "", ErrTOTPRequired
+		}
+		if !totp.Validate(totpCode, user.TOTPSecret) {
+			return model.User{}, "", errors.New("invalid TOTP code")
+		}
 	}
 
 	now := time.Now().UTC()
@@ -63,6 +75,60 @@ func (s *AuthService) Login(username, password string) (model.User, string, erro
 		return model.User{}, "", err
 	}
 	return user, token, nil
+}
+
+func (s *AuthService) SetupTOTP(userID string) (secret, qrURL string, err error) {
+	user, err := s.store.GetUser(userID)
+	if err != nil {
+		return "", "", err
+	}
+	key, err := totp.Generate(totp.GenerateOpts{
+		Issuer:      "RAG",
+		AccountName: user.Username,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	user.TOTPSecret = key.Secret()
+	user.TOTPEnabled = false
+	user.UpdatedAt = time.Now().UTC()
+	if err := s.store.UpdateUser(user); err != nil {
+		return "", "", err
+	}
+	return key.Secret(), key.URL(), nil
+}
+
+func (s *AuthService) EnableTOTP(userID, code string) error {
+	user, err := s.store.GetUser(userID)
+	if err != nil {
+		return err
+	}
+	if user.TOTPSecret == "" {
+		return errors.New("TOTP not set up; call setup first")
+	}
+	if !totp.Validate(code, user.TOTPSecret) {
+		return errors.New("invalid TOTP code")
+	}
+	user.TOTPEnabled = true
+	user.UpdatedAt = time.Now().UTC()
+	return s.store.UpdateUser(user)
+}
+
+func (s *AuthService) DisableTOTP(userID, code string) error {
+	user, err := s.store.GetUser(userID)
+	if err != nil {
+		return err
+	}
+	if !user.TOTPEnabled {
+		return errors.New("TOTP is not enabled")
+	}
+	if !totp.Validate(code, user.TOTPSecret) {
+		return errors.New("invalid TOTP code")
+	}
+	user.TOTPEnabled = false
+	user.TOTPSecret = ""
+	user.UpdatedAt = time.Now().UTC()
+	return s.store.UpdateUser(user)
 }
 
 func (s *AuthService) Logout(tokenStr string) error {

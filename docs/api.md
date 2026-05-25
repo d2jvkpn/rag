@@ -114,6 +114,50 @@
 ### `GET /api/me`
 
 - 获取当前登录用户信息
+- 响应包含 `totp_enabled` 字段，表示当前用户是否已开启两步验证
+
+### `POST /api/login`（TOTP 两步验证）
+
+当账户已开启 TOTP 时，登录分两步：
+
+**第一步**：提交用户名和密码（不含 `totp_code`）
+
+```json
+{ "username": "admin", "password": "..." }
+```
+
+服务端验证凭据后，若账户已开启 TOTP，返回：
+
+```json
+{ "data": { "totp_required": true } }
+```
+
+HTTP 状态码仍为 `200`，不设置 Cookie。
+
+**第二步**：重新提交，附上动态验证码：
+
+```json
+{ "username": "admin", "password": "...", "totp_code": "123456" }
+```
+
+验证码正确后，正常登录并设置 Cookie。
+
+### `POST /api/me/totp/setup`
+
+- 为当前用户初始化 TOTP，生成 secret 和 QR Code URL
+- 此时 `totp_enabled` 仍为 `false`，secret 存入数据库但未激活
+- 响应：`{ "secret": "...", "qr_url": "otpauth://totp/..." }`
+
+### `POST /api/me/totp/enable`
+
+- 验证用户输入的 6 位验证码，正确后将 `totp_enabled` 设为 `true`
+- 请求体：`{ "code": "123456" }`
+- 已验证后续登录需要提供 TOTP 验证码
+
+### `POST /api/me/totp/disable`
+
+- 验证用户输入的 6 位验证码，正确后清除 secret，将 `totp_enabled` 设为 `false`
+- 请求体：`{ "code": "123456" }`
 
 ## 文档接口
 

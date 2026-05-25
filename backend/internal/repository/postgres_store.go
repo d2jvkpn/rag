@@ -245,6 +245,8 @@ type userRow struct {
 	PasswordHash string     `gorm:"column:password_hash"`
 	Status       string     `gorm:"column:status"`
 	LastLoginAt  *time.Time `gorm:"column:last_login_at"`
+	TOTPSecret   string     `gorm:"column:totp_secret"`
+	TOTPEnabled  bool       `gorm:"column:totp_enabled"`
 }
 
 func (userRow) TableName() string { return "users" }
@@ -312,6 +314,8 @@ func userFromRow(r userRow) model.User {
 		PasswordHash: r.PasswordHash,
 		Status:       r.Status,
 		LastLoginAt:  r.LastLoginAt,
+		TOTPSecret:   r.TOTPSecret,
+		TOTPEnabled:  r.TOTPEnabled,
 	}
 }
 
@@ -324,6 +328,8 @@ func userToRow(u model.User) userRow {
 		PasswordHash: u.PasswordHash,
 		Status:       u.Status,
 		LastLoginAt:  u.LastLoginAt,
+		TOTPSecret:   u.TOTPSecret,
+		TOTPEnabled:  u.TOTPEnabled,
 	}
 }
 

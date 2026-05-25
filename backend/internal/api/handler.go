@@ -38,6 +38,9 @@ func (h *Handler) Routes() http.Handler {
 	apiGroup.POST("/logout", h.withAuth(), h.handleLogout)
 	apiGroup.GET("/me", h.withAuth(), h.handleMe)
 	apiGroup.PUT("/me/password", h.withAuth(), h.handleChangePassword)
+	apiGroup.POST("/me/totp/setup", h.withAuth(), h.handleTOTPSetup)
+	apiGroup.POST("/me/totp/enable", h.withAuth(), h.handleTOTPEnable)
+	apiGroup.POST("/me/totp/disable", h.withAuth(), h.handleTOTPDisable)
 	apiGroup.POST("/documents", h.withAuth(), h.handleCreateDocument)
 	apiGroup.GET("/documents", h.withAuth(), h.handleListDocuments)
 	apiGroup.GET("/documents/:document_id", h.withAuth(), h.handleGetDocument)
@@ -65,6 +68,7 @@ func (h *Handler) handleLogin(c *gin.Context) {
 	var request struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
+		TOTPCode string `json:"totp_code"`
 	}
 	if err := json.NewDecoder(c.Request.Body).Decode(&request); err != nil {
 		writeError(c, 400, "validation_error", "invalid request body", nil)
@@ -78,8 +82,12 @@ func (h *Handler) handleLogin(c *gin.Context) {
 		return
 	}
 
-	user, token, err := h.authService.Login(request.Username, request.Password)
+	user, token, err := h.authService.Login(request.Username, request.Password, request.TOTPCode)
 	if err != nil {
+		if errors.Is(err, service.ErrTOTPRequired) {
+			writeData(c, 200, map[string]any{"totp_required": true})
+			return
+		}
 		writeError(c, 401, "unauthorized", err.Error(), nil)
 		return
 	}
@@ -442,6 +450,48 @@ func (h *Handler) writeStoreError(c *gin.Context, err error) {
 	writeError(c, 500, "internal_error", err.Error(), nil)
 }
 
+func (h *Handler) handleTOTPSetup(c *gin.Context) {
+	user := c.MustGet("current_user").(model.User)
+	secret, qrURL, err := h.authService.SetupTOTP(user.UserID)
+	if err != nil {
+		writeError(c, 500, "internal_error", err.Error(), nil)
+		return
+	}
+	writeData(c, 200, map[string]any{"secret": secret, "qr_url": qrURL})
+}
+
+func (h *Handler) handleTOTPEnable(c *gin.Context) {
+	user := c.MustGet("current_user").(model.User)
+	var body struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(c.Request.Body).Decode(&body); err != nil || body.Code == "" {
+		writeError(c, 400, "validation_error", "code is required", nil)
+		return
+	}
+	if err := h.authService.EnableTOTP(user.UserID, body.Code); err != nil {
+		writeError(c, 400, "validation_error", err.Error(), nil)
+		return
+	}
+	writeData(c, 200, map[string]any{"enabled": true})
+}
+
+func (h *Handler) handleTOTPDisable(c *gin.Context) {
+	user := c.MustGet("current_user").(model.User)
+	var body struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(c.Request.Body).Decode(&body); err != nil || body.Code == "" {
+		writeError(c, 400, "validation_error", "code is required", nil)
+		return
+	}
+	if err := h.authService.DisableTOTP(user.UserID, body.Code); err != nil {
+		writeError(c, 400, "validation_error", err.Error(), nil)
+		return
+	}
+	writeData(c, 200, map[string]any{"enabled": false})
+}
+
 func sanitizeUser(user model.User) map[string]any {
 	return map[string]any{
 		"user_id":       user.UserID,
@@ -450,5 +500,6 @@ func sanitizeUser(user model.User) map[string]any {
 		"last_login_at": user.LastLoginAt,
 		"created_at":    user.CreatedAt,
 		"updated_at":    user.UpdatedAt,
+		"totp_enabled":  user.TOTPEnabled,
 	}
 }

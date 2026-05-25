@@ -10,6 +10,8 @@ type User struct {
 	PasswordHash string     `json:"password_hash"`
 	Status       string     `json:"status"`
 	LastLoginAt  *time.Time `json:"last_login_at,omitempty"`
+	TOTPSecret   string     `json:"totp_secret,omitempty"`
+	TOTPEnabled  bool       `json:"totp_enabled"`
 }
 
 type Document struct {

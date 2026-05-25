@@ -51,6 +51,59 @@
       </template>
     </n-modal>
 
+    <n-modal v-model:show="showTOTPModal" preset="card" title="两步验证" style="width:400px" :mask-closable="false">
+      <div v-if="totpStep === 'idle'" style="text-align:center;padding:8px 0">
+        <n-text depth="3" style="display:block;margin-bottom:16px">为账户添加动态验证码保护，登录时需要额外输入 App 中显示的 6 位验证码。</n-text>
+        <n-button type="primary" :loading="totpLoading" @click="startTOTPSetup">开始设置</n-button>
+      </div>
+
+      <div v-else-if="totpStep === 'setup'">
+        <div style="text-align:center;margin-bottom:12px">
+          <img v-if="totpQRDataUrl" :src="totpQRDataUrl" alt="QR Code" style="width:200px;height:200px" />
+        </div>
+        <n-text depth="3" style="font-size:12px;display:block;margin-bottom:4px">用身份验证器 App 扫描二维码，或手动输入密钥：</n-text>
+        <n-text code style="font-size:13px;word-break:break-all;display:block;margin-bottom:16px">{{ totpSecret }}</n-text>
+        <n-input
+          v-model:value="totpCode"
+          placeholder="输入 App 中显示的 6 位验证码"
+          maxlength="6"
+          :allow-input="(v) => /^\d*$/.test(v)"
+          style="margin-bottom:8px"
+        />
+        <n-text v-if="totpError" type="error" style="font-size:12px;display:block;margin-bottom:8px">{{ totpError }}</n-text>
+      </div>
+
+      <div v-else-if="totpStep === 'disable'">
+        <n-text depth="3" style="display:block;margin-bottom:16px">关闭两步验证后，登录时将不再需要动态验证码。请输入当前验证码以确认操作。</n-text>
+        <n-input
+          v-model:value="totpCode"
+          placeholder="输入 App 中显示的 6 位验证码"
+          maxlength="6"
+          :allow-input="(v) => /^\d*$/.test(v)"
+          style="margin-bottom:8px"
+        />
+        <n-text v-if="totpError" type="error" style="font-size:12px;display:block;margin-bottom:8px">{{ totpError }}</n-text>
+      </div>
+
+      <template #footer>
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <n-button @click="showTOTPModal = false">取消</n-button>
+          <n-button
+            v-if="totpStep === 'setup'"
+            type="primary"
+            :loading="totpLoading"
+            @click="confirmTOTPEnable"
+          >确认启用</n-button>
+          <n-button
+            v-else-if="totpStep === 'disable'"
+            type="error"
+            :loading="totpLoading"
+            @click="confirmTOTPDisable"
+          >确认关闭</n-button>
+        </div>
+      </template>
+    </n-modal>
+
     <n-layout>
       <n-layout-content class="main-content">
         <router-view />
@@ -63,7 +116,8 @@
 import { computed, h, ref, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { NIcon, useDialog, useMessage } from 'naive-ui'
-import { DocumentOutline, SearchOutline, LogOutOutline as LogOutIcon, KeyOutline as KeyIcon, PersonCircleOutline as PersonIcon } from '@vicons/ionicons5'
+import { DocumentOutline, SearchOutline, LogOutOutline as LogOutIcon, KeyOutline as KeyIcon, PersonCircleOutline as PersonIcon, ShieldCheckmarkOutline as ShieldIcon } from '@vicons/ionicons5'
+import QRCode from 'qrcode'
 import { useAuthStore } from '../stores/auth.js'
 import { getConfig } from '../config/app-config.js'
 import { authService } from '../services/auth.js'
@@ -92,15 +146,22 @@ const menuOptions = [
   { label: '知识库查询', key: 'search', icon: icon(SearchOutline) },
 ]
 
-const userMenuOptions = [
+const userMenuOptions = computed(() => [
   { label: '修改密码', key: 'change-password', icon: () => h(NIcon, null, { default: () => h(KeyIcon) }) },
+  {
+    label: auth.user?.totp_enabled ? '关闭两步验证' : '开启两步验证',
+    key: 'totp',
+    icon: () => h(NIcon, null, { default: () => h(ShieldIcon) }),
+  },
   { type: 'divider', key: 'd1' },
   { label: '退出登录', key: 'logout', icon: () => h(NIcon, null, { default: () => h(LogOutIcon) }) },
-]
+])
 
 function handleUserMenuSelect(key) {
   if (key === 'change-password') {
     showPasswordModal.value = true
+  } else if (key === 'totp') {
+    openTOTPModal()
   } else if (key === 'logout') {
     handleLogout()
   }
@@ -159,6 +220,73 @@ async function submitPasswordChange() {
     message.error(e.message || '密码修改失败')
   } finally {
     pwLoading.value = false
+  }
+}
+
+// TOTP modal
+const showTOTPModal = ref(false)
+const totpStep = ref('idle') // idle | setup | confirm | disable
+const totpSecret = ref('')
+const totpQRDataUrl = ref('')
+const totpCode = ref('')
+const totpLoading = ref(false)
+const totpError = ref('')
+
+async function openTOTPModal() {
+  totpStep.value = auth.user?.totp_enabled ? 'disable' : 'idle'
+  totpCode.value = ''
+  totpError.value = ''
+  totpSecret.value = ''
+  totpQRDataUrl.value = ''
+  showTOTPModal.value = true
+}
+
+async function startTOTPSetup() {
+  totpLoading.value = true
+  totpError.value = ''
+  try {
+    const data = await authService.totpSetup()
+    totpSecret.value = data.secret
+    totpQRDataUrl.value = await QRCode.toDataURL(data.qr_url, { width: 200, margin: 1 })
+    totpStep.value = 'setup'
+  } catch (e) {
+    totpError.value = e.message || '初始化失败'
+  } finally {
+    totpLoading.value = false
+  }
+}
+
+async function confirmTOTPEnable() {
+  if (!totpCode.value) { totpError.value = '请输入验证码'; return }
+  totpLoading.value = true
+  totpError.value = ''
+  try {
+    await authService.totpEnable(totpCode.value)
+    auth.user = { ...auth.user, totp_enabled: true }
+    message.success('两步验证已开启')
+    showTOTPModal.value = false
+  } catch (e) {
+    totpError.value = e.message || '验证失败'
+    totpCode.value = ''
+  } finally {
+    totpLoading.value = false
+  }
+}
+
+async function confirmTOTPDisable() {
+  if (!totpCode.value) { totpError.value = '请输入验证码'; return }
+  totpLoading.value = true
+  totpError.value = ''
+  try {
+    await authService.totpDisable(totpCode.value)
+    auth.user = { ...auth.user, totp_enabled: false }
+    message.success('两步验证已关闭')
+    showTOTPModal.value = false
+  } catch (e) {
+    totpError.value = e.message || '验证失败'
+    totpCode.value = ''
+  } finally {
+    totpLoading.value = false
   }
 }
 </script>

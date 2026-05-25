@@ -13,9 +13,11 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function login(username, password) {
-    const data = await authService.login(username, password)
+  async function login(username, password, totpCode) {
+    const data = await authService.login(username, password, totpCode)
+    if (data?.totp_required) return { totp_required: true }
     user.value = data
+    return {}
   }
 
   async function logout() {
