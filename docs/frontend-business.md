@@ -374,11 +374,10 @@
 ### 文档状态
 
 - `uploaded`：文档已上传，等待处理
-- `processing`：解析或切分进行中
-- `review_pending`：切分完成，等待人工审核（或直接入库）
-- `reviewing`：人工审核进行中
-- `approved`：审核通过，待触发入库
-- `indexed`：已完成 embedding 和向量写入
+- `processing`：解析、切分、embedding 或入库阶段进行中（具体看 `stage`）
+- `review_pending`：人工审核模式下切分完成，等待审核
+- `approved`：审核通过，已自动进入 embedding 流程
+- `indexed`：已完成 embedding 和向量写入，文档不可再修改
 - `failed`：某阶段处理失败，错误原因见 `error_message`
 
 ### 处理阶段
@@ -389,18 +388,18 @@
 - `embed`
 - `index`
 - `done`
-- `delete`
 
 展示要求：
 
 - 状态和阶段同时展示
 - `failed` 必须关联错误信息
-- `review_pending` 和 `reviewing` 需要明显区别于自动流程状态
+- `review_pending` 需要明显区别于自动流程状态
 
 ## 前端通用交互约定
 
 - 所有 `/documents` 相关页面都要求登录后访问
 - 加载态、错误态、空态和配置加载失败态应统一风格
+- 应用支持中/英双语切换，语言偏好保存在浏览器本地；新增 UI 文案必须同步两份语言字典，详见 [前端技术方案 - 国际化](./frontend.md#前端国际化i18n)
 
 统一组件、提示、表格和时间处理约定，见 [前端技术方案](./frontend.md)。
 

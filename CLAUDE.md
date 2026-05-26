@@ -69,7 +69,7 @@ uploaded → processing/parse → processing/chunk → review_pending
 
 **Graceful shutdown:** `cmd/server/main.go` listens for `SIGINT`/`SIGTERM`, calls `http.Server.Shutdown` with a 5-second timeout, then calls `app.App.Shutdown` with a 10-second timeout. Application shutdown waits for the document task queue / in-flight indexing to finish, then closes Milvus, Redis blacklist, and Postgres connections when those backends are enabled.
 
-**TOTP:** Users can enable/disable TOTP (Time-based OTP, RFC 6238) via the settings menu. `POST /api/me/totp/setup` generates a secret + `otpauth://` URL (rendered as QR code in browser via `qrcode` npm package). `POST /api/me/totp/enable` activates it after the user confirms a valid code. `POST /api/me/totp/disable` deactivates it. At login, if `totp_enabled=true` and no `totp_code` is submitted, the server returns HTTP 200 `{"totp_required": true}` without setting a cookie; the frontend shows a second step to collect the code. Migration `000004_add_totp` adds `totp_secret TEXT` and `totp_enabled BOOLEAN` columns to `users`.
+**TOTP:** Users can enable/disable TOTP (Time-based OTP, RFC 6238) via the settings menu. `POST /api/me/totp/setup` generates a secret + `otpauth://` URL (rendered as QR code in browser via `qrcode` npm package). `POST /api/me/totp/enable` activates it after the user confirms a valid code. `POST /api/me/totp/disable` deactivates it. At login, if `totp_enabled=true` and no `totp_code` is submitted, the server returns HTTP 200 `{"totp_required": true}` without setting a cookie; the frontend shows a second step to collect the code. The `users` table carries `totp_secret TEXT` and `totp_enabled BOOLEAN` columns.
 
 **Account seeding:** `accounts` in `local.yaml` is a list of `{username, password, permissions[]}`. On startup, each entry whose username does not exist in the users table is inserted. `password` may be plaintext (auto-hashed on insert) or a pre-computed bcrypt hash (detected by `$2a$`/`$2b$`/`$2y$` prefix, stored as-is). Existing accounts are never modified. `permissions` are config-only and are **not** persisted in the database. Supported permissions: `view_user_list`, `delete_documents`, `disable_users`.
 
@@ -126,7 +126,7 @@ milvus:
 
 **Naive UI** is registered globally via `app.use(naive)` in `main.js`. Import components only when needed for render functions (e.g., inside `columns` definitions in `DocumentsPage`).
 
-**Runtime config** lives in `frontend/public/app.json`. The frontend never reads build-time environment variables. Fields: `apiBase`, `appTitle`, `pollIntervalMs`, `humanReviewEnabled`.
+**Runtime config** lives in `frontend/public/app.json`. The frontend never reads build-time environment variables. Fields: `apiBase`, `appTitle`, `pollIntervalMs`.
 
 ## Documentation Sync
 
@@ -148,10 +148,12 @@ Do not add placeholder text or "TODO: document later" — write the actual descr
 - `ListDocuments(knowledgeBaseID, tag string)` — pass empty strings to return all documents; both filters are pushed to the DB query when supported, not applied in memory after fetch.
 - `ListDocumentTags(knowledgeBaseID string)` returns deduplicated document tags with counts for the current scope. Used by the frontend tag filter dropdown.
 - Tests use `t.TempDir()` + `JSONStore`. No database mocking; no external dependencies in tests.
-- The `sessions` table (migration 000002) is unused — auth switched to JWT before it was needed.
+- Schema changes always require a new numbered migration pair under `migrations/sql/`; never edit existing files in place. No `sessions` table — auth is JWT-only.
 - Frontend does not use TypeScript. Do not introduce it.
-- `logger.L` defaults to `zap.NewNop()` at package level so tests that skip `logger.Init()` never panic. `Init()` is called only in `main.go`.
-- `Embedder` (`internal/embedder/`) has `Noop` (default) and `OpenAI` implementations. `OpenAI` works against any OpenAI-compatible endpoint. Wire via `WithEmbedder()`. Activated when `embedder.base_url` + `embedder.api_key` are set in config. DashScope model: `text-embedding-v3` (dim=1024).
+- Frontend i18n uses a Pinia `locale` store with `i18n/{zh,en}.js` message catalogs. UI text must read from the catalogs (`useI18n().t(...)`), not hardcoded strings.
+- `infra.L` defaults to `zap.NewNop()` at package level so tests that skip `infra.Init()` never panic. `Init()` is called only in `main.go`.
+- Request logging: `infra.RequestLogger` logs every request after `c.Next()`, level by status (`>=500` Error / `>=400` Warn / else Info). Fields: `ip`, `method`, `path` (route template via `c.FullPath()`, falls back to `URL.Path` for 404), `status`, `latency`, optional `params`, `query`, `err_origin`, `err_code`, `err_message`. `writeError` (`api/response.go`) captures the call site with `runtime.Caller(1)` (trimmed to `internal/...`) and stashes `err_origin`/`err_code`/`err_message` via `c.Set(...)` so the middleware can attach error location to 4xx/5xx logs.
+- `Embedder` (`internal/llm/`) has `Noop` (default) and `OpenAI` implementations. `OpenAI` works against any OpenAI-compatible endpoint. Wire via `WithEmbedder()`. Activated when `embedder.base_url` + `embedder.api_key` are set in config. DashScope model: `text-embedding-v3` (dim=1024).
 - `VectorStore` (`internal/llm/`) has `Noop` (default) and `Milvus` implementations. `Milvus` uses the official Go SDK v2 (gRPC, Milvus 2.5+). Interface: `ValidateKnowledgeBase`, `ListKnowledgeBases`, `Upsert`, `DeleteByDocument`, `Search(ctx, SearchRequest)`. `SearchRequest` carries `KnowledgeBaseID`, `Embedding`, `Query`, `TopK`, `DocumentIDs`, `Mode` (`""` dense / `"bm25"` / `"hybrid"`), `EF`, `DropRatio`, `RRFK`.
 - `TaskQueue` (`internal/queue/`) has `GoroutineQueue` (default, single worker goroutine) and `AsynqQueue` (Redis-backed, activated when `redis.dsn` is set). Wire via `WithTaskQueue()`. Queue selection happens inside `NewDocumentService`.
 - `POST /api/query` requires `knowledge_base_id` (cross-collection search is not supported). Request fields: `knowledge_base_id` (required), `query`, `top_k`, `search_mode` (`""` dense / `"bm25"` / `"hybrid"`), `document_ids` (optional filter), `ef`, `drop_ratio`, `rrf_k`. BM25-only mode skips the embedder. Embeds the query (dense/hybrid), calls `VectorStore.Search`, then optionally calls `LLM.Complete`. Returns `{ items, answer, query, knowledge_base_id }`. `answer` is `""` when LLM is Noop.

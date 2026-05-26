@@ -202,11 +202,10 @@ chunk 落盘和快照复用的具体实现约定，见 [后端架构与技术方
 - `approved`
 - `rejected`
 
-文档级状态建议补充：
+文档级状态补充：
 
-- `review_pending`
-- `reviewing`
-- `approved`
+- `review_pending`：切分完成等待审核
+- `approved`：审核通过，已进入 embedding 流程（审核通过后自动触发）
 
 ### 第一版取舍
 

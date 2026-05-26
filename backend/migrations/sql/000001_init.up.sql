@@ -5,7 +5,9 @@ CREATE TABLE users (
   username TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   status TEXT NOT NULL,
-  last_login_at TIMESTAMPTZ
+  last_login_at TIMESTAMPTZ,
+  totp_secret  TEXT    NOT NULL DEFAULT '',
+  totp_enabled BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE TABLE documents (
@@ -30,6 +32,9 @@ CREATE TABLE documents (
   chunk_config_hash TEXT NOT NULL DEFAULT '',
   started_at TIMESTAMPTZ,
   finished_at TIMESTAMPTZ,
+  human_review BOOLEAN NOT NULL DEFAULT FALSE,
+  uploader_id   TEXT NOT NULL DEFAULT '',
+  uploader_name TEXT NOT NULL DEFAULT '',
   UNIQUE (knowledge_base_id, sha256)
 );
 

@@ -10,7 +10,7 @@
 
 ## `documents`
 
-字段建议：
+字段：
 
 - `document_id`
 - `created_at`
@@ -33,6 +33,8 @@
 - `chunk_config_hash`
 - `started_at`
 - `finished_at`
+- `human_review`：上传时由表单 `human_review=true` 决定，控制切分完成后是否进入 `review_pending`
+- `uploader_id`、`uploader_name`：上传者快照，用于所有权中间件鉴权
 
 建议约束：
 
@@ -51,7 +53,7 @@
 
 ## `document_chunks`
 
-字段建议：
+字段：
 
 - `chunk_id`
 - `created_at`
@@ -69,7 +71,8 @@
 - `is_current`
 - `review_comment`
 - `filename`
-- `embedding_model`
+- `embedding_model`：embedding 完成后写入；快照中也带，便于断电重建
+- `embedding`：仅模型层和快照中携带（`[]float32`），数据库不存（向量在 Milvus）
 - `resource_refs`
 
 字段说明：
@@ -134,15 +137,17 @@
 
 ## `users`
 
-字段建议：
+字段：
 
 - `user_id`
 - `created_at`
 - `updated_at`
 - `username`
-- `password_hash`
-- `status`
+- `password_hash`：bcrypt（`golang.org/x/crypto/bcrypt`，`DefaultCost`）
+- `status`：`active` / `disabled`，运行时状态，配置 `accounts[].permissions` 不进入此表
 - `last_login_at`
+- `totp_secret`：未启用时为空
+- `totp_enabled`：`true` 时登录需附加 6 位动态码
 
 建议约束：
 
@@ -159,9 +164,9 @@
 
 ## Milvus Schema
 
-建议字段：
+每个 collection 一个知识库。字段：
 
-- `id`
+- `id`：主键，直接使用 `chunk_id`
 - `knowledge_base_id`
 - `document_id`
 - `chunk_id`
@@ -171,12 +176,12 @@
 - `page_start`
 - `page_end`
 - `chunk_index`
-- `text`
-- `text_hash`
-- `embedding`
+- `text`：原文
+- `embedding`：稠密向量，dim 由 collection 配置决定
+- `sparse`：BM25 稀疏向量，由 Milvus 内置 BM25 function 从 `text` 自动生成（基于 collection 配置的 `analyzer`，默认 `chinese`）
 
 说明：
 
-- `id` 可直接使用 `chunk_id`
-- 删除条件建议使用 `knowledge_base_id + document_id`
-- Milvus 存向量和核心检索元数据，chunk 全文仍保留在关系库
+- 删除按 `knowledge_base_id + document_id` 条件执行
+- Milvus 存向量和检索元数据，chunk 全文也存在 Milvus（用于 BM25 / 检索结果展示）；关系库保留完整原文，是真源
+- 启动时 `ensureCollection` 检测 schema：发现 `sparse` 缺失或 `analyzer` 不匹配会**drop + recreate collection**（数据丢失，需要重新入库）

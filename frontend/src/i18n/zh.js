@@ -101,7 +101,7 @@ export default {
   },
   documents: {
     upload: '上传文档',
-    kbFilter: '知识库筛选',
+    kbFilter: '选择知识库',
     statusFilter: '状态筛选',
     tagFilter: '标签筛选',
     pageSummary: '第 {page} / {pages} 页 · {start}–{end} / 共 {total} 条',

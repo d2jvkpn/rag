@@ -143,6 +143,12 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 
 验证码正确后，正常登录并设置 Cookie。
 
+### `PUT /api/me/password`
+
+- 修改当前登录用户密码
+- 请求体：`{ "old_password": "...", "new_password": "..." }`
+- 旧密码校验失败返回 `400 validation_error`，`details[0]` 指向 `old_password`
+
 ### `POST /api/me/totp/setup`
 
 - 为当前用户初始化 TOTP，生成 secret 和 QR Code URL
@@ -170,12 +176,13 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 - 返回 `202 Accepted`（文档已创建，处理异步进行）
 - 自动记录 `uploader_id` 和 `uploader_name`（取自当前登录用户）
 
-字段建议：
+字段（multipart/form-data）：
 
-- `file`
-- `knowledge_base_id`
-- `title` 可选
-- `tags` 可选
+- `file`：必填
+- `knowledge_base_id`：必填，须匹配配置中的 collection
+- `title`：可选
+- `tags`：可选，可重复字段
+- `human_review`：可选，`"true"` 表示切分完成后进入 `review_pending` 等待审核；其他值或缺省走自动入库
 
 ### 文档所有权与删除权限
 
@@ -186,7 +193,7 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 - `POST /api/documents/:id/chunks/rechunk`
 - `POST /api/documents/:id/chunks/approve`
 - `POST /api/documents/:id/chunks/merge`
-- `POST /api/documents/:id/chunks/:chunk_id/edit`
+- `PUT  /api/documents/:id/chunks/:chunk_id`
 - `POST /api/documents/:id/chunks/:chunk_id/reject`
 - `POST /api/documents/:id/chunks/:chunk_id/restore`
 - `POST /api/documents/:id/index`
@@ -264,17 +271,28 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 
 ### `POST /api/documents/:document_id/chunks/:chunk_id/reject`
 
-- 标记某个 chunk 忽略入库
+- 标记某个 chunk 忽略入库（`is_current=false, status=rejected`）
+
+### `POST /api/documents/:document_id/chunks/:chunk_id/restore`
+
+- 将已 `rejected` 的 chunk 恢复为 `draft`、`is_current=true`
+
+### `PUT /api/documents/:document_id/chunks/:chunk_id`
+
+- 编辑某个 chunk 的正文
+- 请求体：`{ "text": "..." }`
+- 编辑后 `source=manual`
 
 ### `POST /api/documents/:document_id/chunks/approve`
 
-- 审核通过当前 chunk 版本
+- 审核通过当前文档的全部 `draft` chunk（标记为 `approved`），文档状态变为 `approved` 并**自动触发 embedding 和入库**（无独立手动步骤）
 
 ### `POST /api/documents/:document_id/index`
 
 - 对当前 `approved` chunk 版本触发 embedding 和 Milvus 入库
+- 仅用于 `failed` 文档的失败重试。正常流程下 `approve` 已自动触发，不需要单独调用
 
-如果未开启人工审核，系统可在自动切分完成后直接触发 embedding 和入库，不必等待 `approve`。
+如果未开启人工审核，系统在自动切分完成后直接进入入库流程。
 
 ## 知识库接口
 
@@ -359,17 +377,16 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 
 ## 状态查询建议
 
-文档状态：
+文档状态（`documents.status` 实际取值）：
 
-- `uploaded`：文档已上传，等待处理
-- `processing`：解析或切分进行中
-- `review_pending`：切分完成，等待人工审核（或直接入库）
-- `reviewing`：人工审核进行中
-- `approved`：审核通过，待触发入库
-- `indexed`：已完成 embedding 和向量写入
-- `failed`：某阶段处理失败，错误原因见 `error_message`
+- `uploaded`：文档已上传，等待异步处理
+- `processing`：解析、切分、embedding 或入库阶段进行中（具体看 `stage`）
+- `review_pending`：人工审核模式下切分完成，等待审核
+- `approved`：审核通过，已触发 embedding 流程
+- `indexed`：已完成 embedding 和向量写入，文档不可再修改
+- `failed`：某阶段失败，错误见 `error_message`
 
-阶段状态：
+阶段（`documents.stage` 实际取值）：
 
 - `upload`
 - `parse`
@@ -377,7 +394,6 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 - `embed`
 - `index`
 - `done`
-- `delete`
 
 ## Chunk 返回字段建议
 

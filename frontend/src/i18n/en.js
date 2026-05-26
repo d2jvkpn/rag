@@ -101,7 +101,7 @@ export default {
   },
   documents: {
     upload: 'Upload Document',
-    kbFilter: 'Filter by KB',
+    kbFilter: 'Select Knowledge Base',
     statusFilter: 'Filter by Status',
     tagFilter: 'Filter by Tag',
     pageSummary: 'Page {page} / {pages} · {start}–{end} of {total}',

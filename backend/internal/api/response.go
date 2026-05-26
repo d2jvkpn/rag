@@ -1,6 +1,10 @@
 package api
 
 import (
+	"fmt"
+	"runtime"
+	"strings"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -16,6 +20,12 @@ func writeData(c *gin.Context, status int, data any) {
 }
 
 func writeError(c *gin.Context, status int, code, message string, details []fieldError) {
+	if _, file, line, ok := runtime.Caller(1); ok {
+		c.Set("err_origin", fmt.Sprintf("%s:%d", trimSourcePath(file), line))
+	}
+	c.Set("err_code", code)
+	c.Set("err_message", message)
+
 	payload := map[string]any{
 		"code":    code,
 		"message": message,
@@ -26,4 +36,11 @@ func writeError(c *gin.Context, status int, code, message string, details []fiel
 	c.JSON(status, map[string]any{
 		"error": payload,
 	})
+}
+
+func trimSourcePath(file string) string {
+	if i := strings.Index(file, "/backend/"); i >= 0 {
+		return file[i+len("/backend/"):]
+	}
+	return file
 }

@@ -124,17 +124,48 @@
 
 ## 日志约定
 
-后端日志建议使用：
+后端日志使用：
 
 - `zap` 负责结构化日志输出
 - `gopkg.in/natefinch/lumberjack.v2` 负责日志文件轮转
 
-第一版要求：
+约定：
 
-- 日志文件写入 `backend/logs/`
+- 日志文件写入 `backend/logs/app.log`
 - 同时保留控制台输出和文件输出
 - worker 和 API 进程使用统一日志格式
 - 不自行实现日志切片和归档逻辑，直接复用 `lumberjack`
+- 全局 logger `infra.L` 默认 `zap.NewNop()`；`infra.Init()` 只在 `main.go` 中调用
+
+### 请求日志中间件
+
+`infra.RequestLogger`（`internal/infra/middleware.go`）在每次请求 `c.Next()` 完成后输出一条 `request` 日志，按 status 分级：
+
+| status | level |
+|---|---|
+| `>= 500` | `Error` |
+| `>= 400` | `Warn` |
+| 其他 | `Info` |
+
+字段：
+
+- `ip`、`method`、`status`、`latency`：基础信息
+- `path`：路由模板（`c.FullPath()`），便于聚合统计；未匹配路由时回落到 `c.Request.URL.Path`
+- `params`：路径参数（如 `/api/documents/:id` → `{"id":"..."}`），非空才写
+- `query`：原始 query 字符串（`c.Request.URL.RawQuery`），非空才写
+- `err_origin`、`err_code`、`err_message`：仅在 handler 调用 `writeError` 后由其写入 `c.Set(...)`，定位 4xx/5xx 的代码出处
+
+中间件派生 logger 时关闭了 caller（`zap.WithCaller(false)`），避免每条请求日志都打 `infra/middleware.go:N`。
+
+### `writeError` 错误来源捕获
+
+`internal/api/response.go` 的 `writeError` 用 `runtime.Caller(1)` 记录调用点（裁剪为 `internal/...` 相对路径），连同 `code`、`message` 一起塞进 `c.Set(...)`。这样请求日志可以直接看到形如：
+
+```text
+WARN  request  status=401 err_origin=internal/api/handler.go:99 err_code=unauthorized err_message="invalid credentials"
+```
+
+无需 handler 主动调用日志 API。
 
 ## 静态文件存储约定
 
@@ -299,25 +330,28 @@ backend/
 - `backend/target/`: 后端编译产物目录
 - `backend/migrations/sql/`: SQL migration 文件目录
 
-当前已落地的最小目录结构：
+当前实际目录结构：
 
 ```text
 backend/
-  cmd/server/
-  configs/local.yaml
-  data/
-  logs/
-  target/
-  migrations/sql/
+  Makefile
+  cmd/server/                # 入口
+  configs/local.yaml         # 本地配置（gitignore）
+  data/                      # 文档/快照（gitignore）
+  logs/                      # 运行日志（gitignore）
+  migrations/sql/            # numbered up/down SQL
   internal/
-    api/
-    config/
-    model/
-    parser/
-    repository/
-    service/
-    uuid/
+    api/                     # gin handler、middleware、response
+    app/                     # App 装配（store/embedder/llm/queue/milvus 等）
+    infra/                   # 全局 logger、请求日志中间件
+    llm/                     # Embedder、VectorStore (Milvus)、LLM、parser
+    model/                   # 领域模型
+    queue/                   # TaskQueue（GoroutineQueue / AsynqQueue）
+    repository/              # Store 接口、JSONStore、PostgresStore
+    service/                 # AuthService、DocumentService、blacklist、chunker
 ```
+
+> 历史 README/计划里出现过的 `config/`、`parser/`、`uuid/` 包已并入 `app/` / `llm/` 等位置，不再以独立包存在。
 
 ## 实现顺序
 
@@ -341,9 +375,7 @@ backend/
 - `gin` 路由与鉴权中间件骨架
 - `configs/local.yaml` + `viper` 配置加载
 - `--release`、`--addr`、`--config` 启动参数
-- `users`、`documents`、`document_chunks` 初版 migration（000001）
-- `sessions` migration（000002，未使用）
-- `documents` 新增 `uploader_id`、`uploader_name` 列 migration（000003）
+- `users`、`documents`、`document_chunks` 表落地，含 `human_review`、`uploader_id/name`、`totp_secret/enabled` 等字段
 - `repository.Store` 接口；`JSONStore` 和 `PostgresStore` 双实现
 - `PostgresStore`：`gorm` + `lib/pq` driver，支持 `TEXT[]` tags 和 `JSONB` resource_refs
 - 启动时根据 `database.dsn` 配置自动选择 store

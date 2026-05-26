@@ -66,13 +66,15 @@
 
 ## 前端路由建议
 
-第一版建议使用以下核心路由：
+当前核心路由：
 
 - `/login`
 - `/documents`
 - `/documents/:documentId`
 - `/documents/:documentId/chunks`
+- `/search`：语义检索页（调用 `POST /api/query`）
 - `/users`（仅当当前用户具备 `view_user_list` 权限时可访问）
+- `/` 重定向到 `/documents`
 
 如果上传能力使用弹窗承载，则无需单独定义 `/upload` 页面路由。
 
@@ -101,22 +103,23 @@
 
 前端请求层建议按领域拆分，不在页面内直接发请求。
 
-建议目录：
+当前目录：
 
 - `services/http.js`
 - `services/auth.js`
 - `services/documents.js`
 - `services/chunks.js`
 - `services/users.js`
+- `services/search.js`
 
-职责建议：
+职责：
 
 - `http.js`：基于原生 `fetch` 的统一请求客户端、错误处理、鉴权基础配置
-- `auth.js`：登录、退出、获取当前用户
-- `documents.js`：文档上传、列表、详情、删除、触发入库
-- `documents.js` 还负责获取文档标签下拉数据（`GET /api/document-tags`）
-- `chunks.js`：chunk 列表、重切分、合并、拒绝、审核
+- `auth.js`：登录、退出、获取当前用户、TOTP setup/enable/disable、修改密码
+- `documents.js`：文档上传、列表、详情、删除、触发入库；同时负责文档标签下拉数据（`GET /api/document-tags`）
+- `chunks.js`：chunk 列表、重切分、合并、编辑、拒绝、恢复、审核
 - `users.js`：用户列表、启用、禁用
+- `search.js`：语义检索（`POST /api/query`）、知识库列表与可用 collection 配置
 
 实现约定：
 
@@ -134,12 +137,13 @@
 - 浏览器加载应用后，通过 HTTP 请求读取 `/app.json`
 - 前端在应用启动阶段加载配置，再初始化后续接口请求和页面渲染
 
-适合放入 `app.json` 的配置包括：
+`app.json` 当前字段：
 
-- 后端 API 基础地址
-- 页面标题
-- 默认轮询间隔
-- 是否默认启用人工审核入口
+- `apiBase`：后端 API 基础地址（开发环境为空字符串，走 Vite 代理）
+- `appTitle`：默认页面标题（实际显示由 i18n 字典覆盖）
+- `pollIntervalMs`：详情页轮询处理中文档的间隔，默认 3000
+
+> 是否启用人工审核改为按上传单独决定（表单字段 `human_review`），不再通过 `app.json` 全局开关控制。
 
 设计要求：
 
@@ -232,6 +236,21 @@
 
 建议通过公共组件统一这些状态表现，避免每个页面重复实现。
 
+## 前端国际化（i18n）
+
+前端使用自实现的轻量 i18n（无第三方库）：
+
+- 文案目录 `src/i18n/{zh,en}.js`，每种语言一个扁平 key/value 对象
+- `src/i18n/index.js` 暴露 `useI18n()`，组件中调用 `t(key, vars)` 读取文案
+- 当前语言由 Pinia store `stores/locale.js` 持有，并写入 localStorage 持久化
+- 页面/组件 UI 文本应使用 `t(...)` 读取字典，不要硬编码字符串
+
+新增页面或组件时：
+
+1. 先在两个语言文件中补 key
+2. 在组件中通过 `useI18n` 使用
+3. 出现需要变量插值的文案时使用 `{varName}` 占位符
+
 ## 前端样式与时间处理约定
 
 第一版前端样式使用普通 CSS：
@@ -245,11 +264,12 @@
 
 ## 前端目录建议
 
-建议目录结构：
+当前目录结构：
 
 ```text
 frontend/
   public/
+    app.json
   src/
     main.js
     App.vue
@@ -258,33 +278,37 @@ frontend/
     stores/
       auth.js
       document-filters.js
+      locale.js
     services/
       http.js
       auth.js
       documents.js
       chunks.js
+      users.js
+      search.js
     config/
       app-config.js
+    i18n/
+      index.js
+      zh.js
+      en.js
     pages/
       LoginPage.vue
       DocumentsPage.vue
       DocumentDetailPage.vue
       DocumentChunksPage.vue
+      SearchPage.vue
+      UsersPage.vue
     components/
-      layout/
-      documents/
-      chunks/
-      common/
+      AppLayout.vue
     utils/
       status.js
       format.js
-      resource-refs.js
-    styles/
-      tokens.css
-      main.css
   target/
     dist/
 ```
+
+> 历史 `frontend.md` 中的 `components/{layout,documents,chunks,common}/` 分组未落地，当前所有组件归于 `components/AppLayout.vue` 一个文件；新组件按需新增即可。
 
 ## 前端实现原则
 
