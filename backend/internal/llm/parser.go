@@ -22,9 +22,18 @@ import (
 	"go.uber.org/zap"
 )
 
+// ParseBlock is a structural unit from the parser (a section, slide, etc.)
+// carrying optional metadata for the chunker.
+type ParseBlock struct {
+	Text         string
+	SectionTitle string
+	PageStart    int
+}
+
 type ParseResult struct {
-	Text      string `json:"text"`
-	PageCount int    `json:"page_count"`
+	Text      string       `json:"text"`
+	PageCount int          `json:"page_count"`
+	Blocks    []ParseBlock // nil for DOCX/PDF; populated for Markdown and PPTX
 }
 
 type ooxmlBlock struct {
@@ -64,7 +73,43 @@ func parseMarkdown(path string) (ParseResult, error) {
 	if text == "" {
 		return ParseResult{}, errors.New("markdown content is empty")
 	}
-	return ParseResult{Text: text, PageCount: 1}, nil
+	return ParseResult{Text: text, PageCount: 1, Blocks: splitMarkdownBlocks(text)}, nil
+}
+
+// splitMarkdownBlocks splits Markdown text into blocks at heading boundaries.
+// Each block carries the heading text as SectionTitle.
+func splitMarkdownBlocks(text string) []ParseBlock {
+	lines := strings.Split(text, "\n")
+	var blocks []ParseBlock
+	var currentTitle string
+	var currentLines []string
+
+	for _, line := range lines {
+		if isMarkdownHeading(line) {
+			if t := strings.TrimSpace(strings.Join(currentLines, "\n")); t != "" {
+				blocks = append(blocks, ParseBlock{Text: t, SectionTitle: currentTitle})
+			}
+			currentTitle = strings.TrimSpace(strings.TrimLeft(line, "#"))
+			currentLines = []string{line}
+		} else {
+			currentLines = append(currentLines, line)
+		}
+	}
+	if t := strings.TrimSpace(strings.Join(currentLines, "\n")); t != "" {
+		blocks = append(blocks, ParseBlock{Text: t, SectionTitle: currentTitle})
+	}
+	if len(blocks) == 0 {
+		return []ParseBlock{{Text: text}}
+	}
+	return blocks
+}
+
+func isMarkdownHeading(line string) bool {
+	if !strings.HasPrefix(line, "#") {
+		return false
+	}
+	rest := strings.TrimLeft(line, "#")
+	return rest == "" || rest[0] == ' ' || rest[0] == '\t'
 }
 
 func parseDocx(path string) (ParseResult, error) {
@@ -74,7 +119,7 @@ func parseDocx(path string) (ParseResult, error) {
 	}
 	defer reader.Close()
 
-	texts := make([]string, 0)
+	var blocks []ParseBlock
 	for _, file := range reader.File {
 		if file.Name != "word/document.xml" {
 			continue
@@ -83,14 +128,145 @@ func parseDocx(path string) (ParseResult, error) {
 		if err != nil {
 			return ParseResult{}, err
 		}
-		texts = append(texts, extractOOXMLTextWithMarkdownTables(string(content), "w:p", "w:t", "w:tbl", "w:tr", "w:tc", true))
+		blocks = extractDocxBlocks(string(content))
 	}
 
-	text := strings.TrimSpace(strings.Join(texts, "\n"))
+	if len(blocks) == 0 {
+		return ParseResult{}, errors.New("docx content is empty")
+	}
+	texts := make([]string, 0, len(blocks))
+	for _, b := range blocks {
+		if b.Text != "" {
+			texts = append(texts, b.Text)
+		}
+	}
+	text := strings.TrimSpace(strings.Join(texts, "\n\n"))
 	if text == "" {
 		return ParseResult{}, errors.New("docx content is empty")
 	}
-	return ParseResult{Text: text, PageCount: 1}, nil
+	return ParseResult{Text: text, PageCount: 1, Blocks: blocks}, nil
+}
+
+var docxHeadingStyleRe = regexp.MustCompile(`<w:pStyle\s[^>]*w:val="([^"]*)"`)
+
+func isDocxHeadingStyle(val string) bool {
+	lower := strings.ToLower(val)
+	if strings.HasPrefix(lower, "heading") {
+		return true
+	}
+	if strings.HasPrefix(lower, "标题") {
+		return true
+	}
+	// numeric styles 1–6 are headings in many CJK DOCX templates
+	if len(val) == 1 && val[0] >= '1' && val[0] <= '6' {
+		return true
+	}
+	return false
+}
+
+// extractDocxBlocks splits a DOCX document.xml into blocks at heading paragraph
+// boundaries. Each block carries the heading text as SectionTitle. When no
+// heading styles are detected the entire document is returned as one block,
+// preserving existing behavior.
+func extractDocxBlocks(content string) []ParseBlock {
+	blockRe := regexp.MustCompile(`(?s)<w:tbl[\s>].*?</w:tbl>|<w:p[\s>].*?</w:p>`)
+	tableStartRe := regexp.MustCompile(`(?s)^<w:tbl[\s>]`)
+
+	rawBlocks := blockRe.FindAllString(content, -1)
+
+	type docItem struct {
+		isHeading bool
+		heading   string
+		ob        ooxmlBlock
+	}
+
+	items := make([]docItem, 0, len(rawBlocks))
+	for _, raw := range rawBlocks {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		if tableStartRe.MatchString(raw) {
+			rows := extractTableRows(raw, "w:p", "w:t", "w:tr", "w:tc")
+			if len(rows) > 0 {
+				items = append(items, docItem{ob: ooxmlBlock{kind: "table", rows: rows}})
+			}
+			continue
+		}
+		paraText := extractParagraphText(raw, "w:p", "w:t")
+		isHeading := false
+		headingText := ""
+		if m := docxHeadingStyleRe.FindStringSubmatch(raw); m != nil && isDocxHeadingStyle(m[1]) {
+			isHeading = true
+			headingText = paraText
+		}
+		if paraText != "" {
+			items = append(items, docItem{isHeading: isHeading, heading: headingText, ob: ooxmlBlock{kind: "text", text: paraText}})
+		}
+	}
+
+	hasHeadings := false
+	for _, it := range items {
+		if it.isHeading {
+			hasHeadings = true
+			break
+		}
+	}
+	if !hasHeadings {
+		text := extractOOXMLTextWithMarkdownTables(content, "w:p", "w:t", "w:tbl", "w:tr", "w:tc", true)
+		if text == "" {
+			return nil
+		}
+		return []ParseBlock{{Text: text}}
+	}
+
+	var result []ParseBlock
+	var currentTitle string
+	var currentItems []ooxmlBlock
+
+	flush := func() {
+		if len(currentItems) == 0 {
+			return
+		}
+		merged := mergeAdjacentOOXMLTables(currentItems)
+		lines := make([]string, 0, len(merged))
+		for _, item := range merged {
+			switch item.kind {
+			case "table":
+				if t := renderMarkdownTable(item.rows); t != "" {
+					lines = append(lines, t)
+				}
+			default:
+				if item.text != "" {
+					lines = append(lines, item.text)
+				}
+			}
+		}
+		if text := strings.TrimSpace(strings.Join(lines, "\n\n")); text != "" {
+			result = append(result, ParseBlock{Text: text, SectionTitle: currentTitle})
+		}
+		currentItems = nil
+	}
+
+	for _, it := range items {
+		if it.isHeading {
+			flush()
+			currentTitle = it.heading
+			currentItems = []ooxmlBlock{{kind: "text", text: it.heading}}
+		} else {
+			currentItems = append(currentItems, it.ob)
+		}
+	}
+	flush()
+
+	if len(result) == 0 {
+		text := extractOOXMLTextWithMarkdownTables(content, "w:p", "w:t", "w:tbl", "w:tr", "w:tc", true)
+		if text == "" {
+			return nil
+		}
+		return []ParseBlock{{Text: text}}
+	}
+	return result
 }
 
 func parsePptx(path string) (ParseResult, error) {
@@ -130,7 +306,7 @@ func parsePptx(path string) (ParseResult, error) {
 	}
 	sort.Strings(slideNames)
 
-	var sections []string
+	var blocks []ParseBlock
 	for idx, name := range slideNames {
 		section := strings.TrimSpace(slideText[name])
 		noteName := filepath.Join("ppt", "notesSlides", "notesSlide"+slideNumberFromName(name)+".xml")
@@ -139,15 +315,26 @@ func parsePptx(path string) (ParseResult, error) {
 			section = strings.TrimSpace(section + "\n备注: " + note)
 		}
 		if section != "" {
-			sections = append(sections, "幻灯片 "+strconv.Itoa(idx+1)+"\n"+section)
+			slideNum := idx + 1
+			label := "幻灯片 " + strconv.Itoa(slideNum)
+			blocks = append(blocks, ParseBlock{
+				Text:         label + "\n" + section,
+				SectionTitle: label,
+				PageStart:    slideNum,
+			})
 		}
 	}
 
-	text := strings.TrimSpace(strings.Join(sections, "\n\n"))
-	if text == "" {
+	if len(blocks) == 0 {
 		return ParseResult{}, errors.New("pptx content is empty")
 	}
-	return ParseResult{Text: text, PageCount: len(sections)}, nil
+
+	slideTexts := make([]string, 0, len(blocks))
+	for _, b := range blocks {
+		slideTexts = append(slideTexts, b.Text)
+	}
+	text := strings.TrimSpace(strings.Join(slideTexts, "\n\n"))
+	return ParseResult{Text: text, PageCount: len(blocks), Blocks: blocks}, nil
 }
 
 func parsePDF(path string) (ParseResult, error) {
@@ -192,18 +379,31 @@ func parsePDF(path string) (ParseResult, error) {
 		return ParseResult{}, fmt.Errorf("pdf parser exec failed (python=%s script=%s file=%s): %w", pythonBin, scriptPath, path, err)
 	}
 
-	var result ParseResult
-	if err := json.Unmarshal(output, &result); err != nil {
+	var payload struct {
+		Text      string `json:"text"`
+		PageCount int    `json:"page_count"`
+		Pages     []struct {
+			Text string `json:"text"`
+			Page int    `json:"page"`
+		} `json:"pages"`
+	}
+	if err := json.Unmarshal(output, &payload); err != nil {
 		return ParseResult{}, fmt.Errorf("pdf parser returned invalid json (script=%s file=%s): %w", scriptPath, path, err)
 	}
-	result.Text = strings.TrimSpace(result.Text)
-	if result.Text == "" {
+	payload.Text = strings.TrimSpace(payload.Text)
+	if payload.Text == "" {
 		return ParseResult{}, errors.New("pdf content is empty")
 	}
-	if result.PageCount < 1 {
-		result.PageCount = 1
+	if payload.PageCount < 1 {
+		payload.PageCount = 1
 	}
-	return result, nil
+	blocks := make([]ParseBlock, 0, len(payload.Pages))
+	for _, p := range payload.Pages {
+		if t := strings.TrimSpace(p.Text); t != "" {
+			blocks = append(blocks, ParseBlock{Text: t, PageStart: p.Page})
+		}
+	}
+	return ParseResult{Text: payload.Text, PageCount: payload.PageCount, Blocks: blocks}, nil
 }
 
 func pdfParserScriptPath() (string, error) {

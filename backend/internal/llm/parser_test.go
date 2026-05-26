@@ -230,6 +230,122 @@ func TestParsePptxConvertsTablesToMarkdown(t *testing.T) {
 	}
 }
 
+func TestParseDocxHeadingBlocks(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "headings.docx")
+	files := map[string]string{
+		"word/document.xml": `<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>第一章</w:t></w:r>
+    </w:p>
+    <w:p><w:r><w:t>第一章内容。</w:t></w:r></w:p>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:r><w:t>第二章</w:t></w:r>
+    </w:p>
+    <w:p><w:r><w:t>第二章内容。</w:t></w:r></w:p>
+  </w:body>
+</w:document>`,
+	}
+	if err := writeZipFixture(path, files); err != nil {
+		t.Fatalf("write docx fixture: %v", err)
+	}
+	got, err := Parse(path, "docx")
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if len(got.Blocks) != 2 {
+		t.Fatalf("expected 2 blocks, got %d", len(got.Blocks))
+	}
+	if got.Blocks[0].SectionTitle != "第一章" {
+		t.Errorf("expected SectionTitle='第一章', got %q", got.Blocks[0].SectionTitle)
+	}
+	if got.Blocks[1].SectionTitle != "第二章" {
+		t.Errorf("expected SectionTitle='第二章', got %q", got.Blocks[1].SectionTitle)
+	}
+}
+
+func TestParseDocxNoHeadingsFallback(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "noh.docx")
+	files := map[string]string{
+		"word/document.xml": `<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:r><w:t>段落一</w:t></w:r></w:p>
+    <w:p><w:r><w:t>段落二</w:t></w:r></w:p>
+  </w:body>
+</w:document>`,
+	}
+	if err := writeZipFixture(path, files); err != nil {
+		t.Fatalf("write docx fixture: %v", err)
+	}
+	got, err := Parse(path, "docx")
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if len(got.Blocks) != 1 {
+		t.Fatalf("expected single fallback block, got %d", len(got.Blocks))
+	}
+	if got.Blocks[0].SectionTitle != "" {
+		t.Errorf("expected empty SectionTitle, got %q", got.Blocks[0].SectionTitle)
+	}
+}
+
+func TestSplitMarkdownBlocksHeadings(t *testing.T) {
+	md := "# Title\n\nIntro paragraph.\n\n## Section A\n\nContent A.\n\n## Section B\n\nContent B."
+	blocks := splitMarkdownBlocks(md)
+	if len(blocks) != 3 {
+		t.Fatalf("expected 3 blocks, got %d", len(blocks))
+	}
+	cases := []struct{ title, wantTitle string }{
+		{blocks[0].SectionTitle, "Title"},
+		{blocks[1].SectionTitle, "Section A"},
+		{blocks[2].SectionTitle, "Section B"},
+	}
+	for _, c := range cases {
+		if c.title != c.wantTitle {
+			t.Errorf("expected SectionTitle=%q, got %q", c.wantTitle, c.title)
+		}
+	}
+}
+
+func TestSplitMarkdownBlocksNoHeadings(t *testing.T) {
+	md := "Just a paragraph without headings."
+	blocks := splitMarkdownBlocks(md)
+	if len(blocks) != 1 {
+		t.Fatalf("expected 1 block, got %d", len(blocks))
+	}
+	if blocks[0].SectionTitle != "" {
+		t.Errorf("expected empty SectionTitle, got %q", blocks[0].SectionTitle)
+	}
+}
+
+func TestParsePptxReturnsBlocks(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "slides.pptx")
+	files := map[string]string{
+		"ppt/slides/slide1.xml": `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>第一页</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`,
+		"ppt/slides/slide2.xml": `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>第二页</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`,
+	}
+	if err := writeZipFixture(path, files); err != nil {
+		t.Fatalf("write pptx fixture: %v", err)
+	}
+	got, err := Parse(path, "pptx")
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if len(got.Blocks) != 2 {
+		t.Fatalf("expected 2 blocks, got %d", len(got.Blocks))
+	}
+	if got.Blocks[0].PageStart != 1 || got.Blocks[1].PageStart != 2 {
+		t.Errorf("unexpected PageStart values: %d, %d", got.Blocks[0].PageStart, got.Blocks[1].PageStart)
+	}
+	if got.Blocks[0].SectionTitle != "幻灯片 1" {
+		t.Errorf("unexpected SectionTitle: %q", got.Blocks[0].SectionTitle)
+	}
+}
+
 func writeZipFixture(path string, files map[string]string) error {
 	f, err := os.Create(path)
 	if err != nil {

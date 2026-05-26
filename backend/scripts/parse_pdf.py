@@ -211,6 +211,7 @@ def merge_cross_page_tables(page_items):
                 current = {
                     "text": current["text"],
                     "tables": current["tables"][1:],
+                    "page": current["page"],
                 }
         merged_pages.append(current)
     return merged_pages
@@ -257,6 +258,7 @@ def main() -> int:
         for index, page in enumerate(pdf.pages, start=1):
             try:
                 page_item = extract_page_content(page, index)
+                page_item["page"] = index
             except Exception as exc:
                 failed_pages += 1
                 if failed_pages == total_pages:
@@ -265,21 +267,22 @@ def main() -> int:
             page_items.append(page_item)
 
         page_items = merge_cross_page_tables(page_items)
-        pages = []
+        page_data = []
         for page_item in page_items:
             rendered = render_page_content(page_item)
             if rendered:
-                pages.append(rendered)
+                page_data.append({"text": rendered, "page": page_item["page"]})
 
-    if not pages:
+    if not page_data:
         return fail(
             "pdf text extraction failed: no extractable text found; "
             "this PDF may be scanned/image-based or use an unsupported encoding"
         )
 
     payload = {
-        "text": "\n\n".join(pages).strip(),
+        "text": "\n\n".join(p["text"] for p in page_data).strip(),
         "page_count": total_pages,
+        "pages": page_data,
     }
     json.dump(payload, sys.stdout, ensure_ascii=False)
     return 0

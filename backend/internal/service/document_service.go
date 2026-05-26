@@ -569,8 +569,23 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 		return
 	}
 
-	cleaned := llm.CleanText(parsed.Text)
-	if cleaned == "" {
+	var blocks []llm.ParseBlock
+	if len(parsed.Blocks) > 0 {
+		for i := range parsed.Blocks {
+			parsed.Blocks[i].Text = llm.CleanText(parsed.Blocks[i].Text)
+		}
+		for _, b := range parsed.Blocks {
+			if strings.TrimSpace(b.Text) != "" {
+				blocks = append(blocks, b)
+			}
+		}
+	} else {
+		cleaned := llm.CleanText(parsed.Text)
+		if cleaned != "" {
+			blocks = []llm.ParseBlock{{Text: cleaned}}
+		}
+	}
+	if len(blocks) == 0 {
 		s.failDocument(document, "chunk", errors.New("document content is empty after cleanup"))
 		return
 	}
@@ -589,7 +604,7 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 	chunks := BuildChunks(
 		document.DocumentID,
 		document.Filename,
-		cleaned,
+		blocks,
 		chunkVersion,
 		colCfg.ChunkSize,
 		colCfg.ChunkOverlap,

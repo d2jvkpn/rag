@@ -225,21 +225,47 @@ chunk 快照约定：
 - 第一版默认不强制人工审核，审核能力作为可选流程
 - `documents` 初始状态为 `uploaded`
 - 第一版不引入独立的 `document_resources` 表，图片、表格、链接引用先写入 `document_chunks.resource_refs`
-- `docx` / `pptx` 遇到原生表格时，会转成 Markdown 表格文本并写入 `document_chunks.text`
+- `docx` / `pptx` 遇到原生表格时，会转成 Markdown 表格文本并写入 `document_chunks.text`；正文段落、标题、列表等其他元素仅提取纯文本，不转 Markdown 格式
+- `docx` 中检测到 `w:pStyle` heading 样式（`Heading1`–N、`1`–`6`、`标题N`）时按标题边界拆分为结构化 blocks，每个 block 带 `SectionTitle`；无标题文档退回单 block
 - `docx` 中相邻且列数一致的连续表会按续表处理并合并；若后一张表首行与前一张表表头一致，会自动去掉重复表头
-- `markdown` 中原有表格语法保持原样，不做二次转换
-- `pdf` 通过 Python 脚本调用 `pdfplumber` 提取文本，并将识别到的页内表格转成 Markdown 表格文本；正文抽取会尽量排除表格区域，减少重复内容；当前会尝试合并相邻页之间列数一致的续页表，并去掉重复表头；要求运行环境可执行 `python3` 且安装 `pdfplumber`
+- `pptx` 每张幻灯片作为独立 block，`SectionTitle` = "幻灯片 N"，`PageStart` = 幻灯片编号
+- `markdown` 中原有表格语法保持原样，不做二次转换；按 `#/##/…` 标题边界拆分为 blocks
+- `pdf` 通过 Python 脚本调用 `pdfplumber` 提取文本，并将识别到的页内表格转成 Markdown 表格文本；正文抽取会尽量排除表格区域，减少重复内容；会尝试合并相邻页列数一致的续页表并去掉重复表头；每页作为独立 block，`PageStart` = 页码；要求运行环境可执行 `python3` 且安装 `pdfplumber`
 - 扫描版 PDF 或其他无可提取文本的 PDF 仍会直接失败，不做 OCR
 - embedding 输入只使用 `document_chunks.text`
 - chunk 切分完成后直接写入 `document_chunks`；快照延后到 embedding 完成时再落盘
 
-## Chunk 策略建议
+## Chunk 策略
 
-- 采用“结构优先 + 长度兜底”的混合切分策略
-- 第一版按字符数近似，不强依赖 token 计数器
-- 默认参数：`chunk_size = 1000`、`chunk_overlap = 150`
-- 短文档在清洗后正文不超过约 `3000` 中文字符时，可默认整篇作为一个 chunk
-- 即使整篇只生成一个 chunk，也保留 `resource_refs`
+采用”结构优先 + 长度兜底”的混合切分策略，按 rune 数计算，不依赖 token 计数器。
+
+**默认参数**（可按 collection 覆盖）：`chunk_size = 1000`、`chunk_overlap = 150`、`min_chunks = 3`
+
+**处理流程**
+
+1. **Parser 输出结构化 blocks**：`Parse()` 返回 `[]ParseBlock{Text, SectionTitle, PageStart}`
+   - Markdown：按 `#/##/…` 标题边界拆分，每节一个 block
+   - DOCX：检测 `w:pStyle` heading 样式拆分；无标题文档退回单 block
+   - PPTX：每张幻灯片一个 block，`PageStart` = 幻灯片编号
+   - PDF：每页一个 block，`PageStart` = 页码
+2. **CleanText**：对每个 block 的文本做清洗（折叠多余空行、去除控制字符）
+3. **BuildChunks**：逐 block 调用 `splitByLength`，每个 chunk 继承所在 block 的 `SectionTitle` / `PageStart`
+4. **min_chunks 合并**：全部 block 切分完成后，若总 chunk 数 ≤ `min_chunks`，将整篇合并为单一 chunk
+
+**splitByLength 细节**
+
+- 以 `\n\n` 为段落边界累积内容，超出 `chunk_size` 时落段
+- Markdown 代码块（`` ``` ``/`~~~`）内部的空行受保护，不触发段落切分
+- 单段落超出 `chunk_size` 时：
+  - 若为 Markdown 表格：按数据行拆分，每部分保留完整表头
+  - 否则：`splitRunes` 按字符滑动窗口切分，cut 点向前搜索最近句末符（`。.!?！？；;`）对齐
+- `overlapTail` 从 overlap 窗口起始位置向后找第一个句末符，overlap 从该符号之后开始，避免从句子中段携带上文
+
+**chunk 内容格式**
+
+- `Text` 和 `NormalizedText` 存同一内容（原始文本，不做规范化）
+- 表格转为 Markdown table 语法，正文为纯文本，Markdown 源文件保留原始语法
+- `SectionTitle`、`PageStart`、`PageEnd` 由 parser 层填充；DOCX 无页码信息（始终为 0）
 
 ## 用户系统
 
