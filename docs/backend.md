@@ -225,7 +225,9 @@ chunk 快照约定：
 - 第一版默认不强制人工审核，审核能力作为可选流程
 - `documents` 初始状态为 `uploaded`
 - 第一版不引入独立的 `document_resources` 表，图片、表格、链接引用先写入 `document_chunks.resource_refs`
-- `pdf` 通过 Python 脚本调用 `pypdf` 提取文本；要求运行环境可执行 `python3` 且安装 `pypdf`
+- `docx` / `pptx` 遇到原生表格时，会转成 Markdown 表格文本并写入 `document_chunks.text`
+- `markdown` 中原有表格语法保持原样，不做二次转换
+- `pdf` 通过 Python 脚本调用 `pdfplumber` 提取文本，并将识别到的页内表格转成 Markdown 表格文本；正文抽取会尽量排除表格区域，减少重复内容；要求运行环境可执行 `python3` 且安装 `pdfplumber`
 - 扫描版 PDF 或其他无可提取文本的 PDF 仍会直接失败，不做 OCR
 - embedding 输入只使用 `document_chunks.text`
 - chunk 切分完成后直接写入 `document_chunks`；快照延后到 embedding 完成时再落盘
@@ -383,7 +385,7 @@ backend/
 - 文档上传（记录 uploader）、列表、详情、删除接口
 - 文档所有权中间件 `withDocumentOwner()`：非上传者操作变更接口返回 403
 - `markdown`、`docx`、`pptx` 基础解析
-- `pdf` 通过 Python `pypdf` 解析
+- `pdf` 通过 Python `pdfplumber` 解析，并将页内表格转成 Markdown 表格文本
 - chunk 切分和 chunk JSON 快照写入
 - `rechunk` 接口和 chunk 版本递增
 - chunk 列表查询接口

@@ -77,7 +77,7 @@ func parseDocx(path string) (ParseResult, error) {
 		if err != nil {
 			return ParseResult{}, err
 		}
-		texts = append(texts, extractParagraphText(string(content), "w:p", "w:t"))
+		texts = append(texts, extractOOXMLTextWithMarkdownTables(string(content), "w:p", "w:t", "w:tbl", "w:tr", "w:tc"))
 	}
 
 	text := strings.TrimSpace(strings.Join(texts, "\n"))
@@ -104,7 +104,7 @@ func parsePptx(path string) (ParseResult, error) {
 			if err != nil {
 				return ParseResult{}, err
 			}
-			slideText[file.Name] = extractParagraphText(string(content), "a:p", "a:t")
+			slideText[file.Name] = extractOOXMLTextWithMarkdownTables(string(content), "a:p", "a:t", "a:tbl", "a:tr", "a:tc")
 		case strings.HasPrefix(file.Name, "ppt/notesSlides/notesSlide") && strings.HasSuffix(file.Name, ".xml"):
 			content, err := readZipFile(file)
 			if err != nil {
@@ -275,6 +275,96 @@ func extractParagraphText(content, paraTag, runTag string) string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+func extractOOXMLTextWithMarkdownTables(content, paraTag, runTag, tableTag, rowTag, cellTag string) string {
+	blockRe := regexp.MustCompile(`(?s)<` + regexp.QuoteMeta(tableTag) + `[\s>].*?</` + regexp.QuoteMeta(tableTag) + `>|<` + regexp.QuoteMeta(paraTag) + `[\s>].*?</` + regexp.QuoteMeta(paraTag) + `>`)
+	tableStartRe := regexp.MustCompile(`(?s)^<` + regexp.QuoteMeta(tableTag) + `[\s>]`)
+
+	blocks := blockRe.FindAllString(content, -1)
+	lines := make([]string, 0, len(blocks))
+	for _, block := range blocks {
+		block = strings.TrimSpace(block)
+		if block == "" {
+			continue
+		}
+		if tableStartRe.MatchString(block) {
+			table := extractMarkdownTable(block, paraTag, runTag, rowTag, cellTag)
+			if table != "" {
+				lines = append(lines, table)
+			}
+			continue
+		}
+		para := extractParagraphText(block, paraTag, runTag)
+		if para != "" {
+			lines = append(lines, para)
+		}
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n\n"))
+}
+
+func extractMarkdownTable(content, paraTag, runTag, rowTag, cellTag string) string {
+	rowRe := regexp.MustCompile(`(?s)<` + regexp.QuoteMeta(rowTag) + `[\s>].*?</` + regexp.QuoteMeta(rowTag) + `>`)
+	cellRe := regexp.MustCompile(`(?s)<` + regexp.QuoteMeta(cellTag) + `[\s>].*?</` + regexp.QuoteMeta(cellTag) + `>`)
+
+	rowMatches := rowRe.FindAllString(content, -1)
+	if len(rowMatches) == 0 {
+		return ""
+	}
+
+	rows := make([][]string, 0, len(rowMatches))
+	maxCols := 0
+	for _, row := range rowMatches {
+		cellMatches := cellRe.FindAllString(row, -1)
+		if len(cellMatches) == 0 {
+			continue
+		}
+
+		cells := make([]string, 0, len(cellMatches))
+		for _, cell := range cellMatches {
+			text := extractParagraphText(cell, paraTag, runTag)
+			text = strings.ReplaceAll(text, "\n", "<br>")
+			text = strings.TrimSpace(text)
+			text = strings.ReplaceAll(text, "|", `\|`)
+			cells = append(cells, text)
+		}
+		rows = append(rows, cells)
+		maxCols = max(maxCols, len(cells))
+	}
+	if len(rows) == 0 || maxCols == 0 {
+		return ""
+	}
+
+	for i := range rows {
+		for len(rows[i]) < maxCols {
+			rows[i] = append(rows[i], "")
+		}
+	}
+
+	var builder strings.Builder
+	builder.WriteString(formatMarkdownTableRow(rows[0]))
+	builder.WriteString("\n")
+	separator := make([]string, 0, maxCols)
+	for i := 0; i < maxCols; i++ {
+		separator = append(separator, "---")
+	}
+	builder.WriteString(formatMarkdownTableRow(separator))
+	for _, row := range rows[1:] {
+		builder.WriteString("\n")
+		builder.WriteString(formatMarkdownTableRow(row))
+	}
+	return builder.String()
+}
+
+func formatMarkdownTableRow(cells []string) string {
+	var builder strings.Builder
+	builder.WriteString("|")
+	for _, cell := range cells {
+		builder.WriteString(" ")
+		builder.WriteString(strings.TrimSpace(cell))
+		builder.WriteString(" |")
+	}
+	return builder.String()
 }
 
 func stripXML(input string) string {

@@ -36,8 +36,8 @@ migrate -path migrations/sql -database "postgres://user:password@localhost:5432/
 - 使用 `gin` 实现 HTTP 路由和中间件
 - 使用本地 JSON 状态文件代替 PostgreSQL，后续可替换为真正的 repository 实现
 - 使用后台 goroutine 队列代替 Asynq，先验证异步处理链路
-- `markdown`、`docx`、`pptx` 已实现基础文本提取
-- `pdf` 仅支持简单文本型 PDF，扫描版或复杂编码 PDF 会失败
+- `markdown`、`docx`、`pptx` 已实现基础文本提取，其中 `docx/pptx` 原生表格会转成 Markdown 表格文本
+- `pdf` 使用 `pdfplumber` 提取文本并尝试抽取页内表格；扫描版、复杂跨页表或复杂编码 PDF 仍可能失败
 
 ## 运行方式
 
