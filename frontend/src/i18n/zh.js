@@ -131,8 +131,6 @@ export default {
       titleLabel: '标题（可选）',
       titlePlaceholder: '留空则使用文件名',
       tags: '标签（可选）',
-      humanReview: '人工审核',
-      humanReviewHint: '开启后切分完成不自动入库，需人工审核 Chunk',
       dragHint: '点击或拖拽文件到此处',
       supportedFormats: '支持 PDF、Word、PowerPoint、Markdown',
       selectKb: '选择知识库',

@@ -22,7 +22,7 @@ go run cmd/server/main.go --addr :9000  # override port
 All commands run from `frontend/`.
 
 ```bash
-npm run dev    # dev server at :5173, proxies /api and /app.json to :8080
+npm run dev    # dev server
 npm run build  # production build → frontend/target/dist/
 ```
 
@@ -48,6 +48,7 @@ npm run build  # production build → frontend/target/dist/
 uploaded → processing/parse → processing/chunk → review_pending
 → (approve) → approved → processing/embed → processing/index → indexed
 ```
+- When `human_review=false` on upload, the service auto-approves generated chunks after chunking and immediately starts indexing, so the document skips `review_pending`.
 - `approve` automatically triggers indexing immediately (no separate manual step).
 - Once `indexed`, the document is immutable — rechunk is blocked. To reprocess, delete and re-upload.
 - `failed` documents can be retried via `POST /api/documents/:id/index` without re-uploading.
@@ -89,7 +90,7 @@ Error codes: `validation_error`, `unauthorized`, `forbidden`, `not_found`, `conf
 
 **Migrations** live in `migrations/sql/` as numbered pairs (`*.up.sql` / `*.down.sql`). gorm auto-migrate is not used; schema changes always require a new migration file. Primary keys use `UUID PRIMARY KEY DEFAULT uuidv7()`.
 
-**Config** reads `backend/configs/local.yaml` via viper. Key fields: `http_addr`, `data_dir`, `state_path`, `database.dsn`, `redis.dsn`, `http.jwt_secret`, `http.jwt_token_ttl` (default `8h`, any `time.ParseDuration` string), `http.session_cookie`, `accounts[].{username,password,permissions[]}`, `embedder.{base_url,api_key,model}`, `milvus.{addr,db,collections[].{collection,dim,chunk_size,chunk_overlap,min_chunks,analyzer}}`. All optional sections fall back to Noop implementations.
+**Config** reads `backend/configs/local.yaml` via viper. Key fields: `http_addr`, `data_dir`, `state_path`, `database.dsn`, `redis.dsn`, `http.jwt_secret`, `http.jwt_token_ttl` (default `8h`, any `time.ParseDuration` string), `http.session_cookie`, `accounts[].{username,password,permissions[]}`, `embedder.{base_url,api_key,model,batch_size}`, `milvus.{addr,db,collections[].{collection,dim,chunk_size,chunk_overlap,min_chunks,analyzer}}`. All optional sections fall back to Noop implementations.
 
 ### Milvus / VectorStore
 
@@ -154,7 +155,7 @@ Do not add placeholder text or "TODO: document later" — write the actual descr
 - Frontend i18n uses a Pinia `locale` store with `i18n/{zh,en}.js` message catalogs. UI text must read from the catalogs (`useI18n().t(...)`), not hardcoded strings.
 - `infra.L` defaults to `zap.NewNop()` at package level so tests that skip `infra.Init()` never panic. `Init()` is called only in `main.go`.
 - Request logging: `infra.RequestLogger` logs every request after `c.Next()`, level by status (`>=500` Error / `>=400` Warn / else Info). Fields: `ip`, `method`, `path` (route template via `c.FullPath()`, falls back to `URL.Path` for 404), `status`, `latency`, optional `params`, `query`, `err_origin`, `err_code`, `err_message`. `writeError` (`api/response.go`) captures the call site with `runtime.Caller(1)` (trimmed to `internal/...`) and stashes `err_origin`/`err_code`/`err_message` via `c.Set(...)` so the middleware can attach error location to 4xx/5xx logs.
-- `Embedder` (`internal/llm/`) has `Noop` (default) and `OpenAI` implementations. `OpenAI` works against any OpenAI-compatible endpoint. Wire via `WithEmbedder()`. Activated when `embedder.base_url` + `embedder.api_key` are set in config. DashScope model: `text-embedding-v3` (dim=1024).
+- `Embedder` (`internal/llm/`) has `Noop` (default) and `OpenAI` implementations. `OpenAI` works against any OpenAI-compatible endpoint. Wire via `WithEmbedder()`. Activated when `embedder.base_url` + `embedder.api_key` are set in config. `embedder.batch_size` controls per-request embedding batch size and defaults to `10`; keep it at `10` for DashScope-compatible endpoints that reject larger `input.contents` batches.
 - `VectorStore` (`internal/llm/`) has `Noop` (default) and `Milvus` implementations. `Milvus` uses the official Go SDK v2 (gRPC, Milvus 2.5+). Interface: `ValidateKnowledgeBase`, `ListKnowledgeBases`, `Upsert`, `DeleteByDocument`, `Search(ctx, SearchRequest)`. `SearchRequest` carries `KnowledgeBaseID`, `Embedding`, `Query`, `TopK`, `DocumentIDs`, `Mode` (`""` dense / `"bm25"` / `"hybrid"`), `EF`, `DropRatio`, `RRFK`.
 - `TaskQueue` (`internal/queue/`) has `GoroutineQueue` (default, single worker goroutine) and `AsynqQueue` (Redis-backed, activated when `redis.dsn` is set). Wire via `WithTaskQueue()`. Queue selection happens inside `NewDocumentService`.
 - `POST /api/query` requires `knowledge_base_id` (cross-collection search is not supported). Request fields: `knowledge_base_id` (required), `query`, `top_k`, `search_mode` (`""` dense / `"bm25"` / `"hybrid"`), `document_ids` (optional filter), `ef`, `drop_ratio`, `rrf_k`. BM25-only mode skips the embedder. Embeds the query (dense/hybrid), calls `VectorStore.Search`, then optionally calls `LLM.Complete`. Returns `{ items, answer, query, knowledge_base_id }`. `answer` is `""` when LLM is Noop.

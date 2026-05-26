@@ -8,4 +8,4 @@ check:
 	go test ./...
 
 run:
-	go run ./cmd/server
+	go run ./cmd/server  --config=configs/local.yaml --addr=:3061

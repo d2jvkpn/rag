@@ -23,7 +23,6 @@
             <n-space>
               <n-button @click="router.push(`/documents/${doc.document_id}/chunks`)">{{ t('documentDetail.viewChunks') }}</n-button>
               <n-button @click="handleRechunk" :loading="rechunking">{{ t('documentDetail.rechunk') }}</n-button>
-              <n-button v-if="doc.human_review && doc.status === 'approved'" type="primary" @click="handleIndex" :loading="indexing">{{ t('documentDetail.triggerIndex') }}</n-button>
               <n-button type="error" @click="handleDelete">{{ t('documentDetail.delete') }}</n-button>
             </n-space>
           </div>
@@ -97,12 +96,10 @@ const doc = ref(null)
 const loading = ref(false)
 const error = ref('')
 const rechunking = ref(false)
-const indexing = ref(false)
 let pollTimer = null
 
 const isPolling = computed(() => {
   if (!doc.value || isTerminal(doc.value.status)) return false
-  if (!doc.value.human_review) return true
   return doc.value.status !== 'review_pending' && doc.value.status !== 'approved'
 })
 
@@ -125,25 +122,10 @@ function schedulePoll() {
     pollTimer = setTimeout(async () => {
       try {
         doc.value = await documentsService.get(documentId)
-        if (!doc.value.human_review && doc.value.status === 'review_pending') {
-          await autoApproveAndIndex()
-          return
-        }
         schedulePoll()
       } catch { /* silently ignore poll errors */ }
     }, pollIntervalMs)
   }
-}
-
-async function autoApproveAndIndex() {
-  try {
-    await chunksService.approve(documentId)
-    await chunksService.index(documentId)
-    doc.value = await documentsService.get(documentId)
-  } catch (e) {
-    console.error('auto approve/index failed:', e)
-  }
-  schedulePoll()
 }
 
 async function handleRechunk() {
@@ -162,27 +144,6 @@ async function handleRechunk() {
         message.error(e.message)
       } finally {
         rechunking.value = false
-      }
-    },
-  })
-}
-
-function handleIndex() {
-  dialog.warning({
-    title: t('documentDetail.indexDialog.title'),
-    content: t('documentDetail.indexDialog.content'),
-    positiveText: t('documentDetail.indexDialog.confirm'),
-    negativeText: t('documentDetail.indexDialog.cancel'),
-    onPositiveClick: async () => {
-      indexing.value = true
-      try {
-        await chunksService.index(documentId)
-        message.success(t('documentDetail.indexDialog.success'))
-        await loadDoc()
-      } catch (e) {
-        message.error(e.message)
-      } finally {
-        indexing.value = false
       }
     },
   })

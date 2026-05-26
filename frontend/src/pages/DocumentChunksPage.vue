@@ -10,11 +10,8 @@
           <n-tag v-if="doc" :type="STATUS_TYPE[doc.status]" size="small">
             {{ t(`status.${doc.status}`) || doc.status }}
           </n-tag>
-          <n-button v-if="doc?.human_review && (doc?.status === 'review_pending' || doc?.status === 'approved')" size="small" type="primary" :loading="approving" @click="handleApprove">
+          <n-button v-if="doc?.status === 'review_pending'" size="small" type="primary" :loading="approving" @click="handleApprove">
             {{ t('chunks.approve') }}
-          </n-button>
-          <n-button v-if="doc?.human_review && doc?.status === 'approved'" size="small" type="info" :loading="indexing" @click="handleIndex">
-            {{ t('chunks.triggerIndex') }}
           </n-button>
           <n-button v-if="selectedIds.length >= 2" size="small" @click="handleMerge" :loading="merging">
             {{ t('chunks.mergeSelected', { n: selectedIds.length }) }}
@@ -64,7 +61,7 @@
                         {{ t(`chunkStatus.${chunk.status}`) || chunk.status }}
                       </n-tag>
                       <n-button
-                        v-if="doc?.human_review && chunk.status !== 'rejected'"
+                        v-if="doc?.status !== 'indexed' && chunk.status !== 'rejected'"
                         text
                         size="tiny"
                         type="error"
@@ -72,7 +69,7 @@
                         @click.stop="handleReject(chunk)"
                       >✕</n-button>
                       <n-button
-                        v-if="doc?.human_review && chunk.status === 'rejected'"
+                        v-if="doc?.status !== 'indexed' && chunk.status === 'rejected'"
                         text
                         size="tiny"
                         type="success"
@@ -196,7 +193,6 @@ const loading = ref(false)
 const error = ref('')
 const rechunking = ref(false)
 const approving = ref(false)
-const indexing = ref(false)
 const merging = ref(false)
 
 // single-click selects for detail view; checkbox tracks multi-select for merge
@@ -325,27 +321,6 @@ function handleApprove() {
         message.error(e.message)
       } finally {
         approving.value = false
-      }
-    },
-  })
-}
-
-function handleIndex() {
-  dialog.warning({
-    title: t('chunks.indexDialog.title'),
-    content: t('chunks.indexDialog.content'),
-    positiveText: t('chunks.indexDialog.confirm'),
-    negativeText: t('chunks.indexDialog.cancel'),
-    onPositiveClick: async () => {
-      indexing.value = true
-      try {
-        await chunksService.index(documentId)
-        message.success(t('chunks.indexDialog.success'))
-        router.push(`/documents/${documentId}`)
-      } catch (e) {
-        message.error(e.message)
-      } finally {
-        indexing.value = false
       }
     },
   })

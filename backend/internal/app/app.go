@@ -127,8 +127,9 @@ func buildServiceOpts(v *viper.Viper) []func(*service.DocumentService) {
 	embedAPIKey := v.GetString("embedder.api_key")
 	if embedBaseURL != "" && embedAPIKey != "" {
 		model := v.GetString("embedder.model")
-		infra.L.Info("embedder: openai-compatible", zap.String("model", model))
-		opts = append(opts, service.WithEmbedder(llm.NewOpenAIEmbedder(embedBaseURL, embedAPIKey, model)))
+		batchSize := v.GetInt("embedder.batch_size")
+		infra.L.Info("embedder: openai-compatible", zap.String("model", model), zap.Int("batch_size", batchSize))
+		opts = append(opts, service.WithEmbedder(llm.NewOpenAIEmbedder(embedBaseURL, embedAPIKey, model, batchSize)))
 	} else {
 		infra.L.Info("embedder: noop")
 	}

@@ -131,8 +131,6 @@ export default {
       titleLabel: 'Title (optional)',
       titlePlaceholder: 'Leave blank to use filename',
       tags: 'Tags (optional)',
-      humanReview: 'Human Review',
-      humanReviewHint: 'When enabled, document requires manual chunk review before indexing',
       dragHint: 'Click or drag file here',
       supportedFormats: 'Supports PDF, Word, PowerPoint, Markdown',
       selectKb: 'Select knowledge base',
