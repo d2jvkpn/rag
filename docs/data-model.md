@@ -33,7 +33,7 @@
 - `chunk_config_hash`
 - `started_at`
 - `finished_at`
-- `human_review`：上传时由表单 `human_review=true` 决定，控制切分完成后是否进入 `review_pending`
+- `human_review`：是否需要人工审核；`true` 时切分完成后进入 `review_pending`，`false` 时自动审核通过并继续 embedding / 入库
 - `uploader_id`、`uploader_name`：上传者快照，用于所有权中间件鉴权
 
 建议约束：

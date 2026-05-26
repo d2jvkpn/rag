@@ -24,7 +24,7 @@ func chunkConfigHash(chunkSize, overlap, minChunks int) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func BuildChunks(documentID, filename, text string, chunkVersion, chunkSize, overlap, minChunks int) []model.DocumentChunk {
+func BuildChunks(documentID, filename, text string, chunkVersion, chunkSize, overlap, minChunks int, approved bool) []model.DocumentChunk {
 	normalized := strings.TrimSpace(text)
 	if normalized == "" {
 		return nil
@@ -39,6 +39,10 @@ func BuildChunks(documentID, filename, text string, chunkVersion, chunkSize, ove
 
 	now := time.Now().UTC()
 	chunks := make([]model.DocumentChunk, 0, len(segments))
+	status := "draft"
+	if approved {
+		status = "approved"
+	}
 	for index, segment := range segments {
 		segment = strings.TrimSpace(segment)
 		if segment == "" {
@@ -52,7 +56,7 @@ func BuildChunks(documentID, filename, text string, chunkVersion, chunkSize, ove
 			ChunkIndex:     index,
 			Text:           segment,
 			NormalizedText: segment,
-			Status:         "draft",
+			Status:         status,
 			ChunkVersion:   chunkVersion,
 			Source:         "auto",
 			IsCurrent:      true,

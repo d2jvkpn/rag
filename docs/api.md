@@ -182,7 +182,7 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 - `knowledge_base_id`：必填，须匹配配置中的 collection
 - `title`：可选
 - `tags`：可选，可重复字段
-- `human_review`：可选，`"true"` 表示切分完成后进入 `review_pending` 等待审核；其他值或缺省走自动入库
+- `human_review`：可选；`true` 时切分完成后进入 `review_pending`，需人工审核通过后才会 embedding 和入库；`false` 或省略时自动将切分结果标记为 `approved` 并立即进入 embedding / 入库
 
 ### 文档所有权与删除权限
 
@@ -381,7 +381,7 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 
 - `uploaded`：文档已上传，等待异步处理
 - `processing`：解析、切分、embedding 或入库阶段进行中（具体看 `stage`）
-- `review_pending`：人工审核模式下切分完成，等待审核
+- `review_pending`：切分完成，等待审核
 - `approved`：审核通过，已触发 embedding 流程
 - `indexed`：已完成 embedding 和向量写入，文档不可再修改
 - `failed`：某阶段失败，错误见 `error_message`

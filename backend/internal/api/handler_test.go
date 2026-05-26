@@ -406,6 +406,9 @@ func createMarkdownDocumentForTestWithTagsAndContent(t *testing.T, handler http.
 	if err := writer.WriteField("title", "Sample"); err != nil {
 		t.Fatalf("write title field: %v", err)
 	}
+	if err := writer.WriteField("human_review", "true"); err != nil {
+		t.Fatalf("write human_review field: %v", err)
+	}
 	for _, tag := range tags {
 		if err := writer.WriteField("tags", tag); err != nil {
 			t.Fatalf("write tag field: %v", err)

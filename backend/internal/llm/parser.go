@@ -2,22 +2,37 @@ package llm
 
 import (
 	"archive/zip"
-	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
+
+	"backend/internal/infra"
+	"go.uber.org/zap"
 )
 
 type ParseResult struct {
-	Text      string
-	PageCount int
+	Text      string `json:"text"`
+	PageCount int    `json:"page_count"`
 }
+
+var pdfGlyphReplacer = strings.NewReplacer(
+	"\uf06c", "•",
+	"\uf0b7", "•", // common private-use bullet from Symbol/Wingdings-like fonts
+	"\uf0a7", "•",
+	"\uf0d8", "•",
+)
 
 func Parse(path, sourceType string) (ParseResult, error) {
 	switch sourceType {
@@ -130,37 +145,77 @@ func parsePptx(path string) (ParseResult, error) {
 }
 
 func parsePDF(path string) (ParseResult, error) {
-	raw, err := os.ReadFile(path)
+	pythonBin := strings.TrimSpace(os.Getenv("PDF_PARSER_PYTHON"))
+	if pythonBin == "" {
+		pythonBin = "python3"
+	}
+
+	scriptPath := strings.TrimSpace(os.Getenv("PDF_PARSER_SCRIPT"))
+	if scriptPath == "" {
+		var err error
+		scriptPath, err = pdfParserScriptPath()
+		if err != nil {
+			return ParseResult{}, err
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	infra.L.Info("running pdf parser",
+		zap.String("python", pythonBin),
+		zap.String("script", scriptPath),
+		zap.String("file", path),
+		zap.Strings("argv", []string{pythonBin, scriptPath, path}),
+	)
+
+	cmd := exec.CommandContext(ctx, pythonBin, scriptPath, path)
+	output, err := cmd.Output()
 	if err != nil {
-		return ParseResult{}, err
-	}
-
-	matches := regexp.MustCompile(`\(([^()]*)\)\s*Tj`).FindAllSubmatch(raw, -1)
-	fragments := make([]string, 0, len(matches))
-	for _, match := range matches {
-		if len(match) < 2 {
-			continue
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			msg := strings.TrimSpace(string(exitErr.Stderr))
+			if msg == "" {
+				msg = err.Error()
+			}
+			return ParseResult{}, fmt.Errorf("pdf parser failed (python=%s script=%s file=%s): %s", pythonBin, scriptPath, path, msg)
 		}
-		text := decodePDFString(match[1])
-		if strings.TrimSpace(text) != "" {
-			fragments = append(fragments, text)
+		if ctx.Err() == context.DeadlineExceeded {
+			return ParseResult{}, fmt.Errorf("pdf parser timed out (python=%s script=%s file=%s)", pythonBin, scriptPath, path)
 		}
+		return ParseResult{}, fmt.Errorf("pdf parser exec failed (python=%s script=%s file=%s): %w", pythonBin, scriptPath, path, err)
 	}
 
-	if len(fragments) == 0 {
-		return ParseResult{}, errors.New("pdf text extraction failed: only simple text PDFs are supported in the current scaffold")
+	var result ParseResult
+	if err := json.Unmarshal(output, &result); err != nil {
+		return ParseResult{}, fmt.Errorf("pdf parser returned invalid json (script=%s file=%s): %w", scriptPath, path, err)
 	}
-
-	text := strings.TrimSpace(strings.Join(fragments, "\n"))
-	if text == "" {
+	result.Text = strings.TrimSpace(result.Text)
+	if result.Text == "" {
 		return ParseResult{}, errors.New("pdf content is empty")
 	}
-	return ParseResult{Text: text, PageCount: max(1, bytes.Count(raw, []byte("/Type /Page")))}, nil
+	if result.PageCount < 1 {
+		result.PageCount = 1
+	}
+	return result, nil
+}
+
+func pdfParserScriptPath() (string, error) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return "", errors.New("resolve pdf parser script path: runtime caller unavailable")
+	}
+	path := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "scripts", "parse_pdf.py"))
+	if _, err := os.Stat(path); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 func CleanText(input string) string {
 	input = strings.ReplaceAll(input, "\r\n", "\n")
 	input = strings.ReplaceAll(input, "\r", "\n")
+	input = pdfGlyphReplacer.Replace(input)
 
 	var builder strings.Builder
 	lastBlank := false
@@ -236,36 +291,6 @@ func htmlUnescape(input string) string {
 		"&apos;", "'",
 	)
 	return replacer.Replace(input)
-}
-
-func decodePDFString(input []byte) string {
-	out := make([]byte, 0, len(input))
-	escaped := false
-	for i := 0; i < len(input); i++ {
-		ch := input[i]
-		if escaped {
-			switch ch {
-			case 'n':
-				out = append(out, '\n')
-			case 'r':
-				out = append(out, '\r')
-			case 't':
-				out = append(out, '\t')
-			case '\\', '(', ')':
-				out = append(out, ch)
-			default:
-				out = append(out, ch)
-			}
-			escaped = false
-			continue
-		}
-		if ch == '\\' {
-			escaped = true
-			continue
-		}
-		out = append(out, ch)
-	}
-	return strings.TrimSpace(string(out))
 }
 
 func slideNumberFromName(name string) string {

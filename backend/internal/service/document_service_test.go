@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/viper"
 
@@ -80,9 +81,83 @@ func TestCreateDocumentDuplicateDoesNotLeaveFiles(t *testing.T) {
 	}
 }
 
+func TestCreateDocumentWithoutHumanReviewAutoApprovesAndIndexes(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	v := testConfig(tmpDir)
+
+	store, err := repository.NewJSONStore(v.GetString("app.state_path"), []repository.AccountSeed{{Username: "admin", Password: "admin123"}})
+	if err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+
+	documentService, err := NewDocumentService(v, store)
+	if err != nil {
+		t.Fatalf("init document service: %v", err)
+	}
+	defer documentService.Close()
+
+	document, err := documentService.CreateDocument(
+		newMultipartFile(t, "# Title\n\nhello rag"),
+		&multipart.FileHeader{Filename: "sample.md"},
+		"kb-1",
+		"Sample",
+		nil,
+		false,
+		"user-1",
+		"testuser",
+	)
+	if err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+
+	waitForServiceTest(t, 2*time.Second, func() bool {
+		current, err := store.GetDocument(document.DocumentID)
+		if err != nil {
+			t.Fatalf("get document: %v", err)
+		}
+		return current.Status == "indexed"
+	})
+
+	current, err := store.GetDocument(document.DocumentID)
+	if err != nil {
+		t.Fatalf("get indexed document: %v", err)
+	}
+	if current.Stage != "done" {
+		t.Fatalf("expected stage done, got %s", current.Stage)
+	}
+
+	chunks, err := store.GetChunks(document.DocumentID)
+	if err != nil {
+		t.Fatalf("get chunks: %v", err)
+	}
+	if len(chunks) == 0 {
+		t.Fatal("expected chunks")
+	}
+	for _, chunk := range chunks {
+		if chunk.Status != "approved" {
+			t.Fatalf("expected approved chunk, got %s", chunk.Status)
+		}
+	}
+}
+
 func newMultipartFile(t *testing.T, content string) multipart.File {
 	t.Helper()
 	return &memoryFile{Reader: strings.NewReader(content)}
+}
+
+func waitForServiceTest(t *testing.T, timeout time.Duration, fn func() bool) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if fn() {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("condition not met before timeout")
 }
 
 type memoryFile struct {

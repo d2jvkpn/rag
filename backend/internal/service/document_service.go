@@ -558,7 +558,13 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 
 	parsed, err := llm.Parse(document.StoragePath, document.SourceType)
 	if err != nil {
-		infra.L.Warn("parse failed", zap.String("document_id", document.DocumentID), zap.Error(err))
+		infra.L.Warn("parse failed",
+			zap.String("document_id", document.DocumentID),
+			zap.String("filename", document.Filename),
+			zap.String("storage_path", document.StoragePath),
+			zap.String("source_type", document.SourceType),
+			zap.Error(err),
+		)
 		s.failDocument(document, "parse", err)
 		return
 	}
@@ -580,7 +586,16 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 
 	colCfg := s.collectionCfg(document.KnowledgeBaseID)
 	cfgHash := chunkConfigHash(colCfg.ChunkSize, colCfg.ChunkOverlap, colCfg.MinChunks)
-	chunks := BuildChunks(document.DocumentID, document.Filename, cleaned, chunkVersion, colCfg.ChunkSize, colCfg.ChunkOverlap, colCfg.MinChunks)
+	chunks := BuildChunks(
+		document.DocumentID,
+		document.Filename,
+		cleaned,
+		chunkVersion,
+		colCfg.ChunkSize,
+		colCfg.ChunkOverlap,
+		colCfg.MinChunks,
+		!document.HumanReview,
+	)
 	if len(chunks) == 0 {
 		s.failDocument(document, "chunk", errors.New("chunk result is empty"))
 		return
@@ -599,6 +614,9 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 
 	done := time.Now().UTC()
 	document.Status = "review_pending"
+	if !document.HumanReview {
+		document.Status = "approved"
+	}
 	document.Stage = "done"
 	document.PageCount = parsed.PageCount
 	document.ChunkCount = len(chunks)
@@ -608,6 +626,12 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 	document.FinishedAt = &done
 	document.UpdatedAt = done
 	_ = s.store.UpdateDocument(document)
+
+	if !document.HumanReview {
+		if err := s.IndexDocument(document.DocumentID); err != nil {
+			s.failDocument(document, "embed", err)
+		}
+	}
 }
 
 func (s *DocumentService) writeSnapshot(document model.Document, chunks []model.DocumentChunk, chunkVersion int, cfgHash string) (string, error) {
@@ -723,6 +747,15 @@ func (s *DocumentService) generateAnswer(query string, hits []llm.SearchResult) 
 }
 
 func (s *DocumentService) failDocument(document model.Document, stage string, reason error) {
+	infra.L.Warn("document failed",
+		zap.String("document_id", document.DocumentID),
+		zap.String("filename", document.Filename),
+		zap.String("storage_path", document.StoragePath),
+		zap.String("source_type", document.SourceType),
+		zap.String("stage", stage),
+		zap.Error(reason),
+	)
+
 	now := time.Now().UTC()
 	document.Status = "failed"
 	document.Stage = stage
