@@ -143,7 +143,7 @@
 - `appTitle`：默认页面标题（实际显示由 i18n 字典覆盖）
 - `pollIntervalMs`：详情页轮询处理中文档的间隔，默认 3000
 
-> 是否启用人工审核改为按上传单独决定（表单字段 `human_review`），不再通过 `app.json` 全局开关控制。
+> 上传流程统一进入人工审核；前端不再提供 `human_review` 开关，并在提交时固定发送 `human_review=true`。
 
 设计要求：
 

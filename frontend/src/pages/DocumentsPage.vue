@@ -106,12 +106,6 @@
         <n-form-item :label="t('documents.uploadModal.tags')">
           <n-dynamic-tags v-model:value="uploadForm.tags" />
         </n-form-item>
-        <n-form-item :label="t('documents.uploadModal.humanReview')">
-          <div class="upload-modal__review">
-            <n-switch v-model:value="uploadForm.humanReview" />
-            <n-text depth="3" class="upload-modal__review-hint">{{ t('documents.uploadModal.humanReviewHint') }}</n-text>
-          </div>
-        </n-form-item>
       </n-form>
       <template #footer>
         <div class="upload-modal__footer">
@@ -156,7 +150,7 @@ const kbConfigs = ref({})
 const tagOptions = ref([])
 const uploadFormRef = ref(null)
 const selectedFile = ref(null)
-const uploadForm = ref({ knowledgeBaseId: '', title: '', tags: [], humanReview: true })
+const uploadForm = ref({ knowledgeBaseId: '', title: '', tags: [] })
 
 const uploadRules = computed(() => ({
   knowledgeBaseId: { required: true, message: t('documents.uploadModal.kbRequired'), trigger: 'blur' },
@@ -243,14 +237,13 @@ async function handleUpload() {
     const fd = new FormData()
     fd.append('file', selectedFile.value)
     fd.append('knowledge_base_id', uploadForm.value.knowledgeBaseId)
+    fd.append('human_review', 'true')
     if (uploadForm.value.title) fd.append('title', uploadForm.value.title)
     uploadForm.value.tags.forEach(tag => fd.append('tags', tag))
-    fd.append('human_review', String(uploadForm.value.humanReview))
-
     await documentsService.upload(fd)
     message.success(t('documents.uploadModal.success'))
     showUpload.value = false
-    uploadForm.value = { knowledgeBaseId: '', title: '', tags: [], humanReview: true }
+    uploadForm.value = { knowledgeBaseId: '', title: '', tags: [] }
     selectedFile.value = null
     await loadDocuments()
   } catch (e) {

@@ -1,12 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
-import AppLayout from '../components/AppLayout.vue'
-import LoginPage from '../pages/LoginPage.vue'
-import DocumentsPage from '../pages/DocumentsPage.vue'
-import DocumentDetailPage from '../pages/DocumentDetailPage.vue'
-import DocumentChunksPage from '../pages/DocumentChunksPage.vue'
-import SearchPage from '../pages/SearchPage.vue'
-import UsersPage from '../pages/UsersPage.vue'
+
+const AppLayout = () => import('../components/AppLayout.vue')
+const LoginPage = () => import('../pages/LoginPage.vue')
+const DocumentsPage = () => import('../pages/DocumentsPage.vue')
+const DocumentDetailPage = () => import('../pages/DocumentDetailPage.vue')
+const DocumentChunksPage = () => import('../pages/DocumentChunksPage.vue')
+const SearchPage = () => import('../pages/SearchPage.vue')
+const UsersPage = () => import('../pages/UsersPage.vue')
 
 const routes = [
   { path: '/login', component: LoginPage },

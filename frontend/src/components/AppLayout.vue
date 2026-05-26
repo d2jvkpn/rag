@@ -112,7 +112,6 @@ import { computed, h, ref, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { NIcon, useDialog, useMessage } from 'naive-ui'
 import { DocumentOutline, SearchOutline, PeopleOutline, LogOutOutline as LogOutIcon, KeyOutline as KeyIcon, PersonCircleOutline as PersonIcon, ShieldCheckmarkOutline as ShieldIcon, LanguageOutline as LangIcon } from '@vicons/ionicons5'
-import QRCode from 'qrcode'
 import { useAuthStore } from '../stores/auth.js'
 import { getConfig } from '../config/app-config.js'
 import { authService } from '../services/auth.js'
@@ -264,8 +263,9 @@ async function startTOTPSetup() {
   totpError.value = ''
   try {
     const data = await authService.totpSetup()
+    const { toDataURL } = await import('qrcode')
     totpSecret.value = data.secret
-    totpQRDataUrl.value = await QRCode.toDataURL(data.qr_url, { width: 200, margin: 1 })
+    totpQRDataUrl.value = await toDataURL(data.qr_url, { width: 200, margin: 1 })
     totpStep.value = 'setup'
   } catch (e) {
     totpError.value = e.message || t('totp.initFailed')

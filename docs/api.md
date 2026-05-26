@@ -184,6 +184,8 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 - `tags`：可选，可重复字段
 - `human_review`：可选；`true` 时切分完成后进入 `review_pending`，需人工审核通过后才会 embedding 和入库；`false` 或省略时自动将切分结果标记为 `approved` 并立即进入 embedding / 入库
 
+当前 Web 前端上传时固定提交 `human_review=true`，因此页面上的标准流程为“上传 -> 切分 -> 审核 -> embedding -> Milvus 入库”。
+
 ### 文档所有权与删除权限
 
 所有用户均可查看所有文档。
