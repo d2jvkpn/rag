@@ -27,6 +27,12 @@ type ParseResult struct {
 	PageCount int    `json:"page_count"`
 }
 
+type ooxmlBlock struct {
+	kind string
+	text string
+	rows [][]string
+}
+
 var pdfGlyphReplacer = strings.NewReplacer(
 	"\uf06c", "•",
 	"\uf0b7", "•", // common private-use bullet from Symbol/Wingdings-like fonts
@@ -77,7 +83,7 @@ func parseDocx(path string) (ParseResult, error) {
 		if err != nil {
 			return ParseResult{}, err
 		}
-		texts = append(texts, extractOOXMLTextWithMarkdownTables(string(content), "w:p", "w:t", "w:tbl", "w:tr", "w:tc"))
+		texts = append(texts, extractOOXMLTextWithMarkdownTables(string(content), "w:p", "w:t", "w:tbl", "w:tr", "w:tc", true))
 	}
 
 	text := strings.TrimSpace(strings.Join(texts, "\n"))
@@ -104,7 +110,7 @@ func parsePptx(path string) (ParseResult, error) {
 			if err != nil {
 				return ParseResult{}, err
 			}
-			slideText[file.Name] = extractOOXMLTextWithMarkdownTables(string(content), "a:p", "a:t", "a:tbl", "a:tr", "a:tc")
+			slideText[file.Name] = extractOOXMLTextWithMarkdownTables(string(content), "a:p", "a:t", "a:tbl", "a:tr", "a:tc", false)
 		case strings.HasPrefix(file.Name, "ppt/notesSlides/notesSlide") && strings.HasSuffix(file.Name, ".xml"):
 			content, err := readZipFile(file)
 			if err != nil {
@@ -277,39 +283,59 @@ func extractParagraphText(content, paraTag, runTag string) string {
 	return strings.Join(lines, "\n")
 }
 
-func extractOOXMLTextWithMarkdownTables(content, paraTag, runTag, tableTag, rowTag, cellTag string) string {
+func extractOOXMLTextWithMarkdownTables(content, paraTag, runTag, tableTag, rowTag, cellTag string, mergeAdjacentTables bool) string {
 	blockRe := regexp.MustCompile(`(?s)<` + regexp.QuoteMeta(tableTag) + `[\s>].*?</` + regexp.QuoteMeta(tableTag) + `>|<` + regexp.QuoteMeta(paraTag) + `[\s>].*?</` + regexp.QuoteMeta(paraTag) + `>`)
 	tableStartRe := regexp.MustCompile(`(?s)^<` + regexp.QuoteMeta(tableTag) + `[\s>]`)
 
 	blocks := blockRe.FindAllString(content, -1)
-	lines := make([]string, 0, len(blocks))
+	items := make([]ooxmlBlock, 0, len(blocks))
 	for _, block := range blocks {
 		block = strings.TrimSpace(block)
 		if block == "" {
 			continue
 		}
 		if tableStartRe.MatchString(block) {
-			table := extractMarkdownTable(block, paraTag, runTag, rowTag, cellTag)
-			if table != "" {
-				lines = append(lines, table)
+			rows := extractTableRows(block, paraTag, runTag, rowTag, cellTag)
+			if len(rows) > 0 {
+				items = append(items, ooxmlBlock{kind: "table", rows: rows})
 			}
 			continue
 		}
 		para := extractParagraphText(block, paraTag, runTag)
 		if para != "" {
-			lines = append(lines, para)
+			items = append(items, ooxmlBlock{kind: "text", text: para})
+		}
+	}
+	if mergeAdjacentTables {
+		items = mergeAdjacentOOXMLTables(items)
+	}
+
+	lines := make([]string, 0, len(items))
+	for _, item := range items {
+		if item.kind == "table" {
+			if table := renderMarkdownTable(item.rows); table != "" {
+				lines = append(lines, table)
+			}
+			continue
+		}
+		if item.text != "" {
+			lines = append(lines, item.text)
 		}
 	}
 	return strings.TrimSpace(strings.Join(lines, "\n\n"))
 }
 
 func extractMarkdownTable(content, paraTag, runTag, rowTag, cellTag string) string {
+	return renderMarkdownTable(extractTableRows(content, paraTag, runTag, rowTag, cellTag))
+}
+
+func extractTableRows(content, paraTag, runTag, rowTag, cellTag string) [][]string {
 	rowRe := regexp.MustCompile(`(?s)<` + regexp.QuoteMeta(rowTag) + `[\s>].*?</` + regexp.QuoteMeta(rowTag) + `>`)
 	cellRe := regexp.MustCompile(`(?s)<` + regexp.QuoteMeta(cellTag) + `[\s>].*?</` + regexp.QuoteMeta(cellTag) + `>`)
 
 	rowMatches := rowRe.FindAllString(content, -1)
 	if len(rowMatches) == 0 {
-		return ""
+		return nil
 	}
 
 	rows := make([][]string, 0, len(rowMatches))
@@ -332,7 +358,7 @@ func extractMarkdownTable(content, paraTag, runTag, rowTag, cellTag string) stri
 		maxCols = max(maxCols, len(cells))
 	}
 	if len(rows) == 0 || maxCols == 0 {
-		return ""
+		return nil
 	}
 
 	for i := range rows {
@@ -340,12 +366,19 @@ func extractMarkdownTable(content, paraTag, runTag, rowTag, cellTag string) stri
 			rows[i] = append(rows[i], "")
 		}
 	}
+	return rows
+}
+
+func renderMarkdownTable(rows [][]string) string {
+	if len(rows) == 0 {
+		return ""
+	}
 
 	var builder strings.Builder
 	builder.WriteString(formatMarkdownTableRow(rows[0]))
 	builder.WriteString("\n")
-	separator := make([]string, 0, maxCols)
-	for i := 0; i < maxCols; i++ {
+	separator := make([]string, 0, len(rows[0]))
+	for i := 0; i < len(rows[0]); i++ {
 		separator = append(separator, "---")
 	}
 	builder.WriteString(formatMarkdownTableRow(separator))
@@ -354,6 +387,74 @@ func extractMarkdownTable(content, paraTag, runTag, rowTag, cellTag string) stri
 		builder.WriteString(formatMarkdownTableRow(row))
 	}
 	return builder.String()
+}
+
+func mergeAdjacentOOXMLTables(items []ooxmlBlock) []ooxmlBlock {
+	if len(items) == 0 {
+		return items
+	}
+
+	merged := make([]ooxmlBlock, 0, len(items))
+	for _, item := range items {
+		if len(merged) == 0 {
+			merged = append(merged, cloneOOXMLBlock(item))
+			continue
+		}
+
+		last := &merged[len(merged)-1]
+		if last.kind == "table" && item.kind == "table" && canMergeOOXMLTables(last.rows, item.rows) {
+			last.rows = mergeOOXMLTableRows(last.rows, item.rows)
+			continue
+		}
+		merged = append(merged, cloneOOXMLBlock(item))
+	}
+	return merged
+}
+
+func canMergeOOXMLTables(left, right [][]string) bool {
+	if len(left) == 0 || len(right) == 0 {
+		return false
+	}
+	return len(left[0]) == len(right[0])
+}
+
+func mergeOOXMLTableRows(left, right [][]string) [][]string {
+	merged := cloneTableRows(left)
+	rightRows := cloneTableRows(right)
+	if len(merged) > 0 && len(rightRows) > 0 && equalStringSlices(merged[0], rightRows[0]) {
+		rightRows = rightRows[1:]
+	}
+	merged = append(merged, rightRows...)
+	return merged
+}
+
+func cloneOOXMLBlock(item ooxmlBlock) ooxmlBlock {
+	clone := ooxmlBlock{kind: item.kind, text: item.text}
+	if item.rows != nil {
+		clone.rows = cloneTableRows(item.rows)
+	}
+	return clone
+}
+
+func cloneTableRows(rows [][]string) [][]string {
+	cloned := make([][]string, 0, len(rows))
+	for _, row := range rows {
+		rowCopy := append([]string(nil), row...)
+		cloned = append(cloned, rowCopy)
+	}
+	return cloned
+}
+
+func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func formatMarkdownTableRow(cells []string) string {

@@ -1,1 +1,2 @@
+# PDF text and table extraction for parse_pdf.py
 pdfplumber==0.11.8

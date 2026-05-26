@@ -63,7 +63,7 @@ class ParsePDFTests(unittest.TestCase):
             ],
         )
 
-        got = parse_pdf.extract_page_content(page, 1)
+        got = parse_pdf.render_page_content(parse_pdf.extract_page_content(page, 1))
 
         self.assertEqual(
             got,
@@ -82,11 +82,64 @@ class ParsePDFTests(unittest.TestCase):
             objects=[{"x0": 20, "x1": 80, "top": 20, "bottom": 40}],
         )
 
-        got = parse_pdf.extract_page_content(page, 2)
+        got = parse_pdf.render_page_content(parse_pdf.extract_page_content(page, 2))
 
         self.assertEqual(
             got,
             "正文\n表格线性文本\n\n表格 1（第 2 页）\n\n| 指标 | 值 |\n| --- | --- |\n| 收入 | 100 |",
+        )
+
+    def test_merge_cross_page_tables_deduplicates_repeated_header(self):
+        page_items = [
+            {
+                "text": "第一页正文",
+                "tables": [
+                    {
+                        "pages": [1],
+                        "rows": [["指标", "值"], ["收入", "100"]],
+                        "bbox": (0, 500, 100, 790),
+                    }
+                ],
+            },
+            {
+                "text": "第二页正文",
+                "tables": [
+                    {
+                        "pages": [2],
+                        "rows": [["指标", "值"], ["成本", "60"]],
+                        "bbox": (0, 0, 100, 120),
+                    }
+                ],
+            },
+        ]
+
+        merged = parse_pdf.merge_cross_page_tables(page_items)
+
+        self.assertEqual(len(merged[0]["tables"]), 1)
+        self.assertEqual(merged[0]["tables"][0]["pages"], [1, 2])
+        self.assertEqual(
+            merged[0]["tables"][0]["rows"],
+            [["指标", "值"], ["收入", "100"], ["成本", "60"]],
+        )
+        self.assertEqual(merged[1]["tables"], [])
+
+    def test_render_page_content_uses_page_range_for_merged_table(self):
+        page_item = {
+            "text": "合并结果",
+            "tables": [
+                {
+                    "pages": [3, 4],
+                    "rows": [["指标", "值"], ["收入", "100"], ["成本", "60"]],
+                    "bbox": None,
+                }
+            ],
+        }
+
+        got = parse_pdf.render_page_content(page_item)
+
+        self.assertEqual(
+            got,
+            "合并结果\n\n表格 1（第 3-4 页）\n\n| 指标 | 值 |\n| --- | --- |\n| 收入 | 100 |\n| 成本 | 60 |",
         )
 
 

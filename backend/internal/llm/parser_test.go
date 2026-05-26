@@ -116,6 +116,58 @@ func TestParseDocxConvertsTablesToMarkdown(t *testing.T) {
 	}
 }
 
+func TestParseDocxMergesAdjacentContinuationTables(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "continuation.docx")
+	files := map[string]string{
+		"word/document.xml": `<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:r><w:t>统计表</w:t></w:r></w:p>
+    <w:tbl>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>指标</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>数值</w:t></w:r></w:p></w:tc>
+      </w:tr>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>收入</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>100</w:t></w:r></w:p></w:tc>
+      </w:tr>
+    </w:tbl>
+    <w:tbl>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>指标</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>数值</w:t></w:r></w:p></w:tc>
+      </w:tr>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>成本</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>60</w:t></w:r></w:p></w:tc>
+      </w:tr>
+    </w:tbl>
+  </w:body>
+</w:document>`,
+	}
+	if err := writeZipFixture(path, files); err != nil {
+		t.Fatalf("write docx fixture: %v", err)
+	}
+
+	got, err := Parse(path, "docx")
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	want := strings.Join([]string{
+		"统计表",
+		"",
+		"| 指标 | 数值 |",
+		"| --- | --- |",
+		"| 收入 | 100 |",
+		"| 成本 | 60 |",
+	}, "\n")
+	if got.Text != want {
+		t.Fatalf("unexpected text:\n%s\nwant:\n%s", got.Text, want)
+	}
+}
+
 func TestParsePptxConvertsTablesToMarkdown(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sample.pptx")
 	files := map[string]string{
