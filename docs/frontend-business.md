@@ -219,6 +219,9 @@
 
 右侧详情展示：
 
+- `chunk_id / document_id`
+- `filename / chunk_index / chunk_version / is_current`
+- `created_at / updated_at / embedding_model / review_comment`
 - `text`
 - `normalized_text`
 - `resource_refs`
