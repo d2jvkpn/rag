@@ -212,11 +212,12 @@ backend/
 
 chunk 快照约定：
 
-- chunk 切分完成后，先将当前版本保存为本地 JSON 快照
-- JSON 快照建议按版本管理，例如 `chunks-v1.json`
-- 快照中保存 `document_id`、`knowledge_base_id`、`chunk_version`、原文哈希、切分参数和完整 chunks 内容
-- 后续如果命中有效快照，可直接复用，不再重新切分
-- 用户主动触发 `rechunk` 时，应忽略旧快照并生成新版本
+- 快照只在 embedding 成功之后、Milvus upsert 之前落盘；未走到 `indexed` 的文档不会有快照
+- 文件按版本命名，例如 `chunks-v1.json`，旧版本永不覆盖；rechunk 在重新走到 indexed 时才生成 `chunks-v{N+1}.json`
+- 快照中保存 `document_id`、`knowledge_base_id`、`chunk_version`、原文哈希、切分参数，以及带向量的完整 chunks 内容
+- 快照的作用是：Milvus collection 因为 schema 变更被重建时，可以直接从快照 re-upsert，不必重新调用 embedding API
+- embedding 向量只存在于快照和 Milvus，Postgres 的 `document_chunks` 表不存向量
+- 快照写入失败只记 Warn，不影响 `indexed` 状态
 
 ## 第一版实现边界
 
@@ -226,8 +227,7 @@ chunk 快照约定：
 - 第一版不引入独立的 `document_resources` 表，图片、表格、链接引用先写入 `document_chunks.resource_refs`
 - `pdf` 仅支持可提取文本的文件；扫描版 PDF 直接失败，不做 OCR
 - embedding 输入只使用 `document_chunks.text`
-- chunk 切分完成后，先落本地 JSON 快照，再写入 `document_chunks`
-- 如果命中有效的 chunk 快照文件，可直接复用，不必重新切分
+- chunk 切分完成后直接写入 `document_chunks`；快照延后到 embedding 完成时再落盘
 
 ## Chunk 策略建议
 
@@ -236,7 +236,6 @@ chunk 快照约定：
 - 默认参数：`chunk_size = 1000`、`chunk_overlap = 150`
 - 短文档在清洗后正文不超过约 `3000` 中文字符时，可默认整篇作为一个 chunk
 - 即使整篇只生成一个 chunk，也保留 `resource_refs`
-- 如果存在有效的 `chunks-vN.json` 快照，且源文件哈希、切分参数、切分策略版本一致，则可直接复用
 
 ## 用户系统
 

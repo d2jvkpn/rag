@@ -478,8 +478,11 @@ func (s *DocumentService) runIndex(document model.Document) {
 		}
 	}
 
-	if err := s.writeEmbeddingSnapshot(document, approved); err != nil {
-		infra.L.Warn("write embedding snapshot failed", zap.String("document_id", document.DocumentID), zap.Error(err))
+	snapshotPath, err := s.writeSnapshot(document, approved, document.ChunkVersion, document.ChunkConfigHash)
+	if err != nil {
+		infra.L.Warn("write snapshot failed", zap.String("document_id", document.DocumentID), zap.Error(err))
+	} else {
+		document.ChunkSnapshotPath = snapshotPath
 	}
 
 	document.Stage = "index"
@@ -583,12 +586,6 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 		return
 	}
 
-	snapshotPath, err := s.writeSnapshot(document, chunks, chunkVersion, cfgHash)
-	if err != nil {
-		s.failDocument(document, "chunk", err)
-		return
-	}
-
 	if err := s.store.ReplaceChunks(document.DocumentID, chunks); err != nil {
 		s.failDocument(document, "chunk", err)
 		return
@@ -607,39 +604,10 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 	document.ChunkCount = len(chunks)
 	document.ChunkVersion = chunkVersion
 	document.ChunkConfigHash = cfgHash
-	document.ChunkSnapshotPath = snapshotPath
+	document.ChunkSnapshotPath = ""
 	document.FinishedAt = &done
 	document.UpdatedAt = done
 	_ = s.store.UpdateDocument(document)
-}
-
-func (s *DocumentService) writeEmbeddingSnapshot(document model.Document, chunks []model.DocumentChunk) error {
-	if document.ChunkSnapshotPath == "" {
-		return nil
-	}
-	raw, err := os.ReadFile(document.ChunkSnapshotPath)
-	if err != nil {
-		return err
-	}
-	var snapshot model.ChunkSnapshot
-	if err := json.Unmarshal(raw, &snapshot); err != nil {
-		return err
-	}
-	embMap := make(map[string][]float32, len(chunks))
-	for _, c := range chunks {
-		embMap[c.ChunkID] = c.Embedding
-	}
-	for i := range snapshot.Chunks {
-		if emb, ok := embMap[snapshot.Chunks[i].ChunkID]; ok {
-			snapshot.Chunks[i].Embedding = emb
-			snapshot.Chunks[i].EmbeddingModel = chunks[0].EmbeddingModel
-		}
-	}
-	updated, err := json.MarshalIndent(snapshot, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(document.ChunkSnapshotPath, updated, 0o644)
 }
 
 func (s *DocumentService) writeSnapshot(document model.Document, chunks []model.DocumentChunk, chunkVersion int, cfgHash string) (string, error) {

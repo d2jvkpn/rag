@@ -40,7 +40,7 @@ npm run build  # production build → frontend/target/dist/
 
 **Async document processing** is dispatched via the `queue.TaskQueue` interface. Two implementations: `GoroutineQueue` (buffered channel, default when `redis.dsn` is absent) and `AsynqQueue` (hibiken/asynq, used when `redis.dsn` is set). Selection happens in `NewDocumentService`. The flow is:
 1. `CreateDocument` validates KB ID against configured Milvus collections, saves the file, creates the DB record at `status=uploaded`, then calls `taskQueue.Enqueue`
-2. `processDocument()` runs parse → clean → chunk → write snapshot → `ReplaceChunks` → set `status=review_pending`
+2. `processDocument()` runs parse → clean → chunk → `ReplaceChunks` → set `status=review_pending`
 3. `RechunkDocument` re-enqueues with `rechunk=true`, which increments `chunk_version`. **Blocked if `status=indexed`.**
 
 **Document lifecycle (with human review):**
@@ -60,10 +60,11 @@ uploaded → processing/parse → processing/chunk → review_pending
 - `approve` — all `draft` chunks → `approved`, then auto-triggers indexing
 
 **Chunk snapshots** are written to `data/chunks/{knowledge_base_id}/{document_id}/chunks-vN.json`.
-- Written after chunking (text only, no vectors).
-- Overwritten after embedding to include `embedding` vectors and `embedding_model` field.
-- Old chunk versions are never overwritten; rechunk always creates a new version file.
-- Embedding vectors are written to the snapshot **before** Milvus upsert, so Milvus can be rebuilt from snapshots without re-calling the embedding API.
+- Written **only after embedding succeeds**, before Milvus upsert. Documents that never reach `indexed` (still in review, failed before embed, etc.) have no snapshot — the DB row is the only source of truth.
+- The snapshot contains chunks with `embedding` vectors and `embedding_model`, plus `chunk_version`, source SHA256 and chunk config hash.
+- Old chunk versions are never overwritten; rechunk creates a new version file at index time.
+- Snapshot purpose: rebuild Milvus from disk without re-calling the embedding API. Embedding vectors are not duplicated in Postgres.
+- Snapshot write failure is a soft warning — indexing still proceeds.
 
 **Auth:** JWT (HS256, `golang-jwt/jwt/v5`) stored in an HttpOnly cookie named by `http.session_cookie`. Cookie attributes: `HttpOnly=true`, `SameSite=Lax`, `Secure=true` only when `--release` flag is set. Token TTL is configured via `http.jwt_token_ttl` (default `8h`); cookie `maxAge` is always set to the same value. `Logout` clears the cookie (`maxAge=-1`) and adds the token JTI to the `TokenBlacklist` (`MemoryBlacklist` by default; `RedisBlacklist` when `redis.dsn` is set). Passwords are hashed with **bcrypt** (`golang.org/x/crypto/bcrypt`, `DefaultCost`).
 

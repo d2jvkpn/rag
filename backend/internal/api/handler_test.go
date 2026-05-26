@@ -116,8 +116,8 @@ func TestDocumentLifecycle(t *testing.T) {
 		return ok && int(version) == 2 && documentResponse.Data["status"] == "review_pending"
 	})
 
-	if _, err := os.Stat(filepath.Join(v.GetString("app.data_dir"), "chunks", "kb-1", documentID, "chunks-v2.json")); err != nil {
-		t.Fatalf("expected chunk snapshot v2: %v", err)
+	if _, err := os.Stat(filepath.Join(v.GetString("app.data_dir"), "chunks", "kb-1", documentID, "chunks-v2.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected no chunk snapshot before indexing, got err=%v", err)
 	}
 
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/documents/"+documentID, nil)
