@@ -194,18 +194,7 @@ chunk 落盘和快照复用的具体实现约定，见 [后端架构与技术方
 | approve | 全部 draft chunk → approved，自动触发 embedding + indexing |
 | rechunk | 重新自动切分整个文档，生成新的 chunk version |
 
-### 审核后的状态
-
-- `draft`
-- `approved`
-- `rejected`
-
-文档级状态补充：
-
-- `review_pending`：切分完成等待审核
-- `approved`：审核通过，已进入 embedding 流程（审核通过后自动触发）
-
-如果未开启人工审核（`human_review=false`），则自动切分完成后直接进入 embedding 和 Milvus 入库，以上审核操作不适用。
+chunk 状态（draft / approved / rejected）与文档生命周期完整定义见 [设计决策与关键约定](./design.md#文档生命周期)。
 
 ## 删除与更新
 

@@ -39,7 +39,9 @@ Any change that affects system behavior, API contracts, configuration, or archit
 | New / changed API endpoint | `docs/api.md` |
 | Request path, auth, ownership, cross-cutting design | `docs/architecture.md` |
 | Document lifecycle, design decisions, conventions | `docs/design.md` |
+| Document processing flow, parsing strategy, chunking, human review | `docs/workflow.md` |
 | Backend implementation detail, middleware, data model | `docs/backend.md` |
+| DB table / column added or changed | `docs/data-model.md` |
 | Frontend page, component behavior, UI design decision | `docs/frontend-business.md`, `docs/frontend.md` |
 | Config field added / changed | `docs/architecture.md` (Config 参考表) |
 

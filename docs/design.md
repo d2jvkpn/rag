@@ -31,7 +31,7 @@ uploaded
 
 `chunk_version` 在每次 `RechunkDocument` 时递增，embedding 成功后写入 `chunks-vN.json` 快照。快照用于 Milvus collection 重建时免重调 embedding API。
 
-各阶段的业务处理细节（解析策略、清洗步骤、切分参数、删除操作）见 [流程与业务规则](./workflow.md)。
+各阶段的业务处理细节（解析策略、清洗步骤、切分参数、删除操作）及 chunk 审核操作列表见 [流程与业务规则](./workflow.md)。
 
 ## 知识库与 knowledge_base_id
 
