@@ -310,6 +310,27 @@ accounts:
 
 接口详见 [API 设计](./api.md)。
 
+## 组件接口与装配约定
+
+`DocumentService` 通过 functional options 装配外部组件，未配置时回落 Noop 实现，无需代码改动。
+
+| 组件 | 包 | 装配函数 | 激活条件 |
+|---|---|---|---|
+| Embedder | `internal/llm/` | `WithEmbedder()` | `embedder.base_url` + `api_key` 均已配置 |
+| VectorStore | `internal/llm/` | `WithVectorStore()` | `milvus.addr` 已配置 |
+| TaskQueue | `internal/queue/` | `WithTaskQueue()` | `redis.dsn` 已配置（否则用 GoroutineQueue） |
+| LLM | `internal/llm/` | `WithLLM()` | `llm.base_url` + `api_key` 均已配置 |
+
+**Embedder** 实现：Noop（默认）和 OpenAI-compatible（`embedder.base_url` 指向任意兼容端点）。`batch_size` 默认 `10`，DashScope 兼容端点不支持更大批次，不要调大。
+
+**VectorStore** 接口方法：`ValidateKnowledgeBase`、`ListKnowledgeBases`、`Upsert`、`DeleteByDocument`、`Search(ctx, SearchRequest)`。`SearchRequest` 携带 `KnowledgeBaseID`、`Embedding`、`Query`、`TopK`、`DocumentIDs`、`Mode`（`""` dense / `"bm25"` / `"hybrid"`）、`EF`、`DropRatio`、`RRFK`。BM25 模式跳过 Embedder；dense / hybrid 模式要求 Embedder 已配置。
+
+**TaskQueue** 实现：`GoroutineQueue`（单 worker goroutine，默认）和 `AsynqQueue`（Redis 支持）。选择逻辑封装在 `NewDocumentService` 内部。
+
+**LLM** 实现：Noop（默认，`answer` 返回 `""`）和 OpenAI-compatible。`POST /api/query` 在有 LLM 时用检索结果上下文生成回答。
+
+**Config 补充字段：** `http.base_path`（所有路由的 URL 前缀，默认 `""`，例如 `"/rag"`）。
+
 ## 推荐目录结构
 
 ```text

@@ -1,5 +1,11 @@
 # RAG 文档处理流程与业务规则
 
+相关文档：
+
+- [设计决策与关键约定](./design.md)
+- [系统架构总览](./architecture.md)
+- [API 设计](./api.md)
+
 ## 目标
 
 先支持四类输入文档：
@@ -29,17 +35,8 @@
 输入：
 
 - 文件二进制
-- `knowledge_base_id`
+- `knowledge_base_id`（必填，文档归属边界，同时作为存储路径命名空间和检索过滤边界，详见 [设计决策与关键约定](./design.md#知识库与-knowledge_base_id)）
 - 可选：`doc_id`、`title`、`tags`
-
-`knowledge_base_id` 的作用不是“附带信息”，而是文档归属边界。它至少承担 4 个职责：
-
-- 标识文档属于哪个知识库
-- 作为检索时的过滤条件，避免跨知识库召回
-- 作为去重边界的一部分，例如 `knowledge_base_id + sha256`
-- 作为删除范围的一部分，避免误删其他知识库的向量
-
-如果系统只有单一知识库，也建议保留这个字段。这样后面扩展多租户、多业务空间时，不需要重做 schema。
 
 落盘建议：
 
@@ -185,17 +182,17 @@ chunk 落盘和快照复用的具体实现约定，见 [后端架构与技术方
 
 只有审核通过后的 chunks，才进入 embedding 和 Milvus。
 
-### 审核能力建议
+### 审核能力（已实现）
 
-- 查看 chunk 列表
-- 查看 chunk 对应的页码、章节、序号
-- 查看 chunk 原文和清洗后文本
-- 合并相邻 chunks
-- 拆分某个 chunk
-- 调整 chunk 顺序
-- 删除噪声 chunk
-- 标记某个 chunk 为“忽略入库”
-- 重新触发自动切分
+| 操作 | 说明 |
+|---|---|
+| 查看 chunk 列表 | 含页码、章节、序号、原文、清洗后文本 |
+| reject | 标记 chunk 忽略入库（`is_current=false, status=rejected`） |
+| restore | 将已 rejected 的 chunk 恢复为 draft |
+| edit | 编辑 chunk 正文（`source=manual`） |
+| merge | 合并相邻 chunk（后端校验 `chunk_index` 连续性） |
+| approve | 全部 draft chunk → approved，自动触发 embedding + indexing |
+| rechunk | 重新自动切分整个文档，生成新的 chunk version |
 
 ### 审核后的状态
 
@@ -208,17 +205,7 @@ chunk 落盘和快照复用的具体实现约定，见 [后端架构与技术方
 - `review_pending`：切分完成等待审核
 - `approved`：审核通过，已进入 embedding 流程（审核通过后自动触发）
 
-### 第一版取舍
-
-第一版可以只支持：
-
-- 查看 chunk 列表
-- 删除 chunk
-- 合并相邻 chunk
-- 重新切分整个文档
-- 审核通过后再入库
-
-如果未开启人工审核，则自动切分完成后可直接进入 embedding 和 Milvus 入库。
+如果未开启人工审核（`human_review=false`），则自动切分完成后直接进入 embedding 和 Milvus 入库，以上审核操作不适用。
 
 ## 删除与更新
 

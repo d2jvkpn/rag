@@ -4,7 +4,7 @@
       bordered
       collapse-mode="width"
       :collapsed-width="56"
-      :width="200"
+      :width="siderWidth"
       :collapsed="collapsed"
       show-trigger
       @collapse="collapsed = true"
@@ -29,6 +29,8 @@
           <span v-if="!collapsed" class="user-name">{{ auth.user?.username }}</span>
         </div>
       </n-dropdown>
+
+      <div v-if="!collapsed" class="sider-resize-handle" @mousedown="startResize" />
     </n-layout-sider>
 
     <n-modal v-model:show="showPasswordModal" preset="card" :title="t('password.title')" style="width:360px" :mask-closable="false">
@@ -125,6 +127,28 @@ const appTitle = computed(() => t('appTitle'))
 const dialog = useDialog()
 const message = useMessage()
 const collapsed = ref(false)
+
+const SIDER_MIN = 150
+const SIDER_MAX = 480
+
+const siderWidth = ref(parseInt(localStorage.getItem('siderWidth') || '200', 10))
+
+function startResize(e) {
+  e.preventDefault()
+  const startX = e.clientX
+  const startWidth = siderWidth.value
+
+  function onMouseMove(ev) {
+    siderWidth.value = Math.min(SIDER_MAX, Math.max(SIDER_MIN, startWidth + ev.clientX - startX))
+  }
+  function onMouseUp() {
+    localStorage.setItem('siderWidth', siderWidth.value)
+    window.removeEventListener('mousemove', onMouseMove)
+    window.removeEventListener('mouseup', onMouseUp)
+  }
+  window.addEventListener('mousemove', onMouseMove)
+  window.addEventListener('mouseup', onMouseUp)
+}
 const { t, locale, setLocale } = useI18n()
 
 const activeKey = computed(() => {
@@ -362,5 +386,18 @@ async function confirmTOTPDisable() {
 .main-content {
   height: 100vh;
   overflow-y: auto;
+}
+.sider-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 10;
+}
+.sider-resize-handle:hover,
+.sider-resize-handle:active {
+  background: rgba(99, 125, 255, 0.3);
 }
 </style>

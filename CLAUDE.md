@@ -28,107 +28,7 @@ npm run build  # production build → frontend/target/dist/
 
 ## Architecture
 
-### Backend
-
-**Request path:** `gin router` → `withAuth()` middleware (JWT cookie) → handler → `DocumentService` / `AuthService` → `Store`
-
-**Store interface** (`internal/repository/interface.go`) abstracts all persistence. Two implementations share this interface:
-- `JSONStore` — file-backed, used when `database.dsn` is absent from config
-- `PostgresStore` — gorm + lib/pq, used when `database.dsn` is set
-
-`main.go` selects the store via `initStore(cfg)`. New persistence methods must be added to the interface and both implementations.
-
-**Async document processing** is dispatched via the `queue.TaskQueue` interface. Two implementations: `GoroutineQueue` (buffered channel, default when `redis.dsn` is absent) and `AsynqQueue` (hibiken/asynq, used when `redis.dsn` is set). Selection happens in `NewDocumentService`. The flow is:
-1. `CreateDocument` validates KB ID against configured Milvus collections, saves the file, creates the DB record at `status=uploaded`, then calls `taskQueue.Enqueue`
-2. `processDocument()` runs parse → clean → chunk → `ReplaceChunks` → set `status=review_pending`
-3. `RechunkDocument` re-enqueues with `rechunk=true`, which increments `chunk_version`. **Blocked if `status=indexed`.**
-
-**Document lifecycle (with human review):**
-```
-uploaded → processing/parse → processing/chunk → review_pending
-→ (approve) → approved → processing/embed → processing/index → indexed
-```
-- When `human_review=false` on upload, the service auto-approves generated chunks after chunking and immediately starts indexing, so the document skips `review_pending`.
-- `approve` automatically triggers indexing immediately (no separate manual step).
-- Once `indexed`, the document is immutable — rechunk is blocked. To reprocess, delete and re-upload.
-- `failed` documents can be retried via `POST /api/documents/:id/index` without re-uploading.
-
-**Chunk review operations** (only when `human_review=true`):
-- `reject` — marks chunk `IsCurrent=false, status=rejected`; does not change document status
-- `restore` — restores a rejected chunk to `draft`
-- `edit` — updates chunk text, sets `source=manual`
-- `merge` — merges adjacent (consecutive `chunk_index`) chunks into one; backend enforces adjacency
-- `approve` — all `draft` chunks → `approved`, then auto-triggers indexing
-
-**Chunk snapshots** are written next to the source file at `data/documents/{yyyy}/{mm}/{dd}/{yyyy-mm-dd}_{document_id}/chunks-vN.json`.
-- Written **only after embedding succeeds**, before Milvus upsert. Documents that never reach `indexed` (still in review, failed before embed, etc.) have no snapshot — the DB row is the only source of truth.
-- The snapshot contains chunks with `embedding` vectors and `embedding_model`, plus `chunk_version`, source SHA256 and chunk config hash.
-- Old chunk versions are never overwritten; rechunk creates a new version file at index time.
-- Snapshot purpose: rebuild Milvus from disk without re-calling the embedding API. Embedding vectors are not duplicated in Postgres.
-- Snapshot write failure is a soft warning — indexing still proceeds.
-
-**Auth:** JWT (HS256, `golang-jwt/jwt/v5`) stored in an HttpOnly cookie named by `http.session_cookie`. Cookie attributes: `HttpOnly=true`, `SameSite=Lax`, `Secure=true` only when `--release` flag is set. Token TTL is configured via `http.jwt_token_ttl` (default `8h`); cookie `maxAge` is always set to the same value. `Logout` clears the cookie (`maxAge=-1`) and adds the token JTI to the `TokenBlacklist` (`MemoryBlacklist` by default; `RedisBlacklist` when `redis.dsn` is set). Passwords are hashed with **bcrypt** (`golang.org/x/crypto/bcrypt`, `DefaultCost`).
-
-**Graceful shutdown:** `cmd/server/main.go` listens for `SIGINT`/`SIGTERM`, calls `http.Server.Shutdown` with a 5-second timeout, then calls `app.App.Shutdown` with a 10-second timeout. Application shutdown waits for the document task queue / in-flight indexing to finish, then closes Milvus, Redis blacklist, and Postgres connections when those backends are enabled.
-
-**TOTP:** Users can enable/disable TOTP (Time-based OTP, RFC 6238) via the settings menu. `POST /api/me/totp/setup` generates a secret + `otpauth://` URL (rendered as QR code in browser via `qrcode` npm package). `POST /api/me/totp/enable` activates it after the user confirms a valid code. `POST /api/me/totp/disable` deactivates it. At login, if `totp_enabled=true` and no `totp_code` is submitted, the server returns HTTP 200 `{"totp_required": true}` without setting a cookie; the frontend shows a second step to collect the code. The `users` table carries `totp_secret TEXT` and `totp_enabled BOOLEAN` columns.
-
-**Account seeding:** `accounts` in `local.yaml` is a list of `{username, password, permissions[]}`. On startup, each entry whose username does not exist in the users table is inserted. `password` may be plaintext (auto-hashed on insert) or a pre-computed bcrypt hash (detected by `$2a$`/`$2b$`/`$2y$` prefix, stored as-is). Existing accounts are never modified. `permissions` are config-only and are **not** persisted in the database. Supported permissions: `view_user_list`, `delete_documents`, `disable_users`.
-
-**User status:** `users.status` is runtime state stored in the database. `active` users can log in and use the API. `disabled` users are blocked both at login time and on every authenticated request, so existing JWT cookies stop working after disablement.
-
-**Document ownership:** `documents.uploader_id` and `documents.uploader_name` are set at upload time from the authenticated user. `withDocumentOwner()` middleware is applied to rechunk, approve, merge, edit, reject, restore, index and returns 403 if `doc.uploader_id != ""` and the current user is not the uploader. `DELETE /api/documents/:id` additionally allows users with `delete_documents` permission to delete any document. All users can read all documents.
-
-**API response envelope:**
-- Success: `{"data": <payload>}`
-- Error: `{"error": {"code": "...", "message": "...", "details": [...]}}`
-- List: `{"data": {"items": [...], "page": 1, "page_size": N, "total": N}}`
-
-List endpoints always return 200 with `items: []` when empty — never 404.
-
-Error codes: `validation_error`, `unauthorized`, `forbidden`, `not_found`, `conflict`, `unsupported_file_type`, `processing_failed`, `internal_error`.
-
-**Migrations** live in `internal/migrations/sql/` as numbered pairs (`*.up.sql` / `*.down.sql`). gorm auto-migrate is not used; schema changes always require a new migration file. Primary keys use `UUID PRIMARY KEY DEFAULT uuidv7()`.
-
-**Config** reads `backend/configs/local.yaml` via viper. Key fields: `http.addr` (usually overridden by `--addr`), `http.jwt_secret`, `http.jwt_token_ttl` (default `8h`, any `time.ParseDuration` string), `http.session_cookie`, `http.allow_origins` (non-empty list; `"*"` allows any Origin), `app.data_dir`, `app.state_path`, `database.dsn`, `redis.dsn`, `accounts[].{username,password,permissions[]}`, `embedder.{base_url,api_key,model,batch_size}`, `milvus.{addr,db,collections[].{collection,dim,chunk_size,chunk_overlap,min_chunks,analyzer}}`, `llm.{base_url,api_key,model}`. Optional external backends fall back to Noop or local implementations when their DSNs/base URLs are empty.
-
-### Milvus / VectorStore
-
-**Each knowledge base = one Milvus collection.** Collections are pre-configured in `local.yaml`:
-
-```yaml
-milvus:
-  addr: "localhost:19530"
-  db: rag
-  collections:
-  - collection: public
-    dim: 1024
-    analyzer: chinese   # BM25 分词器，默认 chinese（Jieba），可选 english/standard
-    chunk_size: 512
-    chunk_overlap: 64
-```
-
-- Uses the official Milvus Go SDK v2 (`github.com/milvus-io/milvus/client/v2`), gRPC transport. Requires Milvus 2.5+.
-- Each collection schema contains: dense float vector field `embedding`, sparse vector field `sparse` (BM25 auto-generated from `text` via built-in BM25 function), plus metadata fields.
-- On startup, `NewMilvus` calls `ensureDatabase` then `ensureCollection` for each configured collection. `ensureCollection` calls `DescribeCollection` on existing collections to check for `sparse` field presence and analyzer match; drops and recreates if schema is stale (e.g. pre-BM25 collection or changed analyzer). **Data loss on recreate — documents must be re-indexed.**
-- `knowledge_base_id` on a document must match a configured collection name; validated at upload time.
-- `GET /api/knowledge-bases/available` returns the configured collection list with full config (`dim`, `analyzer`, `chunk_size`, `chunk_overlap`, `min_chunks`). Used by frontend dropdowns and to display collection parameters in upload modal and search page.
-- `GET /api/knowledge-bases` returns KB IDs with document counts (from DB scan, not Milvus).
-- `DeleteByDocument` is called on document delete only when `status=indexed`.
-
-### Frontend
-
-**Bootstrap sequence:** `main.js` calls `loadConfig()` (fetches `/app.json`) before mounting the app. If config fails, a fatal error is shown. All service modules call `getConfig()` at request time — they do not cache the base URL.
-
-**Services** (`services/`) wrap `fetch` via `services/http.js`. All requests use `credentials: 'include'`. Errors are thrown as `HttpError` with `.status`, `.code`, `.message`, `.details`.
-
-**Polling:** `DocumentDetailPage` polls `GET /api/documents/:id` every `poll_interval_ms` ms (from `app.json`, exposed to code as `pollIntervalMs`, default 3000) while the document status is not in `['indexed', 'failed', 'review_pending']`. The timer is cleared on `onUnmounted`.
-
-**Status/type mapping** is centralised in `utils/status.js`. Use `STATUS_LABEL`, `STATUS_TYPE`, `isTerminal()` — do not duplicate these mappings in components.
-
-**Naive UI** is registered globally via `app.use(naive)` in `main.js`. Import components only when needed for render functions (e.g., inside `columns` definitions in `DocumentsPage`).
-
-**Runtime config** lives in `frontend/public/app.json`. The frontend never reads build-time environment variables. Fields: `api_base`, `static_base`, `poll_interval_ms`. The loader normalizes these to camelCase for frontend code and still accepts the old camelCase names for compatibility.
+See `docs/architecture.md` for request path, auth, ownership, Milvus, frontend structure, and config reference. See `docs/design.md` for document lifecycle, conventions, and component wiring.
 
 ## Documentation Sync
 
@@ -137,34 +37,48 @@ Any change that affects system behavior, API contracts, configuration, or archit
 | Change type | Files to update |
 |---|---|
 | New / changed API endpoint | `docs/api.md` |
-| Backend architecture, middleware, auth, data model | `docs/backend.md`, `CLAUDE.md` |
+| Request path, auth, ownership, cross-cutting design | `docs/architecture.md` |
+| Document lifecycle, design decisions, conventions | `docs/design.md` |
+| Backend implementation detail, middleware, data model | `docs/backend.md` |
 | Frontend page, component behavior, UI design decision | `docs/frontend-business.md`, `docs/frontend.md` |
-| Config field added / changed | `CLAUDE.md` (Config section), relevant backend/frontend doc |
-| Cross-cutting (auth, ownership, search modes, etc.) | `CLAUDE.md` Key Conventions + relevant domain doc |
+| Config field added / changed | `docs/architecture.md` (Config 参考表) |
 
 Do not add placeholder text or "TODO: document later" — write the actual description at the time of the change.
 
-## Key Conventions
+See `docs/design.md` for key conventions: knowledge_base_id scoping, query filter behavior, component wiring (Noop pattern), search modes, parser/chunker interfaces, migration rules, frontend constraints, test isolation, and observability patterns.
 
-- `knowledge_base_id` must match a configured `milvus.collections[*].collection` name. Validated at `CreateDocument`. Scopes file storage paths and chunk snapshot paths.
-- `ListDocuments(knowledgeBaseID, tag string)` — pass empty strings to return all documents; both filters are pushed to the DB query when supported, not applied in memory after fetch.
-- `ListDocumentTags(knowledgeBaseID string)` returns deduplicated document tags with counts for the current scope. Used by the frontend tag filter dropdown.
-- Tests use `t.TempDir()` + `JSONStore`. No database mocking; no external dependencies in tests.
-- Schema changes always require a new numbered migration pair under `internal/migrations/sql/`; never edit existing files in place. No `sessions` table — auth is JWT-only.
-- Frontend does not use TypeScript. Do not introduce it.
-- Frontend i18n uses a Pinia `locale` store with `i18n/{zh,en}.js` message catalogs. UI text must read from the catalogs (`useI18n().t(...)`), not hardcoded strings.
-- `infra.L` defaults to `zap.NewNop()` at package level so tests that skip `infra.Init()` never panic. `Init()` is called only in `main.go`.
-- Request logging: `infra.RequestLogger` logs every request after `c.Next()`, level by status (`>=500` Error / `>=400` Warn / else Info). Fields: `ip`, `method`, `path` (route template via `c.FullPath()`, falls back to `URL.Path` for 404), `status`, `latency`, optional `params`, `query`, `err_origin`, `err_code`, `err_message`. `writeError` (`api/response.go`) captures the call site with `runtime.Caller(1)` (trimmed to `internal/...`) and stashes `err_origin`/`err_code`/`err_message` via `c.Set(...)` so the middleware can attach error location to 4xx/5xx logs.
-- `Embedder` (`internal/llm/`) has `Noop` (default) and `OpenAI` implementations. `OpenAI` works against any OpenAI-compatible endpoint. Wire via `WithEmbedder()`. Activated when `embedder.base_url` + `embedder.api_key` are set in config. `embedder.batch_size` controls per-request embedding batch size and defaults to `10`; keep it at `10` for DashScope-compatible endpoints that reject larger `input.contents` batches.
-- `VectorStore` (`internal/llm/`) has `Noop` (default) and `Milvus` implementations. `Milvus` uses the official Go SDK v2 (gRPC, Milvus 2.5+). Interface: `ValidateKnowledgeBase`, `ListKnowledgeBases`, `Upsert`, `DeleteByDocument`, `Search(ctx, SearchRequest)`. `SearchRequest` carries `KnowledgeBaseID`, `Embedding`, `Query`, `TopK`, `DocumentIDs`, `Mode` (`""` dense / `"bm25"` / `"hybrid"`), `EF`, `DropRatio`, `RRFK`.
-- `TaskQueue` (`internal/queue/`) has `GoroutineQueue` (default, single worker goroutine) and `AsynqQueue` (Redis-backed, activated when `redis.dsn` is set). Wire via `WithTaskQueue()`. Queue selection happens inside `NewDocumentService`.
-- `POST /api/query` requires `knowledge_base_id` (cross-collection search is not supported). Request fields: `knowledge_base_id` (required), `query`, `top_k`, `search_mode` (`""` dense / `"bm25"` / `"hybrid"`), `document_ids` (optional filter), `ef`, `drop_ratio`, `rrf_k`. BM25-only mode skips the embedder. Embeds the query (dense/hybrid), calls `VectorStore.Search`, then optionally calls `LLM.Complete`. Returns `{ items, answer, query, knowledge_base_id }`. `answer` is `""` when LLM is Noop.
-- `LLM` interface (`internal/llm/`) has `Noop` (default) and `OpenAI` implementations. Wire via `WithLLM()`. Activated when `llm.base_url` + `llm.api_key` are set in config.
-- **Parser output** (`internal/parser/`): `Parse()` returns `ParseResult{Text, PageCount, Blocks}`. `Blocks []ParseBlock` carries structured units (`Text`, `SectionTitle`, `PageStart`) for Markdown and PPTX/DOCX/PDF; `nil` falls back to the flat `Text` field. `processDocument` applies `CleanText` per block, then passes blocks to `BuildChunks`.
-- DOCX/PPTX parsing: `docx.go` / `pptx.go` with shared OOXML helpers group runs within the same paragraph without separators, and converts native OOXML tables (`w:tbl` / `a:tbl`) into Markdown table text while preserving block order. Tables and plain paragraphs are the only elements converted; bold, italic, lists and other formatting are extracted as plain text.
-- DOCX structure: `extractDocxBlocks` detects `w:pStyle` heading styles (`Heading1`–`N`, numeric `1`–`6`, `标题N`) and splits the document into `ParseBlock`s at heading boundaries, with the heading text as `SectionTitle`. Documents without heading styles fall back to a single block.
-- DOCX continuation tables: adjacent `w:tbl` blocks with matching column counts are merged as one Markdown table, and a repeated first row in the later block is dropped when it matches the existing header.
-- PPTX structure: each slide becomes one `ParseBlock` with `SectionTitle="幻灯片 N"` and `PageStart=N`.
-- PDF parsing: `backend/scripts/parse_pdf.py` uses `pdfplumber` for page text extraction, removes detected table regions from the linear page text when possible, converts page-local tables into Markdown table text, and merges adjacent-page tables when column counts match (dropping a repeated header row when present). Each page is returned as a separate entry in `pages: [{text, page, refs}]`; image, table and link refs are converted to `ResourceRef`; PDF image refs are rendered to PNG files under `data/static/{yyyy}/{mm}/{dd}/{yyyy-mm-dd}_{document_id}` when `mediaDir` is provided and the Go parser carries them into `ParseBlock.Refs` with `PageStart` set. Scanned PDFs and complex table layouts may still fail or degrade.
-- Markdown structure: `splitMarkdownBlocks` splits the document at `#`/`##`/… heading boundaries; each section becomes a `ParseBlock` with `SectionTitle` set to the heading text.
-- **Chunking** (`internal/service/chunker.go`): `BuildChunks(documentID, filename string, blocks []parser.ParseBlock, ...)` iterates blocks and calls `splitByLength` per block. Each resulting chunk inherits `SectionTitle` and `PageStart` from its source block. After all blocks are processed, if total chunk count ≤ `min_chunks` the entire document is merged into one chunk. `splitByLength` splits on `\n\n` paragraph boundaries; oversized Markdown tables are split by data row (header repeated in every part); code fences (` ``` `/`~~~`) are protected from internal `\n\n` splitting. `splitRunes` (character-level fallback for oversized paragraphs) snaps cut points backward to the nearest sentence-ending punctuation within `overlap/2` characters. `overlapTail` advances the raw overlap start to the first sentence boundary so overlap context begins at a clean sentence.
+## Tooling Checks
+
+Before answering questions like "why does X fail to install" or "why isn't X working", verify the actual state first:
+
+```bash
+which <tool>
+<tool> --version
+```
+
+Do not give troubleshooting steps before confirming whether the tool is present.
+
+## Commits & PRs
+
+Never create a commit unless the user explicitly asks for one.
+
+### Message language
+
+Always write commit messages in English.
+
+### Preferred prefixes
+
+- `feat: add openclaw proxy handler`
+- `fix: handle upstream timeout response`
+- `docs: update backend decisions`
+
+### AI attribution
+
+Every AI-assisted commit must include:
+
+```
+Assisted-by: <agent_name>:<model_version>
+```
+
+- Do not add `Signed-off-by` on behalf of the author.
+- List only specialized analysis tools; omit `git` or editors.

@@ -24,6 +24,7 @@ func LoadConfig(path string) *viper.Viper {
 
 func setDefaults(v *viper.Viper) {
 	v.SetDefault("http.addr", ":3061")
+	v.SetDefault("http.base_path", "")
 	v.SetDefault("http.jwt_secret", "change-me-in-production")
 	v.SetDefault("http.session_cookie", "rag_session")
 	v.SetDefault("http.allow_origins", []string{"*"})

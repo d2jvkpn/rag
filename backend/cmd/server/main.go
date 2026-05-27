@@ -58,11 +58,15 @@ func main() {
 		}
 	}()
 
-	infra.L.Info("server starting",
+	logFields := []zap.Field{
 		zap.Bool("release", *release),
 		zap.String("addr", v.GetString("http.addr")),
 		zap.String("config", *configPath),
-	)
+	}
+	if bp := v.GetString("http.base_path"); bp != "" {
+		logFields = append(logFields, zap.String("base_path", bp))
+	}
+	infra.L.Info("server starting", logFields...)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()

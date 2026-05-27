@@ -38,18 +38,24 @@ func (h *Handler) Routes() http.Handler {
 	router := gin.New()
 	router.Use(gin.Recovery(), infra.RequestLogger(), h.cors())
 
-	router.GET("/healthz", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
-	})
-
-	staticDir := filepath.Join(h.cfg.GetString("app.data_dir"), "static")
-	router.Static("/static", staticDir)
-
 	router.NoRoute(func(c *gin.Context) {
 		writeError(c, 404, "not_found", "route not found", nil)
 	})
 
-	apiGroup := router.Group("/api")
+	basePath := strings.TrimRight(h.cfg.GetString("http.base_path"), "/")
+	if basePath != "" && !strings.HasPrefix(basePath, "/") {
+		basePath = "/" + basePath
+	}
+	root := router.Group(basePath)
+
+	root.GET("/healthz", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	staticDir := filepath.Join(h.cfg.GetString("app.data_dir"), "static")
+	root.Static("/static", staticDir)
+
+	apiGroup := root.Group("/api")
 	apiGroup.POST("/login", h.handleLogin)
 	apiGroup.POST("/logout", h.withAuth(), h.handleLogout)
 	apiGroup.GET("/me", h.withAuth(), h.handleMe)

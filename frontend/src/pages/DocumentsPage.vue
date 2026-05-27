@@ -45,6 +45,7 @@
         :loading="loading"
         :pagination="false"
         :row-key="(row) => row.document_id"
+        :scroll-x="1310"
         size="small"
       />
       <div style="display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-top:12px">
