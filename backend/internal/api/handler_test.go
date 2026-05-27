@@ -116,7 +116,12 @@ func TestDocumentLifecycle(t *testing.T) {
 		return ok && int(version) == 2 && documentResponse.Data["status"] == "review_pending"
 	})
 
-	if _, err := os.Stat(filepath.Join(v.GetString("app.data_dir"), "chunks", "kb-1", documentID, "chunks-v2.json")); !os.IsNotExist(err) {
+	currentDocument, err := store.GetDocument(documentID)
+	if err != nil {
+		t.Fatalf("get document before delete: %v", err)
+	}
+	documentDir := filepath.Dir(currentDocument.StoragePath)
+	if _, err := os.Stat(filepath.Join(documentDir, "chunks-v2.json")); !os.IsNotExist(err) {
 		t.Fatalf("expected no chunk snapshot before indexing, got err=%v", err)
 	}
 
@@ -129,7 +134,7 @@ func TestDocumentLifecycle(t *testing.T) {
 	}
 
 	waitForTest(t, time.Second, func() bool {
-		_, err := os.Stat(filepath.Join(v.GetString("app.data_dir"), "documents", "kb-1", documentID))
+		_, err := os.Stat(documentDir)
 		return os.IsNotExist(err)
 	})
 }

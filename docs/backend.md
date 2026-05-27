@@ -52,7 +52,7 @@
 - 启动参数使用命令行 flag，不使用环境变量
 - 存储双实现：`JSONStore`（本地 JSON 文件，`state_path` 指定）和 `PostgresStore`（`gorm` + `lib/pq`），通过 `database.dsn` 配置自动选择
 - 异步处理先使用进程内 goroutine 队列（channel 容量 32）
-- chunk 快照写入 `backend/data/chunks/`
+- 原始文件和 chunk 快照写入同一个 `backend/data/documents/{yyyy}/{mm}/{dd}/{yyyy-mm-dd}_{document_id}/` 目录
 
 当前启动参数：
 
@@ -181,33 +181,30 @@ WARN  request  status=401 err_origin=internal/api/handler.go:99 err_code=unautho
 backend/
   data/
     documents/
-      {knowledge_base_id}/
-        {document_id}/
-          source.pdf
-    chunks/
-      {knowledge_base_id}/
-        {document_id}/
-          chunks-v1.json
-          chunks-v2.json
-    resources/
-      {knowledge_base_id}/
-        {document_id}/
-          images/
-            img_001.png
-          tables/
-            tbl_001.json
+      {yyyy}/
+        {mm}/
+          {dd}/
+            {yyyy-mm-dd}_{document_id}/
+              source.pdf
+              chunks-v1.json
+              chunks-v2.json
+    static/
+      {yyyy}/
+        {mm}/
+          {dd}/
+            {yyyy-mm-dd}_{document_id}/
+              pdf-page-1-image-1.png
 ```
 
 目录说明：
 
-- `backend/data/documents/...`：保存原始上传文件
-- `backend/data/chunks/...`：保存 chunk 切分结果的 JSON 快照
-- `backend/data/resources/...`：保存图片、表格 JSON 等派生资源
+- `backend/data/documents/...`：按上传日期分层保存原始上传文件和 chunk JSON 快照
+- `backend/data/static/...`：按上传日期分层保存 PDF/DOCX/PPTX 解析出的图片等派生静态资源
 
 设计要求：
 
-- 路径中带上 `knowledge_base_id` 和 `document_id`
-- chunk 快照按版本保存，不直接覆盖旧版本
+- documents/static 使用同一日期分层和 `{yyyy-mm-dd}_{document_id}` 末级目录名
+- chunk 快照与原始文件放在同一个 documents 目录下，按版本保存，不直接覆盖旧版本
 - 业务静态文件不要放进 `backend/logs/` 或 `backend/target/`
 
 chunk 快照约定：
@@ -230,7 +227,7 @@ chunk 快照约定：
 - `docx` 中相邻且列数一致的连续表会按续表处理并合并；若后一张表首行与前一张表表头一致，会自动去掉重复表头
 - `pptx` 每张幻灯片作为独立 block，`SectionTitle` = "幻灯片 N"，`PageStart` = 幻灯片编号
 - `markdown` 中原有表格语法保持原样，不做二次转换；按 `#/##/…` 标题边界拆分为 blocks
-- `pdf` 通过 Python 脚本调用 `pdfplumber` 提取文本，并将识别到的页内表格转成 Markdown 表格文本；正文抽取会尽量排除表格区域，减少重复内容；会尝试合并相邻页列数一致的续页表并去掉重复表头；内容尺寸的图片、表格和 PDF 超链接会写入 `resource_refs`，PDF 图片会渲染为 PNG 并保存到 `data/static/{document_id}`；每页作为独立 block，`PageStart` = 页码；要求运行环境可执行 `python3` 且安装 `pdfplumber`
+- `pdf` 通过 Python 脚本调用 `pdfplumber` 提取文本，并将识别到的页内表格转成 Markdown 表格文本；正文抽取会尽量排除表格区域，减少重复内容；会尝试合并相邻页列数一致的续页表并去掉重复表头；内容尺寸的图片、表格和 PDF 超链接会写入 `resource_refs`，PDF 图片会渲染为 PNG 并保存到 `data/static/{yyyy}/{mm}/{dd}/{yyyy-mm-dd}_{document_id}`；每页作为独立 block，`PageStart` = 页码；要求运行环境可执行 `python3` 且安装 `pdfplumber`
 - 扫描版 PDF 或其他无可提取文本的 PDF 仍会直接失败，不做 OCR
 - embedding 输入只使用 `document_chunks.text`
 - chunk 切分完成后直接写入 `document_chunks`；快照延后到 embedding 完成时再落盘

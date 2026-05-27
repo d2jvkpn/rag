@@ -68,16 +68,20 @@ func TestCreateDocumentDuplicateDoesNotLeaveFiles(t *testing.T) {
 		t.Fatalf("expected duplicate upload error, got second document %+v", second)
 	}
 
-	documentsDir := filepath.Join(v.GetString("app.data_dir"), "documents", "kb-1")
-	entries, err := os.ReadDir(documentsDir)
+	firstDir := filepath.Dir(first.StoragePath)
+	if _, err := os.Stat(firstDir); err != nil {
+		t.Fatalf("first document dir should exist: %v", err)
+	}
+	entries, err := os.ReadDir(filepath.Dir(firstDir))
 	if err != nil {
-		t.Fatalf("read documents dir: %v", err)
+		t.Fatalf("read document date dir: %v", err)
 	}
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 document dir after duplicate upload, got %d", len(entries))
 	}
-	if entries[0].Name() != first.DocumentID {
-		t.Fatalf("expected only first document dir %s, got %s", first.DocumentID, entries[0].Name())
+	wantDirName := first.CreatedAt.UTC().Format("2006-01-02") + "_" + first.DocumentID
+	if entries[0].Name() != wantDirName {
+		t.Fatalf("expected only first document dir %s, got %s", wantDirName, entries[0].Name())
 	}
 }
 

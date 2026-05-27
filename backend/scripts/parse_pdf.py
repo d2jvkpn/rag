@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -344,7 +345,8 @@ def main() -> int:
         return fail(f"pdf file not found: {path}")
 
     media_dir = Path(sys.argv[2]) if len(sys.argv) == 3 and sys.argv[2] else None
-    storage_base = media_dir.parent if media_dir is not None else None
+    storage_base_env = os.environ.get("PDF_PARSER_STORAGE_BASE")
+    storage_base = Path(storage_base_env) if storage_base_env else (media_dir.parent if media_dir is not None else None)
 
     try:
         import pdfplumber

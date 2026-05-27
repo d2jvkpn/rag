@@ -478,6 +478,9 @@ func parsePDF(path, mediaDir string) (ParseResult, error) {
 	)
 
 	cmd := exec.CommandContext(ctx, pythonBin, args...)
+	if mediaDir != "" {
+		cmd.Env = append(os.Environ(), "PDF_PARSER_STORAGE_BASE="+staticResourceBase(mediaDir))
+	}
 	output, err := cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError
@@ -897,14 +900,14 @@ func parseOOXMLImageRels(content, baseDir string) map[string]string {
 
 // resolveZIPMedia walks all image refs in blocks whose StoragePath holds a
 // temporary ZIP-internal path, extracts the file from the ZIP, writes it to
-// mediaDir, and replaces StoragePath with a path relative to mediaDir's parent
-// (i.e. relative to data/static/ when mediaDir is data/static/{docID}).
+// mediaDir, and replaces StoragePath with a path relative to the static root
+// (i.e. relative to data/static/).
 func resolveZIPMedia(reader *zip.Reader, blocks []ParseBlock, mediaDir string) {
 	mediaDir = filepath.Clean(mediaDir)
 	if err := os.MkdirAll(mediaDir, 0o755); err != nil {
 		return
 	}
-	storageBase := filepath.Dir(mediaDir)
+	storageBase := staticResourceBase(mediaDir)
 	seen := map[string]string{} // zipPath → relative storage path (or "" on failure)
 	for bi := range blocks {
 		for ri := range blocks[bi].Refs {
@@ -937,6 +940,27 @@ func resolveZIPMedia(reader *zip.Reader, blocks []ParseBlock, mediaDir string) {
 			seen[zipPath] = relPath
 		}
 	}
+}
+
+func staticResourceBase(mediaDir string) string {
+	mediaDir = filepath.Clean(mediaDir)
+	leaf := filepath.Base(mediaDir)
+	if isDatedDocumentDirName(leaf) {
+		return filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(mediaDir))))
+	}
+	return filepath.Dir(mediaDir)
+}
+
+func isDatedDocumentDirName(name string) bool {
+	if len(name) < len("2006-01-02_") || name[4] != '-' || name[7] != '-' || name[10] != '_' {
+		return false
+	}
+	for _, idx := range []int{0, 1, 2, 3, 5, 6, 8, 9} {
+		if name[idx] < '0' || name[idx] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func readFromZIP(reader *zip.Reader, name string) []byte {

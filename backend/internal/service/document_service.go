@@ -44,7 +44,7 @@ func NewDocumentService(cfg *viper.Viper, store repository.Store, opts ...func(*
 	if err := os.MkdirAll(filepath.Join(dataDir, "documents"), 0o755); err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(filepath.Join(dataDir, "chunks"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dataDir, "static"), 0o755); err != nil {
 		return nil, err
 	}
 	svc := &DocumentService{
@@ -158,8 +158,9 @@ func (s *DocumentService) CreateDocument(file multipart.File, header *multipart.
 		return model.Document{}, errors.New("file is empty")
 	}
 
+	now := time.Now().UTC()
 	documentID := uuid.Must(uuid.NewV7()).String()
-	dir := filepath.Join(s.cfg.GetString("app.data_dir"), "documents", knowledgeBaseID, documentID)
+	dir := documentStorageDir(s.cfg.GetString("app.data_dir"), documentID, now)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return model.Document{}, err
 	}
@@ -171,7 +172,6 @@ func (s *DocumentService) CreateDocument(file multipart.File, header *multipart.
 	}
 
 	sum := sha256.Sum256(content)
-	now := time.Now().UTC()
 	document := model.Document{
 		DocumentID:      documentID,
 		KnowledgeBaseID: knowledgeBaseID,
@@ -234,9 +234,11 @@ func (s *DocumentService) DeleteDocument(documentID string) error {
 		return err
 	}
 	_ = os.RemoveAll(filepath.Dir(document.StoragePath))
-	if document.ChunkSnapshotPath != "" {
+	if document.ChunkSnapshotPath != "" && filepath.Clean(filepath.Dir(document.ChunkSnapshotPath)) != filepath.Clean(filepath.Dir(document.StoragePath)) {
 		_ = os.RemoveAll(filepath.Dir(document.ChunkSnapshotPath))
 	}
+	_ = os.RemoveAll(staticStorageDir(s.cfg.GetString("app.data_dir"), document.DocumentID, document.CreatedAt))
+	_ = os.RemoveAll(filepath.Join(s.cfg.GetString("app.data_dir"), "static", document.DocumentID))
 	if document.Status == "indexed" {
 		_ = s.vectorStore.DeleteByDocument(context.Background(), document.KnowledgeBaseID, document.DocumentID)
 	}
@@ -556,7 +558,7 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 		zap.Bool("rechunk", rechunk),
 	)
 
-	mediaDir := filepath.Join(s.cfg.GetString("app.data_dir"), "static", document.DocumentID)
+	mediaDir := staticStorageDir(s.cfg.GetString("app.data_dir"), document.DocumentID, document.CreatedAt)
 	parsed, err := llm.Parse(document.StoragePath, document.SourceType, mediaDir)
 	if err != nil {
 		infra.L.Warn("parse failed",
@@ -651,7 +653,10 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 }
 
 func (s *DocumentService) writeSnapshot(document model.Document, chunks []model.DocumentChunk, chunkVersion int, cfgHash string) (string, error) {
-	dir := filepath.Join(s.cfg.GetString("app.data_dir"), "chunks", document.KnowledgeBaseID, document.DocumentID)
+	dir := filepath.Dir(document.StoragePath)
+	if dir == "." || dir == "" {
+		dir = documentStorageDir(s.cfg.GetString("app.data_dir"), document.DocumentID, document.CreatedAt)
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
@@ -670,6 +675,30 @@ func (s *DocumentService) writeSnapshot(document model.Document, chunks []model.
 		return "", err
 	}
 	return path, os.WriteFile(path, raw, 0o644)
+}
+
+func documentStorageDir(dataDir, documentID string, createdAt time.Time) string {
+	parts := datedDocumentPathParts(documentID, createdAt)
+	return filepath.Join(append([]string{dataDir, "documents"}, parts...)...)
+}
+
+func staticStorageDir(dataDir, documentID string, createdAt time.Time) string {
+	parts := datedDocumentPathParts(documentID, createdAt)
+	return filepath.Join(append([]string{dataDir, "static"}, parts...)...)
+}
+
+func datedDocumentPathParts(documentID string, createdAt time.Time) []string {
+	t := createdAt.UTC()
+	if t.IsZero() {
+		t = time.Now().UTC()
+	}
+	date := t.Format("2006-01-02")
+	return []string{
+		t.Format("2006"),
+		t.Format("01"),
+		t.Format("02"),
+		date + "_" + documentID,
+	}
 }
 
 // QueryResult bundles semantic search hits with an optional LLM-generated answer.
