@@ -22,7 +22,11 @@ type AsynqQueue struct {
 	wg     sync.WaitGroup
 }
 
-func NewAsynqQueue(redisDSN string, concurrency int, handler func(documentID string, rechunk bool)) (*AsynqQueue, error) {
+func NewAsynqQueue(
+	redisDSN string,
+	concurrency int,
+	handler func(documentID string, rechunk bool),
+) (*AsynqQueue, error) {
 	opt, err := asynq.ParseRedisURI(redisDSN)
 	if err != nil {
 		return nil, err

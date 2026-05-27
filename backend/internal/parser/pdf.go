@@ -59,12 +59,29 @@ func parsePDF(path, mediaDir string) (ParseResult, error) {
 			if msg == "" {
 				msg = err.Error()
 			}
-			return ParseResult{}, fmt.Errorf("pdf parser failed (python=%s script=%s file=%s): %s", pythonBin, scriptPath, path, msg)
+			return ParseResult{}, fmt.Errorf(
+				"pdf parser failed (python=%s script=%s file=%s): %s",
+				pythonBin,
+				scriptPath,
+				path,
+				msg,
+			)
 		}
 		if ctx.Err() == context.DeadlineExceeded {
-			return ParseResult{}, fmt.Errorf("pdf parser timed out (python=%s script=%s file=%s)", pythonBin, scriptPath, path)
+			return ParseResult{}, fmt.Errorf(
+				"pdf parser timed out (python=%s script=%s file=%s)",
+				pythonBin,
+				scriptPath,
+				path,
+			)
 		}
-		return ParseResult{}, fmt.Errorf("pdf parser exec failed (python=%s script=%s file=%s): %w", pythonBin, scriptPath, path, err)
+		return ParseResult{}, fmt.Errorf(
+			"pdf parser exec failed (python=%s script=%s file=%s): %w",
+			pythonBin,
+			scriptPath,
+			path,
+			err,
+		)
 	}
 
 	var payload struct {
@@ -77,7 +94,12 @@ func parsePDF(path, mediaDir string) (ParseResult, error) {
 		} `json:"pages"`
 	}
 	if err := json.Unmarshal(output, &payload); err != nil {
-		return ParseResult{}, fmt.Errorf("pdf parser returned invalid json (script=%s file=%s): %w", scriptPath, path, err)
+		return ParseResult{}, fmt.Errorf(
+			"pdf parser returned invalid json (script=%s file=%s): %w",
+			scriptPath,
+			path,
+			err,
+		)
 	}
 	payload.Text = strings.TrimSpace(payload.Text)
 	if payload.Text == "" {

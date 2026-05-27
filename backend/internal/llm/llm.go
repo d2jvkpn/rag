@@ -12,4 +12,4 @@ type LLM interface {
 type NoopLLM struct{}
 
 func (NoopLLM) Complete(_ context.Context, _, _ string) (string, error) { return "", nil }
-func (NoopLLM) Model() string                                            { return "noop" }
+func (NoopLLM) Model() string                                           { return "noop" }

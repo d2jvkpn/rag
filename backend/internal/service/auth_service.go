@@ -34,7 +34,13 @@ type AuthService struct {
 	permsByUser map[string][]string
 }
 
-func NewAuthService(store repository.Store, jwtSecret string, tokenTTL time.Duration, accounts []repository.AccountSeed, bl ...TokenBlacklist) *AuthService {
+func NewAuthService(
+	store repository.Store,
+	jwtSecret string,
+	tokenTTL time.Duration,
+	accounts []repository.AccountSeed,
+	bl ...TokenBlacklist,
+) *AuthService {
 	if tokenTTL <= 0 {
 		tokenTTL = defaultTokenTTL
 	}
@@ -162,7 +168,9 @@ func (s *AuthService) ChangePassword(userID, oldPassword, newPassword string) er
 	if err != nil {
 		return err
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(oldPassword)); err != nil {
+	if err := bcrypt.CompareHashAndPassword(
+		[]byte(user.PasswordHash), []byte(oldPassword),
+	); err != nil {
 		return errors.New("incorrect current password")
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)

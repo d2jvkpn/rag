@@ -72,7 +72,8 @@ print(json.dumps({
 		t.Fatalf("expected 1 ref, got %d", len(got.Blocks[0].Refs))
 	}
 	ref := got.Blocks[0].Refs[0]
-	if ref.RefType != "link" || ref.AnchorText != "Example" || ref.URL != "https://example.com" || !ref.IsExternal {
+	if ref.RefType != "link" || ref.AnchorText != "Example" || ref.URL != "https://example.com" ||
+		!ref.IsExternal {
 		t.Fatalf("unexpected ref: %+v", ref)
 	}
 }
@@ -370,7 +371,11 @@ func TestParsePptxReturnsBlocks(t *testing.T) {
 		t.Fatalf("expected 2 blocks, got %d", len(got.Blocks))
 	}
 	if got.Blocks[0].PageStart != 1 || got.Blocks[1].PageStart != 2 {
-		t.Errorf("unexpected PageStart values: %d, %d", got.Blocks[0].PageStart, got.Blocks[1].PageStart)
+		t.Errorf(
+			"unexpected PageStart values: %d, %d",
+			got.Blocks[0].PageStart,
+			got.Blocks[1].PageStart,
+		)
 	}
 	if got.Blocks[0].SectionTitle != "幻灯片 1" {
 		t.Errorf("unexpected SectionTitle: %q", got.Blocks[0].SectionTitle)
@@ -391,7 +396,9 @@ func TestExtractMarkdownRefs(t *testing.T) {
 	if refs[0].RefType != "image" || refs[0].Label != "logo" || refs[0].URL != "img/logo.png" {
 		t.Errorf("unexpected image ref: %+v", refs[0])
 	}
-	if refs[1].RefType != "link" || refs[1].AnchorText != "Go docs" || refs[1].URL != "https://go.dev" || !refs[1].IsExternal {
+	if refs[1].RefType != "link" || refs[1].AnchorText != "Go docs" ||
+		refs[1].URL != "https://go.dev" ||
+		!refs[1].IsExternal {
 		t.Errorf("unexpected link ref: %+v", refs[1])
 	}
 }
@@ -451,7 +458,8 @@ func TestParseDocxExtractsHyperlinkRefs(t *testing.T) {
 	if len(allRefs) != 1 {
 		t.Fatalf("expected 1 ref, got %d: %+v", len(allRefs), allRefs)
 	}
-	if allRefs[0].RefType != "link" || allRefs[0].AnchorText != "Visit Example" || allRefs[0].URL != "https://example.com" {
+	if allRefs[0].RefType != "link" || allRefs[0].AnchorText != "Visit Example" ||
+		allRefs[0].URL != "https://example.com" {
 		t.Errorf("unexpected ref: %+v", allRefs[0])
 	}
 }

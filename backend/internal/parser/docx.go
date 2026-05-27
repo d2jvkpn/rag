@@ -82,7 +82,11 @@ func isDocxHeadingStyle(val string) bool {
 // boundaries. Each block carries the heading text as SectionTitle. When no
 // heading styles are detected the entire document is returned as one block,
 // preserving existing behavior.
-func extractDocxBlocks(content string, rels map[string]string, imageRels map[string]string) []ParseBlock {
+func extractDocxBlocks(
+	content string,
+	rels map[string]string,
+	imageRels map[string]string,
+) []ParseBlock {
 	blockRe := regexp.MustCompile(`(?s)<w:tbl[\s>].*?</w:tbl>|<w:p[\s>].*?</w:p>`)
 	tableStartRe := regexp.MustCompile(`(?s)^<w:tbl[\s>]`)
 
@@ -121,7 +125,14 @@ func extractDocxBlocks(content string, rels map[string]string, imageRels map[str
 			headingText = paraText
 		}
 		if paraText != "" {
-			items = append(items, docItem{isHeading: isHeading, heading: headingText, ob: ooxmlBlock{kind: "text", text: paraText, refs: paraRefs}})
+			items = append(
+				items,
+				docItem{
+					isHeading: isHeading,
+					heading:   headingText,
+					ob:        ooxmlBlock{kind: "text", text: paraText, refs: paraRefs},
+				},
+			)
 		}
 	}
 
@@ -165,7 +176,10 @@ func extractDocxBlocks(content string, rels map[string]string, imageRels map[str
 			}
 		}
 		if text := strings.TrimSpace(strings.Join(lines, "\n\n")); text != "" {
-			result = append(result, ParseBlock{Text: text, SectionTitle: currentTitle, Refs: blockRefs})
+			result = append(
+				result,
+				ParseBlock{Text: text, SectionTitle: currentTitle, Refs: blockRefs},
+			)
 		}
 		currentItems = nil
 	}

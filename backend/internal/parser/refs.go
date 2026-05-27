@@ -126,7 +126,11 @@ func extractMarkdownRefs(text string) (string, []model.ResourceRef) {
 // contains a drawing but no text runs (so the caller can substitute it).
 // imageRels maps rId to ZIP-internal path; image refs have StoragePath set to
 // that path as a temporary value resolved later by resolveZIPMedia.
-func extractDocxParaRefs(paraXML string, rels map[string]string, imageRels map[string]string) (imgPlaceholder string, refs []model.ResourceRef) {
+func extractDocxParaRefs(
+	paraXML string,
+	rels map[string]string,
+	imageRels map[string]string,
+) (imgPlaceholder string, refs []model.ResourceRef) {
 	for _, m := range docxHyperlinkRe.FindAllStringSubmatch(paraXML, -1) {
 		attrs, inner := m[1], m[2]
 		url := ""
@@ -183,7 +187,11 @@ func extractDocxParaRefs(paraXML string, rels map[string]string, imageRels map[s
 // extractPptxSlideRefs extracts hyperlink and image refs from a PPTX slide XML.
 // imageRels maps rId to ZIP-internal path; image refs have StoragePath set to
 // that path as a temporary value resolved later by resolveZIPMedia.
-func extractPptxSlideRefs(slideXML string, rels map[string]string, imageRels map[string]string) []model.ResourceRef {
+func extractPptxSlideRefs(
+	slideXML string,
+	rels map[string]string,
+	imageRels map[string]string,
+) []model.ResourceRef {
 	var refs []model.ResourceRef
 
 	for _, m := range pptxRunRe.FindAllStringSubmatch(slideXML, -1) {

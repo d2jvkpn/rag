@@ -21,7 +21,12 @@ const (
 )
 
 func chunkConfigHash(chunkSize, overlap, minChunks int) string {
-	s := fmt.Sprintf("strategy=structure-first;chunk_size=%d;chunk_overlap=%d;min_chunks=%d", chunkSize, overlap, minChunks)
+	s := fmt.Sprintf(
+		"strategy=structure-first;chunk_size=%d;chunk_overlap=%d;min_chunks=%d",
+		chunkSize,
+		overlap,
+		minChunks,
+	)
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
 }
@@ -38,7 +43,12 @@ func isSentenceEnd(r rune) bool {
 // SectionTitle and PageStart metadata that is propagated to its chunks.
 // If the total number of chunks produced is <= minChunks, the entire document
 // is returned as a single chunk.
-func newChunk(documentID, filename string, chunkVersion int, status string, now time.Time) model.DocumentChunk {
+func newChunk(
+	documentID, filename string,
+	chunkVersion int,
+	status string,
+	now time.Time,
+) model.DocumentChunk {
 	return model.DocumentChunk{
 		ChunkID:      uuid.Must(uuid.NewV7()).String(),
 		CreatedAt:    now,
@@ -52,7 +62,12 @@ func newChunk(documentID, filename string, chunkVersion int, status string, now 
 	}
 }
 
-func BuildChunks(documentID, filename string, blocks []parser.ParseBlock, chunkVersion, chunkSize, overlap, minChunks int, approved bool) []model.DocumentChunk {
+func BuildChunks(
+	documentID, filename string,
+	blocks []parser.ParseBlock,
+	chunkVersion, chunkSize, overlap, minChunks int,
+	approved bool,
+) []model.DocumentChunk {
 	status := "draft"
 	if approved {
 		status = "approved"

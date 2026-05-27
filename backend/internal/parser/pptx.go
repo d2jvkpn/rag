@@ -23,9 +23,12 @@ func parsePptx(path, mediaDir string) (ParseResult, error) {
 	rawRels := map[string]string{}
 
 	for _, file := range reader.File {
-		isSlide := strings.HasPrefix(file.Name, "ppt/slides/slide") && strings.HasSuffix(file.Name, ".xml")
-		isNote := strings.HasPrefix(file.Name, "ppt/notesSlides/notesSlide") && strings.HasSuffix(file.Name, ".xml")
-		isRels := strings.HasPrefix(file.Name, "ppt/slides/_rels/slide") && strings.HasSuffix(file.Name, ".rels")
+		isSlide := strings.HasPrefix(file.Name, "ppt/slides/slide") &&
+			strings.HasSuffix(file.Name, ".xml")
+		isNote := strings.HasPrefix(file.Name, "ppt/notesSlides/notesSlide") &&
+			strings.HasSuffix(file.Name, ".xml")
+		isRels := strings.HasPrefix(file.Name, "ppt/slides/_rels/slide") &&
+			strings.HasSuffix(file.Name, ".rels")
 		if !isSlide && !isNote && !isRels {
 			continue
 		}
@@ -61,8 +64,20 @@ func parsePptx(path, mediaDir string) (ParseResult, error) {
 	slideText := map[string]string{}
 	slideRefs := map[string][]model.ResourceRef{}
 	for slideName, content := range rawSlides {
-		slideText[slideName] = extractOOXMLTextWithMarkdownTables(content, "a:p", "a:t", "a:tbl", "a:tr", "a:tc", false)
-		slideRefs[slideName] = extractPptxSlideRefs(content, slideRels[slideName], slideImageRels[slideName])
+		slideText[slideName] = extractOOXMLTextWithMarkdownTables(
+			content,
+			"a:p",
+			"a:t",
+			"a:tbl",
+			"a:tr",
+			"a:tc",
+			false,
+		)
+		slideRefs[slideName] = extractPptxSlideRefs(
+			content,
+			slideRels[slideName],
+			slideImageRels[slideName],
+		)
 	}
 
 	noteText := map[string]string{}
@@ -90,7 +105,11 @@ func parsePptx(path, mediaDir string) (ParseResult, error) {
 				section = strings.TrimSpace(section + "\n" + placeholder)
 			}
 		}
-		noteName := filepath.Join("ppt", "notesSlides", "notesSlide"+slideNumberFromName(name)+".xml")
+		noteName := filepath.Join(
+			"ppt",
+			"notesSlides",
+			"notesSlide"+slideNumberFromName(name)+".xml",
+		)
 		note := strings.TrimSpace(noteText[noteName])
 		if note != "" {
 			section = strings.TrimSpace(section + "\nNotes: " + note)

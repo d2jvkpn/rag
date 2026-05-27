@@ -40,7 +40,11 @@ type DocumentService struct {
 	collectionCfgs map[string]llm.CollectionConfig
 }
 
-func NewDocumentService(cfg *viper.Viper, store repository.Store, opts ...func(*DocumentService)) (*DocumentService, error) {
+func NewDocumentService(
+	cfg *viper.Viper,
+	store repository.Store,
+	opts ...func(*DocumentService),
+) (*DocumentService, error) {
 	dataDir := cfg.GetString("app.data_dir")
 	if err := os.MkdirAll(filepath.Join(dataDir, "documents"), 0o755); err != nil {
 		return nil, err
@@ -135,7 +139,14 @@ func (s *DocumentService) Shutdown(ctx context.Context) error {
 	}
 }
 
-func (s *DocumentService) CreateDocument(file multipart.File, header *multipart.FileHeader, knowledgeBaseID, title string, tags []string, humanReview bool, uploaderID, uploaderName string) (model.Document, error) {
+func (s *DocumentService) CreateDocument(
+	file multipart.File,
+	header *multipart.FileHeader,
+	knowledgeBaseID, title string,
+	tags []string,
+	humanReview bool,
+	uploaderID, uploaderName string,
+) (model.Document, error) {
 	if knowledgeBaseID == "" {
 		return model.Document{}, errors.New("knowledge_base_id is required")
 	}
@@ -235,13 +246,24 @@ func (s *DocumentService) DeleteDocument(documentID string) error {
 		return err
 	}
 	_ = os.RemoveAll(filepath.Dir(document.StoragePath))
-	if document.ChunkSnapshotPath != "" && filepath.Clean(filepath.Dir(document.ChunkSnapshotPath)) != filepath.Clean(filepath.Dir(document.StoragePath)) {
+	if document.ChunkSnapshotPath != "" &&
+		filepath.Clean(
+			filepath.Dir(document.ChunkSnapshotPath),
+		) != filepath.Clean(
+			filepath.Dir(document.StoragePath),
+		) {
 		_ = os.RemoveAll(filepath.Dir(document.ChunkSnapshotPath))
 	}
-	_ = os.RemoveAll(staticStorageDir(s.cfg.GetString("app.data_dir"), document.DocumentID, document.CreatedAt))
+	_ = os.RemoveAll(
+		staticStorageDir(s.cfg.GetString("app.data_dir"), document.DocumentID, document.CreatedAt),
+	)
 	_ = os.RemoveAll(filepath.Join(s.cfg.GetString("app.data_dir"), "static", document.DocumentID))
 	if document.Status == "indexed" {
-		_ = s.vectorStore.DeleteByDocument(context.Background(), document.KnowledgeBaseID, document.DocumentID)
+		_ = s.vectorStore.DeleteByDocument(
+			context.Background(),
+			document.KnowledgeBaseID,
+			document.DocumentID,
+		)
 	}
 	return nil
 }
@@ -474,9 +496,18 @@ func (s *DocumentService) runIndex(document model.Document) {
 		return
 	}
 
-	snapshotPath, err := s.writeSnapshot(document, approved, document.ChunkVersion, document.ChunkConfigHash)
+	snapshotPath, err := s.writeSnapshot(
+		document,
+		approved,
+		document.ChunkVersion,
+		document.ChunkConfigHash,
+	)
 	if err != nil {
-		infra.L.Warn("write snapshot failed", zap.String("document_id", document.DocumentID), zap.Error(err))
+		infra.L.Warn(
+			"write snapshot failed",
+			zap.String("document_id", document.DocumentID),
+			zap.Error(err),
+		)
 	} else {
 		document.ChunkSnapshotPath = snapshotPath
 	}
@@ -552,7 +583,11 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 		zap.Bool("rechunk", rechunk),
 	)
 
-	mediaDir := staticStorageDir(s.cfg.GetString("app.data_dir"), document.DocumentID, document.CreatedAt)
+	mediaDir := staticStorageDir(
+		s.cfg.GetString("app.data_dir"),
+		document.DocumentID,
+		document.CreatedAt,
+	)
 	parsed, err := parser.Parse(document.StoragePath, document.SourceType, mediaDir)
 	if err != nil {
 		infra.L.Warn("parse failed",
@@ -646,10 +681,19 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 	}
 }
 
-func (s *DocumentService) writeSnapshot(document model.Document, chunks []model.DocumentChunk, chunkVersion int, cfgHash string) (string, error) {
+func (s *DocumentService) writeSnapshot(
+	document model.Document,
+	chunks []model.DocumentChunk,
+	chunkVersion int,
+	cfgHash string,
+) (string, error) {
 	dir := filepath.Dir(document.StoragePath)
 	if dir == "." || dir == "" {
-		dir = documentStorageDir(s.cfg.GetString("app.data_dir"), document.DocumentID, document.CreatedAt)
+		dir = documentStorageDir(
+			s.cfg.GetString("app.data_dir"),
+			document.DocumentID,
+			document.CreatedAt,
+		)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
@@ -710,7 +754,11 @@ type QueryOptions struct {
 	RRFK        int            // RRF k (hybrid only); 0 = default (60)
 }
 
-func (s *DocumentService) Query(knowledgeBaseID, queryText string, topK int, opts QueryOptions) (QueryResult, error) {
+func (s *DocumentService) Query(
+	knowledgeBaseID, queryText string,
+	topK int,
+	opts QueryOptions,
+) (QueryResult, error) {
 	if strings.TrimSpace(knowledgeBaseID) == "" {
 		return QueryResult{}, errors.New("knowledge_base_id is required")
 	}
@@ -741,7 +789,9 @@ func (s *DocumentService) Query(knowledgeBaseID, queryText string, topK int, opt
 			return QueryResult{}, fmt.Errorf("embed query: %w", err)
 		}
 		if len(embeddings) == 0 || len(embeddings[0]) == 0 {
-			return QueryResult{}, errors.New("embedder returned no vector for query; configure embedder.base_url and embedder.api_key")
+			return QueryResult{}, errors.New(
+				"embedder returned no vector for query; configure embedder.base_url and embedder.api_key",
+			)
 		}
 		req.Embedding = embeddings[0]
 	}

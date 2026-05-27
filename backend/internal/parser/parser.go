@@ -28,8 +28,8 @@ type ParseResult struct {
 var textNormalizer = strings.NewReplacer(
 	"\r\n", "\n",
 	"\r", "\n",
-	" ", " ",    // non-breaking space → regular space
-	" ", "\n",   // Unicode line separator → newline
+	" ", " ", // non-breaking space → regular space
+	" ", "\n", // Unicode line separator → newline
 	" ", "\n\n", // Unicode paragraph separator → double newline
 	// PUA bullets from Symbol/Wingdings fonts
 	"", "•",
@@ -82,10 +82,10 @@ func CleanText(input string) string {
 			return -1
 		}
 		switch r {
-		case '­',                      // soft hyphen
-			'​', '‌', '‍',   // zero-width space / non-joiner / joiner
-			'⁠',                        // word joiner
-			'￼', '�':              // object replacement, replacement character
+		case '­', // soft hyphen
+			'​', '‌', '‍', // zero-width space / non-joiner / joiner
+			'⁠',      // word joiner
+			'￼', '�': // object replacement, replacement character
 			return -1
 		}
 		// remove remaining unmapped PUA characters (Symbol/Wingdings artifacts)

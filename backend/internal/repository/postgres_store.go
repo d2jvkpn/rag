@@ -77,7 +77,9 @@ func runMigrations(sqlDB *sql.DB) error {
 func (s *PostgresStore) ensureAccounts(accounts []AccountSeed) error {
 	for _, acc := range accounts {
 		var count int64
-		if err := s.db.Model(&userRow{}).Where("username = ?", acc.Username).Count(&count).Error; err != nil {
+		if err := s.db.Model(&userRow{}).
+			Where("username = ?", acc.Username).
+			Count(&count).Error; err != nil {
 			return err
 		}
 		if count > 0 {
@@ -201,7 +203,9 @@ func (s *PostgresStore) ListDocumentTags(knowledgeBaseID string) []model.Documen
 	return items
 }
 
-func (s *PostgresStore) DeleteDocument(documentID string) (model.Document, []model.DocumentChunk, error) {
+func (s *PostgresStore) DeleteDocument(
+	documentID string,
+) (model.Document, []model.DocumentChunk, error) {
 	var doc model.Document
 	var chunks []model.DocumentChunk
 
@@ -283,7 +287,9 @@ func (s *PostgresStore) ReplaceChunks(documentID string, chunks []model.Document
 
 func (s *PostgresStore) GetChunks(documentID string) ([]model.DocumentChunk, error) {
 	var rows []chunkRow
-	if err := s.db.Where("document_id = ?", documentID).Order("chunk_index asc").Find(&rows).Error; err != nil {
+	if err := s.db.Where("document_id = ?", documentID).
+		Order("chunk_index asc").
+		Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	chunks := make([]model.DocumentChunk, len(rows))

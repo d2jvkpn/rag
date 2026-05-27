@@ -325,18 +325,35 @@ func (m *Milvus) ensureCollection(ctx context.Context, cfg CollectionConfig) err
 
 	schema := entity.NewSchema().
 		WithName(name).
-		WithField(entity.NewField().WithName("id").WithDataType(entity.FieldTypeVarChar).WithIsPrimaryKey(true).WithMaxLength(64)).
-		WithField(entity.NewField().WithName("knowledge_base_id").WithDataType(entity.FieldTypeVarChar).WithMaxLength(64)).
-		WithField(entity.NewField().WithName("document_id").WithDataType(entity.FieldTypeVarChar).WithMaxLength(64)).
-		WithField(entity.NewField().WithName("chunk_id").WithDataType(entity.FieldTypeVarChar).WithMaxLength(64)).
-		WithField(entity.NewField().WithName("filename").WithDataType(entity.FieldTypeVarChar).WithMaxLength(512)).
-		WithField(entity.NewField().WithName("source_type").WithDataType(entity.FieldTypeVarChar).WithMaxLength(32)).
-		WithField(entity.NewField().WithName("section_title").WithDataType(entity.FieldTypeVarChar).WithMaxLength(512)).
+		WithField(entity.NewField().WithName("id").
+			WithDataType(entity.FieldTypeVarChar).
+			WithIsPrimaryKey(true).
+			WithMaxLength(64)).
+		WithField(entity.NewField().WithName("knowledge_base_id").
+			WithDataType(entity.FieldTypeVarChar).
+			WithMaxLength(64)).
+		WithField(entity.NewField().WithName("document_id").
+			WithDataType(entity.FieldTypeVarChar).
+			WithMaxLength(64)).
+		WithField(entity.NewField().WithName("chunk_id").
+			WithDataType(entity.FieldTypeVarChar).
+			WithMaxLength(64)).
+		WithField(entity.NewField().WithName("filename").
+			WithDataType(entity.FieldTypeVarChar).
+			WithMaxLength(512)).
+		WithField(entity.NewField().WithName("source_type").
+			WithDataType(entity.FieldTypeVarChar).
+			WithMaxLength(32)).
+		WithField(entity.NewField().WithName("section_title").
+			WithDataType(entity.FieldTypeVarChar).
+			WithMaxLength(512)).
 		WithField(entity.NewField().WithName("page_start").WithDataType(entity.FieldTypeInt32)).
 		WithField(entity.NewField().WithName("page_end").WithDataType(entity.FieldTypeInt32)).
 		WithField(entity.NewField().WithName("chunk_index").WithDataType(entity.FieldTypeInt32)).
 		WithField(textField).
-		WithField(entity.NewField().WithName("embedding").WithDataType(entity.FieldTypeFloatVector).WithDim(int64(cfg.Dim))).
+		WithField(entity.NewField().WithName("embedding").
+			WithDataType(entity.FieldTypeFloatVector).
+			WithDim(int64(cfg.Dim))).
 		WithField(entity.NewField().WithName("sparse").WithDataType(entity.FieldTypeSparseVector)).
 		WithFunction(entity.NewFunction().
 			WithName("bm25").
@@ -344,7 +361,9 @@ func (m *Milvus) ensureCollection(ctx context.Context, cfg CollectionConfig) err
 			WithInputFields("text").
 			WithOutputFields("sparse"))
 
-	if err := m.client.CreateCollection(ctx, milvusclient.NewCreateCollectionOption(name, schema)); err != nil {
+	if err := m.client.CreateCollection(
+		ctx, milvusclient.NewCreateCollectionOption(name, schema),
+	); err != nil {
 		return fmt.Errorf("milvus create_collection %q: %w", name, err)
 	}
 

@@ -49,8 +49,8 @@ const (
 // SearchRequest carries all parameters for a VectorStore search.
 type SearchRequest struct {
 	KnowledgeBaseID string
-	Embedding       []float32  // required for dense and hybrid modes
-	Query           string     // required for bm25 and hybrid modes
+	Embedding       []float32 // required for dense and hybrid modes
+	Query           string    // required for bm25 and hybrid modes
 	TopK            int
 	DocumentIDs     []string   // optional: restrict results to these documents
 	Mode            SearchMode // defaults to SearchModeDense when empty
@@ -97,7 +97,11 @@ type CollectionConfig struct {
 }
 
 // BuildRecords converts document chunks + embeddings into VectorRecords.
-func BuildRecords(doc model.Document, chunks []model.DocumentChunk, embeddings [][]float32) []VectorRecord {
+func BuildRecords(
+	doc model.Document,
+	chunks []model.DocumentChunk,
+	embeddings [][]float32,
+) []VectorRecord {
 	records := make([]VectorRecord, 0, len(chunks))
 	for i, c := range chunks {
 		if i >= len(embeddings) {

@@ -16,7 +16,11 @@ func TestEmbeddingBatches(t *testing.T) {
 		t.Fatalf("unexpected first batch: start=%d len=%d", batches[0].start, len(batches[0].texts))
 	}
 	if batches[1].start != 10 || len(batches[1].texts) != 1 {
-		t.Fatalf("unexpected second batch: start=%d len=%d", batches[1].start, len(batches[1].texts))
+		t.Fatalf(
+			"unexpected second batch: start=%d len=%d",
+			batches[1].start,
+			len(batches[1].texts),
+		)
 	}
 }
 

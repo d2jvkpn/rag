@@ -22,7 +22,11 @@ type Handler struct {
 	documentService *service.DocumentService
 }
 
-func NewHandler(cfg *viper.Viper, authService *service.AuthService, documentService *service.DocumentService) *Handler {
+func NewHandler(
+	cfg *viper.Viper,
+	authService *service.AuthService,
+	documentService *service.DocumentService,
+) *Handler {
 	return &Handler{
 		cfg:             cfg,
 		authService:     authService,
@@ -57,18 +61,68 @@ func (h *Handler) Routes() http.Handler {
 	apiGroup.GET("/documents", h.withAuth(), h.handleListDocuments)
 	apiGroup.GET("/document-tags", h.withAuth(), h.handleListDocumentTags)
 	apiGroup.GET("/documents/:document_id", h.withAuth(), h.handleGetDocument)
-	apiGroup.DELETE("/documents/:document_id", h.withAuth(), h.withDocumentOwnerOrPermission("delete_documents"), h.handleDeleteDocument)
+	apiGroup.DELETE(
+		"/documents/:document_id",
+		h.withAuth(),
+		h.withDocumentOwnerOrPermission("delete_documents"),
+		h.handleDeleteDocument,
+	)
 	apiGroup.GET("/documents/:document_id/chunks", h.withAuth(), h.handleGetChunks)
-	apiGroup.POST("/documents/:document_id/chunks/rechunk", h.withAuth(), h.withDocumentOwner(), h.handleRechunk)
-	apiGroup.POST("/documents/:document_id/chunks/approve", h.withAuth(), h.withDocumentOwner(), h.handleApproveChunks)
-	apiGroup.POST("/documents/:document_id/chunks/merge", h.withAuth(), h.withDocumentOwner(), h.handleMergeChunks)
-	apiGroup.PUT("/documents/:document_id/chunks/:chunk_id", h.withAuth(), h.withDocumentOwner(), h.handleEditChunk)
-	apiGroup.POST("/documents/:document_id/chunks/:chunk_id/reject", h.withAuth(), h.withDocumentOwner(), h.handleRejectChunk)
-	apiGroup.POST("/documents/:document_id/chunks/:chunk_id/restore", h.withAuth(), h.withDocumentOwner(), h.handleRestoreChunk)
-	apiGroup.POST("/documents/:document_id/index", h.withAuth(), h.withDocumentOwner(), h.handleIndexDocument)
+	apiGroup.POST(
+		"/documents/:document_id/chunks/rechunk",
+		h.withAuth(),
+		h.withDocumentOwner(),
+		h.handleRechunk,
+	)
+	apiGroup.POST(
+		"/documents/:document_id/chunks/approve",
+		h.withAuth(),
+		h.withDocumentOwner(),
+		h.handleApproveChunks,
+	)
+	apiGroup.POST(
+		"/documents/:document_id/chunks/merge",
+		h.withAuth(),
+		h.withDocumentOwner(),
+		h.handleMergeChunks,
+	)
+	apiGroup.PUT(
+		"/documents/:document_id/chunks/:chunk_id",
+		h.withAuth(),
+		h.withDocumentOwner(),
+		h.handleEditChunk,
+	)
+	apiGroup.POST(
+		"/documents/:document_id/chunks/:chunk_id/reject",
+		h.withAuth(),
+		h.withDocumentOwner(),
+		h.handleRejectChunk,
+	)
+	apiGroup.POST(
+		"/documents/:document_id/chunks/:chunk_id/restore",
+		h.withAuth(),
+		h.withDocumentOwner(),
+		h.handleRestoreChunk,
+	)
+	apiGroup.POST(
+		"/documents/:document_id/index",
+		h.withAuth(),
+		h.withDocumentOwner(),
+		h.handleIndexDocument,
+	)
 	apiGroup.GET("/users", h.withAuth(), h.withPermission("view_user_list"), h.handleListUsers)
-	apiGroup.POST("/users/:user_id/disable", h.withAuth(), h.withPermission("disable_users"), h.handleDisableUser)
-	apiGroup.POST("/users/:user_id/enable", h.withAuth(), h.withPermission("disable_users"), h.handleEnableUser)
+	apiGroup.POST(
+		"/users/:user_id/disable",
+		h.withAuth(),
+		h.withPermission("disable_users"),
+		h.handleDisableUser,
+	)
+	apiGroup.POST(
+		"/users/:user_id/enable",
+		h.withAuth(),
+		h.withPermission("disable_users"),
+		h.handleEnableUser,
+	)
 	apiGroup.POST("/query", h.withAuth(), h.handleQuery)
 	apiGroup.GET("/knowledge-bases", h.withAuth(), h.handleListKnowledgeBases)
 	apiGroup.GET("/knowledge-bases/available", h.withAuth(), h.handleListAvailableKnowledgeBases)
@@ -109,7 +163,15 @@ func (h *Handler) handleLogin(c *gin.Context) {
 	}
 
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(h.cfg.GetString("http.session_cookie"), token, int(h.authService.TokenTTL().Seconds()), "/", "", gin.Mode() == gin.ReleaseMode, true)
+	c.SetCookie(
+		h.cfg.GetString("http.session_cookie"),
+		token,
+		int(h.authService.TokenTTL().Seconds()),
+		"/",
+		"",
+		gin.Mode() == gin.ReleaseMode,
+		true,
+	)
 	writeData(c, 200, h.sanitizeUser(user))
 }
 
@@ -119,7 +181,15 @@ func (h *Handler) handleLogout(c *gin.Context) {
 		_ = h.authService.Logout(cookie.Value)
 	}
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(h.cfg.GetString("http.session_cookie"), "", -1, "/", "", gin.Mode() == gin.ReleaseMode, true)
+	c.SetCookie(
+		h.cfg.GetString("http.session_cookie"),
+		"",
+		-1,
+		"/",
+		"",
+		gin.Mode() == gin.ReleaseMode,
+		true,
+	)
 	writeData(c, 200, map[string]any{"accepted": true})
 }
 
@@ -176,9 +246,17 @@ func (h *Handler) handleChangePassword(c *gin.Context) {
 		writeError(c, 400, "validation_error", "missing required fields", errs)
 		return
 	}
-	if err := h.authService.ChangePassword(user.UserID, body.OldPassword, body.NewPassword); err != nil {
+	if err := h.authService.ChangePassword(
+		user.UserID, body.OldPassword, body.NewPassword,
+	); err != nil {
 		if err.Error() == "incorrect current password" {
-			writeError(c, 400, "validation_error", err.Error(), []fieldError{{Field: "old_password", Reason: "incorrect"}})
+			writeError(
+				c,
+				400,
+				"validation_error",
+				err.Error(),
+				[]fieldError{{Field: "old_password", Reason: "incorrect"}},
+			)
 			return
 		}
 		writeError(c, 500, "internal_error", err.Error(), nil)
@@ -195,14 +273,26 @@ func (h *Handler) handleCreateDocument(c *gin.Context) {
 
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
-		writeError(c, 400, "validation_error", "file is required", []fieldError{{Field: "file", Reason: "required"}})
+		writeError(
+			c,
+			400,
+			"validation_error",
+			"file is required",
+			[]fieldError{{Field: "file", Reason: "required"}},
+		)
 		return
 	}
 	defer file.Close()
 
 	knowledgeBaseID := strings.TrimSpace(c.Request.FormValue("knowledge_base_id"))
 	if knowledgeBaseID == "" {
-		writeError(c, 400, "validation_error", "knowledge_base_id is required", []fieldError{{Field: "knowledge_base_id", Reason: "required"}})
+		writeError(
+			c,
+			400,
+			"validation_error",
+			"knowledge_base_id is required",
+			[]fieldError{{Field: "knowledge_base_id", Reason: "required"}},
+		)
 		return
 	}
 
@@ -428,21 +518,38 @@ func (h *Handler) handleQuery(c *gin.Context) {
 		return
 	}
 	if strings.TrimSpace(body.KnowledgeBaseID) == "" {
-		writeError(c, 400, "validation_error", "knowledge_base_id is required", []fieldError{{Field: "knowledge_base_id", Reason: "required"}})
+		writeError(
+			c,
+			400,
+			"validation_error",
+			"knowledge_base_id is required",
+			[]fieldError{{Field: "knowledge_base_id", Reason: "required"}},
+		)
 		return
 	}
 	if strings.TrimSpace(body.Query) == "" {
-		writeError(c, 400, "validation_error", "query is required", []fieldError{{Field: "query", Reason: "required"}})
+		writeError(
+			c,
+			400,
+			"validation_error",
+			"query is required",
+			[]fieldError{{Field: "query", Reason: "required"}},
+		)
 		return
 	}
 
-	qr, err := h.documentService.Query(body.KnowledgeBaseID, body.Query, body.TopK, service.QueryOptions{
-		DocumentIDs: body.DocumentIDs,
-		SearchMode:  body.SearchMode,
-		EF:          body.EF,
-		DropRatio:   body.DropRatio,
-		RRFK:        body.RRFK,
-	})
+	qr, err := h.documentService.Query(
+		body.KnowledgeBaseID,
+		body.Query,
+		body.TopK,
+		service.QueryOptions{
+			DocumentIDs: body.DocumentIDs,
+			SearchMode:  body.SearchMode,
+			EF:          body.EF,
+			DropRatio:   body.DropRatio,
+			RRFK:        body.RRFK,
+		},
+	)
 	if err != nil {
 		writeError(c, 500, "internal_error", err.Error(), nil)
 		return
@@ -473,7 +580,8 @@ func (h *Handler) withDocumentOwnerOrPermission(permission string) gin.HandlerFu
 			c.Abort()
 			return
 		}
-		if doc.UploaderID != "" && doc.UploaderID != user.UserID && (permission == "" || !h.authService.HasPermission(user, permission)) {
+		if doc.UploaderID != "" && doc.UploaderID != user.UserID &&
+			(permission == "" || !h.authService.HasPermission(user, permission)) {
 			writeError(c, 403, "forbidden", "you can only modify your own documents", nil)
 			c.Abort()
 			return

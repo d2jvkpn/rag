@@ -141,7 +141,8 @@ func (s *JSONStore) CreateDocument(document model.Document) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, existing := range s.data.Documents {
-		if existing.KnowledgeBaseID == document.KnowledgeBaseID && existing.SHA256 == document.SHA256 {
+		if existing.KnowledgeBaseID == document.KnowledgeBaseID &&
+			existing.SHA256 == document.SHA256 {
 			return errors.New("document already exists in knowledge base")
 		}
 	}
@@ -224,7 +225,9 @@ func containsTag(tags []string, want string) bool {
 	return false
 }
 
-func (s *JSONStore) DeleteDocument(documentID string) (model.Document, []model.DocumentChunk, error) {
+func (s *JSONStore) DeleteDocument(
+	documentID string,
+) (model.Document, []model.DocumentChunk, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	document, ok := s.data.Documents[documentID]
@@ -326,7 +329,8 @@ func hashPassword(password string) string {
 }
 
 func isBcryptHash(s string) bool {
-	return strings.HasPrefix(s, "$2a$") || strings.HasPrefix(s, "$2b$") || strings.HasPrefix(s, "$2y$")
+	return strings.HasPrefix(s, "$2a$") || strings.HasPrefix(s, "$2b$") ||
+		strings.HasPrefix(s, "$2y$")
 }
 
 func resolvePasswordHash(password string) string {

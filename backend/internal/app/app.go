@@ -43,7 +43,13 @@ func New(v *viper.Viper) (*App, error) {
 		tokenTTL = 0 // falls back to defaultTokenTTL in NewAuthService
 	}
 	blacklist := initBlacklist(v)
-	authService := service.NewAuthService(store, v.GetString("http.jwt_secret"), tokenTTL, accounts, blacklist)
+	authService := service.NewAuthService(
+		store,
+		v.GetString("http.jwt_secret"),
+		tokenTTL,
+		accounts,
+		blacklist,
+	)
 	handler := api.NewHandler(v, authService, documentService)
 
 	return &App{
@@ -128,8 +134,17 @@ func buildServiceOpts(v *viper.Viper) []func(*service.DocumentService) {
 	if embedBaseURL != "" && embedAPIKey != "" {
 		model := v.GetString("embedder.model")
 		batchSize := v.GetInt("embedder.batch_size")
-		infra.L.Info("embedder: openai-compatible", zap.String("model", model), zap.Int("batch_size", batchSize))
-		opts = append(opts, service.WithEmbedder(llm.NewOpenAIEmbedder(embedBaseURL, embedAPIKey, model, batchSize)))
+		infra.L.Info(
+			"embedder: openai-compatible",
+			zap.String("model", model),
+			zap.Int("batch_size", batchSize),
+		)
+		opts = append(
+			opts,
+			service.WithEmbedder(
+				llm.NewOpenAIEmbedder(embedBaseURL, embedAPIKey, model, batchSize),
+			),
+		)
 	} else {
 		infra.L.Info("embedder: noop")
 	}

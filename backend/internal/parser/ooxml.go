@@ -31,8 +31,12 @@ func readZipFile(file *zip.File) ([]byte, error) {
 // separators. Paragraphs are joined with newlines. This preserves words that Word
 // splits across multiple runs due to mixed formatting.
 func extractParagraphText(content, paraTag, runTag string) string {
-	paraRe := regexp.MustCompile(`(?s)<` + regexp.QuoteMeta(paraTag) + `[\s>].*?</` + regexp.QuoteMeta(paraTag) + `>`)
-	runRe := regexp.MustCompile(`(?s)<` + regexp.QuoteMeta(runTag) + `[^>]*>(.*?)</` + regexp.QuoteMeta(runTag) + `>`)
+	paraRe := regexp.MustCompile(
+		`(?s)<` + regexp.QuoteMeta(paraTag) + `[\s>].*?</` + regexp.QuoteMeta(paraTag) + `>`,
+	)
+	runRe := regexp.MustCompile(
+		`(?s)<` + regexp.QuoteMeta(runTag) + `[^>]*>(.*?)</` + regexp.QuoteMeta(runTag) + `>`,
+	)
 
 	paras := paraRe.FindAllString(content, -1)
 	lines := make([]string, 0, len(paras))
@@ -51,8 +55,21 @@ func extractParagraphText(content, paraTag, runTag string) string {
 	return strings.Join(lines, "\n")
 }
 
-func extractOOXMLTextWithMarkdownTables(content, paraTag, runTag, tableTag, rowTag, cellTag string, mergeAdjacentTables bool) string {
-	blockRe := regexp.MustCompile(`(?s)<` + regexp.QuoteMeta(tableTag) + `[\s>].*?</` + regexp.QuoteMeta(tableTag) + `>|<` + regexp.QuoteMeta(paraTag) + `[\s>].*?</` + regexp.QuoteMeta(paraTag) + `>`)
+func extractOOXMLTextWithMarkdownTables(
+	content, paraTag, runTag, tableTag, rowTag, cellTag string,
+	mergeAdjacentTables bool,
+) string {
+	blockRe := regexp.MustCompile(
+		`(?s)<` + regexp.QuoteMeta(
+			tableTag,
+		) + `[\s>].*?</` + regexp.QuoteMeta(
+			tableTag,
+		) + `>|<` + regexp.QuoteMeta(
+			paraTag,
+		) + `[\s>].*?</` + regexp.QuoteMeta(
+			paraTag,
+		) + `>`,
+	)
 	tableStartRe := regexp.MustCompile(`(?s)^<` + regexp.QuoteMeta(tableTag) + `[\s>]`)
 
 	blocks := blockRe.FindAllString(content, -1)
@@ -98,8 +115,12 @@ func extractMarkdownTable(content, paraTag, runTag, rowTag, cellTag string) stri
 }
 
 func extractTableRows(content, paraTag, runTag, rowTag, cellTag string) [][]string {
-	rowRe := regexp.MustCompile(`(?s)<` + regexp.QuoteMeta(rowTag) + `[\s>].*?</` + regexp.QuoteMeta(rowTag) + `>`)
-	cellRe := regexp.MustCompile(`(?s)<` + regexp.QuoteMeta(cellTag) + `[\s>].*?</` + regexp.QuoteMeta(cellTag) + `>`)
+	rowRe := regexp.MustCompile(
+		`(?s)<` + regexp.QuoteMeta(rowTag) + `[\s>].*?</` + regexp.QuoteMeta(rowTag) + `>`,
+	)
+	cellRe := regexp.MustCompile(
+		`(?s)<` + regexp.QuoteMeta(cellTag) + `[\s>].*?</` + regexp.QuoteMeta(cellTag) + `>`,
+	)
 
 	rowMatches := rowRe.FindAllString(content, -1)
 	if len(rowMatches) == 0 {
@@ -170,7 +191,8 @@ func mergeAdjacentOOXMLTables(items []ooxmlBlock) []ooxmlBlock {
 		}
 
 		last := &merged[len(merged)-1]
-		if last.kind == "table" && item.kind == "table" && canMergeOOXMLTables(last.rows, item.rows) {
+		if last.kind == "table" && item.kind == "table" &&
+			canMergeOOXMLTables(last.rows, item.rows) {
 			last.rows = mergeOOXMLTableRows(last.rows, item.rows)
 			last.refs = append(last.refs, item.refs...)
 			continue

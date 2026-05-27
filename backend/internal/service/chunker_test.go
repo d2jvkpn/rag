@@ -9,7 +9,16 @@ import (
 
 func TestBuildChunksShortDocument(t *testing.T) {
 	blocks := []parser.ParseBlock{{Text: "hello world"}}
-	chunks := BuildChunks("doc-1", "sample.md", blocks, 1, DefaultChunkSize, DefaultChunkOverlap, DefaultMinChunks, false)
+	chunks := BuildChunks(
+		"doc-1",
+		"sample.md",
+		blocks,
+		1,
+		DefaultChunkSize,
+		DefaultChunkOverlap,
+		DefaultMinChunks,
+		false,
+	)
 	if len(chunks) != 1 {
 		t.Fatalf("expected 1 chunk, got %d", len(chunks))
 	}
@@ -21,7 +30,16 @@ func TestBuildChunksShortDocument(t *testing.T) {
 func TestBuildChunksLongDocument(t *testing.T) {
 	text := strings.Repeat("段落内容。", 700)
 	blocks := []parser.ParseBlock{{Text: text}}
-	chunks := BuildChunks("doc-1", "sample.md", blocks, 1, DefaultChunkSize, DefaultChunkOverlap, DefaultMinChunks, false)
+	chunks := BuildChunks(
+		"doc-1",
+		"sample.md",
+		blocks,
+		1,
+		DefaultChunkSize,
+		DefaultChunkOverlap,
+		DefaultMinChunks,
+		false,
+	)
 	if len(chunks) < 2 {
 		t.Fatalf("expected multiple chunks, got %d", len(chunks))
 	}
@@ -32,7 +50,16 @@ func TestBuildChunksSectionMetadata(t *testing.T) {
 		{Text: strings.Repeat("内容句子。", 300), SectionTitle: "第一章", PageStart: 1},
 		{Text: strings.Repeat("内容句子。", 300), SectionTitle: "第二章", PageStart: 2},
 	}
-	chunks := BuildChunks("doc-1", "sample.md", blocks, 1, DefaultChunkSize, DefaultChunkOverlap, DefaultMinChunks, false)
+	chunks := BuildChunks(
+		"doc-1",
+		"sample.md",
+		blocks,
+		1,
+		DefaultChunkSize,
+		DefaultChunkOverlap,
+		DefaultMinChunks,
+		false,
+	)
 	if len(chunks) < 2 {
 		t.Fatalf("expected multiple chunks, got %d", len(chunks))
 	}
@@ -46,7 +73,11 @@ func TestBuildChunksSectionMetadata(t *testing.T) {
 		}
 	}
 	if !sawFirst || !sawSecond {
-		t.Fatalf("expected chunks from both sections, sawFirst=%v sawSecond=%v", sawFirst, sawSecond)
+		t.Fatalf(
+			"expected chunks from both sections, sawFirst=%v sawSecond=%v",
+			sawFirst,
+			sawSecond,
+		)
 	}
 }
 
@@ -56,7 +87,16 @@ func TestBuildChunksMinChunksMerge(t *testing.T) {
 		{Text: "短文本一。"},
 		{Text: "短文本二。"},
 	}
-	chunks := BuildChunks("doc-1", "sample.md", blocks, 1, DefaultChunkSize, DefaultChunkOverlap, DefaultMinChunks, false)
+	chunks := BuildChunks(
+		"doc-1",
+		"sample.md",
+		blocks,
+		1,
+		DefaultChunkSize,
+		DefaultChunkOverlap,
+		DefaultMinChunks,
+		false,
+	)
 	if len(chunks) != 1 {
 		t.Fatalf("expected 1 merged chunk, got %d", len(chunks))
 	}

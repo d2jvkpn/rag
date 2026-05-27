@@ -13,7 +13,10 @@ type task struct {
 	rechunk    bool
 }
 
-func NewGoroutineQueue(concurrency int, handler func(documentID string, rechunk bool)) *GoroutineQueue {
+func NewGoroutineQueue(
+	concurrency int,
+	handler func(documentID string, rechunk bool),
+) *GoroutineQueue {
 	q := &GoroutineQueue{ch: make(chan task, 32)}
 	for range concurrency {
 		q.wg.Add(1)
