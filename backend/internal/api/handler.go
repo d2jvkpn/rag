@@ -31,7 +31,7 @@ func NewHandler(cfg *viper.Viper, authService *service.AuthService, documentServ
 
 func (h *Handler) Routes() http.Handler {
 	router := gin.New()
-	router.Use(gin.Recovery(), infra.RequestLogger())
+	router.Use(gin.Recovery(), infra.RequestLogger(), h.cors())
 
 	apiGroup := router.Group("/api")
 	apiGroup.POST("/login", h.handleLogin)

@@ -466,3 +466,52 @@ func waitForTest(t *testing.T, timeout time.Duration, fn func() bool) {
 	}
 	t.Fatal("condition not met before timeout")
 }
+
+func TestCORSAllowsAnyOrigin(t *testing.T) {
+	t.Parallel()
+
+	v := viper.New()
+	v.Set("http.allow_origins", []string{"*"})
+	handler := NewHandler(v, nil, nil).Routes()
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/me", nil)
+	req.Header.Set("Origin", "https://console.example.com")
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", rec.Code)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "https://console.example.com" {
+		t.Fatalf("unexpected allow origin: %q", got)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Credentials"); got != "true" {
+		t.Fatalf("unexpected allow credentials: %q", got)
+	}
+}
+
+func TestCORSAllowsConfiguredOriginOnly(t *testing.T) {
+	t.Parallel()
+
+	v := viper.New()
+	v.Set("http.allow_origins", []string{"https://app.example.com"})
+	handler := NewHandler(v, nil, nil).Routes()
+
+	allowedReq := httptest.NewRequest(http.MethodOptions, "/api/me", nil)
+	allowedReq.Header.Set("Origin", "https://app.example.com")
+	allowedRec := httptest.NewRecorder()
+	handler.ServeHTTP(allowedRec, allowedReq)
+	if got := allowedRec.Header().Get("Access-Control-Allow-Origin"); got != "https://app.example.com" {
+		t.Fatalf("unexpected allow origin for configured origin: %q", got)
+	}
+
+	blockedReq := httptest.NewRequest(http.MethodOptions, "/api/me", nil)
+	blockedReq.Header.Set("Origin", "https://blocked.example.com")
+	blockedRec := httptest.NewRecorder()
+	handler.ServeHTTP(blockedRec, blockedReq)
+	if got := blockedRec.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("blocked origin should not receive CORS header, got %q", got)
+	}
+}

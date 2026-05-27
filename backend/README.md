@@ -28,7 +28,7 @@ database:
 go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 
 # 执行迁移
-migrate -path migrations/sql -database "postgres://user:password@localhost:5432/ragdb?sslmode=disable" up
+migrate -path internal/migrations/sql -database "postgres://user:password@localhost:5432/ragdb?sslmode=disable" up
 ```
 
 ## 当前实现取舍
@@ -55,7 +55,7 @@ go run ./cmd/server --config configs/local.yaml
 监听地址优先级：
 
 - 先使用 `--addr`
-- 未传时使用配置文件里的 `http_addr`
+- 未传时使用配置文件里的 `http.addr`
 
 默认账号：
 
@@ -74,9 +74,13 @@ go run ./cmd/server --config configs/local.yaml
 
 当前配置项：
 
-- `http_addr`
-- `data_dir`
-- `state_path`
-- `session_cookie`
-- `admin.username`
-- `admin.password`
+- `http.addr`
+- `http.jwt_secret`
+- `http.jwt_token_ttl`
+- `http.session_cookie`
+- `http.allow_origins`
+- `app.data_dir`
+- `app.state_path`
+- `accounts[].username`
+- `accounts[].password`
+- `accounts[].permissions`

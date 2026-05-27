@@ -15,8 +15,8 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
+	"backend/internal/migrations"
 	"backend/internal/model"
-	"backend/migrations"
 )
 
 type PostgresStore struct {

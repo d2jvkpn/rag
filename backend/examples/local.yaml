@@ -1,0 +1,63 @@
+app:
+  name: rag
+  data_dir: "data"
+  # Used only by the local JSON store when database.dsn is empty.
+  # If omitted, the service falls back to {app.data_dir}/app-state.json.
+  state_path: "data/app-state.json"
+
+accounts:
+- username: "admin"
+  password: "admin123"
+  permissions:
+  - "view_user_list"
+  - "delete_documents"
+  - "disable_users"
+
+http:
+  # http.addr is intentionally not set here. Use the command line instead:
+  # go run cmd/server/main.go --addr :3061
+  jwt_secret: "change-me-in-production"
+  jwt_token_ttl: "8h"
+  session_cookie: "rag"
+  allow_origins:
+  - "*"
+
+# Set database.dsn to enable PostgreSQL. Leave empty to use the JSON store.
+database:
+  # Example: "postgres://rag:rag@127.0.0.1:5432/ragdb?sslmode=disable"
+  dsn: ""
+
+# Set redis.dsn to enable Redis-backed token blacklist and Asynq tasks.
+redis:
+  # Example: "redis://127.0.0.1:6379/0"
+  dsn: ""
+
+# OpenAI-compatible embedding endpoint. Leave base_url/api_key empty for Noop.
+embedder:
+  # Example: "https://api.openai.com/v1"
+  # Example: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  base_url: ""
+  api_key: ""
+  model: "text-embedding-3-small"
+  batch_size: 10
+
+# Milvus is enabled only when addr is non-empty. Collection names are knowledge_base_id values.
+milvus:
+  # Example: "127.0.0.1:19530"
+  addr: ""
+  db: "rag"
+  collections:
+  - collection: "public"
+    dim: 1536
+    analyzer: "chinese"
+    chunk_size: 1000
+    chunk_overlap: 150
+    min_chunks: 3
+
+# OpenAI-compatible chat completion endpoint. Leave base_url/api_key empty for Noop.
+llm:
+  # Example: "https://api.openai.com/v1"
+  # Example: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  base_url: ""
+  api_key: ""
+  model: "gpt-4o-mini"

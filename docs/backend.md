@@ -354,7 +354,7 @@ backend/
 - `backend/data/`: 后端数据目录，包含文档原文件、chunk 快照、派生资源等
 - `backend/logs/`: 后端日志目录
 - `backend/target/`: 后端编译产物目录
-- `backend/migrations/sql/`: SQL migration 文件目录
+- `backend/internal/migrations/sql/`: SQL migration 文件目录
 
 当前实际目录结构：
 
@@ -365,19 +365,20 @@ backend/
   configs/local.yaml         # 本地配置（gitignore）
   data/                      # 文档/快照（gitignore）
   logs/                      # 运行日志（gitignore）
-  migrations/sql/            # numbered up/down SQL
   internal/
+    migrations/sql/         # numbered up/down SQL
     api/                     # gin handler、middleware、response
     app/                     # App 装配（store/embedder/llm/queue/milvus 等）
     infra/                   # 全局 logger、请求日志中间件
-    llm/                     # Embedder、VectorStore (Milvus)、LLM、parser
+    llm/                     # Embedder、VectorStore (Milvus)、LLM
+    parser/                  # Markdown/DOCX/PPTX/PDF parser
     model/                   # 领域模型
     queue/                   # TaskQueue（GoroutineQueue / AsynqQueue）
     repository/              # Store 接口、JSONStore、PostgresStore
     service/                 # AuthService、DocumentService、blacklist、chunker
 ```
 
-> 历史 README/计划里出现过的 `config/`、`parser/`、`uuid/` 包已并入 `app/` / `llm/` 等位置，不再以独立包存在。
+> 历史 README/计划里出现过的 `config/`、`uuid/` 包已并入 `app/` / 相关内部包；parser 已迁移为 `internal/parser`。
 
 ## 实现顺序
 
@@ -406,6 +407,7 @@ backend/
 - `PostgresStore`：`gorm` + `lib/pq` driver，支持 `TEXT[]` tags 和 `JSONB` resource_refs
 - 启动时根据 `database.dsn` 配置自动选择 store
 - 登录、退出、当前用户接口；密码使用 bcrypt 哈希
+- CORS 使用 `github.com/gin-contrib/cors`，由 `http.allow_origins` 控制；必须是非空列表，`"*"` 表示允许任意 Origin
 - 文档上传（记录 uploader）、列表、详情、删除接口
 - 文档所有权中间件 `withDocumentOwner()`：非上传者操作变更接口返回 403
 - `markdown`、`docx`、`pptx` 基础解析

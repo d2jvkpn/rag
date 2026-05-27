@@ -212,7 +212,7 @@ export default {
     source: '来源',
     page: '页码',
     metadata: '元数据',
-    detailsAndRefs: '详情 / 引用 ({n})',
+    detailsAndRefs: '详情',
     detailsAndRefsTitle: 'Chunk 详情',
     noResourceRefs: '暂无资源引用',
     externalResource: '外部资源',

@@ -1,4 +1,4 @@
-package llm
+package parser
 
 import (
 	"archive/zip"

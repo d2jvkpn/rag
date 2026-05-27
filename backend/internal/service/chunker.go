@@ -9,8 +9,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"backend/internal/llm"
 	"backend/internal/model"
+	"backend/internal/parser"
 )
 
 const (
@@ -37,7 +37,7 @@ func isSentenceEnd(r rune) bool {
 // SectionTitle and PageStart metadata that is propagated to its chunks.
 // If the total number of chunks produced is <= minChunks, the entire document
 // is returned as a single chunk.
-func BuildChunks(documentID, filename string, blocks []llm.ParseBlock, chunkVersion, chunkSize, overlap, minChunks int, approved bool) []model.DocumentChunk {
+func BuildChunks(documentID, filename string, blocks []parser.ParseBlock, chunkVersion, chunkSize, overlap, minChunks int, approved bool) []model.DocumentChunk {
 	status := "draft"
 	if approved {
 		status = "approved"

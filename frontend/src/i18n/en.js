@@ -212,7 +212,7 @@ export default {
     source: 'Source',
     page: 'Page',
     metadata: 'Metadata',
-    detailsAndRefs: 'Details / Refs ({n})',
+    detailsAndRefs: 'Details',
     detailsAndRefsTitle: 'Chunk Details',
     noResourceRefs: 'No resource refs',
     externalResource: 'External resource',

@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"backend/internal/llm"
+	"backend/internal/parser"
 )
 
 func TestBuildChunksShortDocument(t *testing.T) {
-	blocks := []llm.ParseBlock{{Text: "hello world"}}
+	blocks := []parser.ParseBlock{{Text: "hello world"}}
 	chunks := BuildChunks("doc-1", "sample.md", blocks, 1, DefaultChunkSize, DefaultChunkOverlap, DefaultMinChunks, false)
 	if len(chunks) != 1 {
 		t.Fatalf("expected 1 chunk, got %d", len(chunks))
@@ -20,7 +20,7 @@ func TestBuildChunksShortDocument(t *testing.T) {
 
 func TestBuildChunksLongDocument(t *testing.T) {
 	text := strings.Repeat("段落内容。", 700)
-	blocks := []llm.ParseBlock{{Text: text}}
+	blocks := []parser.ParseBlock{{Text: text}}
 	chunks := BuildChunks("doc-1", "sample.md", blocks, 1, DefaultChunkSize, DefaultChunkOverlap, DefaultMinChunks, false)
 	if len(chunks) < 2 {
 		t.Fatalf("expected multiple chunks, got %d", len(chunks))
@@ -28,7 +28,7 @@ func TestBuildChunksLongDocument(t *testing.T) {
 }
 
 func TestBuildChunksSectionMetadata(t *testing.T) {
-	blocks := []llm.ParseBlock{
+	blocks := []parser.ParseBlock{
 		{Text: strings.Repeat("内容句子。", 300), SectionTitle: "第一章", PageStart: 1},
 		{Text: strings.Repeat("内容句子。", 300), SectionTitle: "第二章", PageStart: 2},
 	}
@@ -52,7 +52,7 @@ func TestBuildChunksSectionMetadata(t *testing.T) {
 
 func TestBuildChunksMinChunksMerge(t *testing.T) {
 	// two blocks that together produce only 2 chunks — should merge to 1
-	blocks := []llm.ParseBlock{
+	blocks := []parser.ParseBlock{
 		{Text: "短文本一。"},
 		{Text: "短文本二。"},
 	}
@@ -121,4 +121,3 @@ func TestIsMarkdownTable(t *testing.T) {
 		t.Fatal("expected isMarkdownTable=false")
 	}
 }
-

@@ -24,6 +24,7 @@ import (
 	"backend/internal/infra"
 	"backend/internal/llm"
 	"backend/internal/model"
+	"backend/internal/parser"
 	"backend/internal/queue"
 	"backend/internal/repository"
 )
@@ -559,7 +560,7 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 	)
 
 	mediaDir := staticStorageDir(s.cfg.GetString("app.data_dir"), document.DocumentID, document.CreatedAt)
-	parsed, err := llm.Parse(document.StoragePath, document.SourceType, mediaDir)
+	parsed, err := parser.Parse(document.StoragePath, document.SourceType, mediaDir)
 	if err != nil {
 		infra.L.Warn("parse failed",
 			zap.String("document_id", document.DocumentID),
@@ -572,10 +573,10 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 		return
 	}
 
-	var blocks []llm.ParseBlock
+	var blocks []parser.ParseBlock
 	if len(parsed.Blocks) > 0 {
 		for i := range parsed.Blocks {
-			parsed.Blocks[i].Text = llm.CleanText(parsed.Blocks[i].Text)
+			parsed.Blocks[i].Text = parser.CleanText(parsed.Blocks[i].Text)
 		}
 		for _, b := range parsed.Blocks {
 			if strings.TrimSpace(b.Text) != "" {
@@ -583,9 +584,9 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 			}
 		}
 	} else {
-		cleaned := llm.CleanText(parsed.Text)
+		cleaned := parser.CleanText(parsed.Text)
 		if cleaned != "" {
-			blocks = []llm.ParseBlock{{Text: cleaned}}
+			blocks = []parser.ParseBlock{{Text: cleaned}}
 		}
 	}
 	if len(blocks) == 0 {
