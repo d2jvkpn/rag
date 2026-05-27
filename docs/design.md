@@ -38,9 +38,9 @@ uploaded
 `knowledge_base_id` 不是普通的标签，它是文档归属边界，承担四个职责：
 
 1. 标识文档所属知识库
-2. 检索时的过滤边界，阻止跨知识库召回
-3. 文件存储路径的命名空间（`data/documents/.../` 和 `data/static/.../`）
-4. Chunk 快照路径的命名空间
+2. 上传时校验目标 collection，并选择对应 chunk 参数和 analyzer 配置
+3. 检索时的过滤边界，阻止跨知识库召回
+4. 向量写入和删除时选择对应 Milvus collection
 
 `knowledge_base_id` 在上传时验证，必须匹配 `milvus.collections[*].collection` 中已配置的 collection 名称。上传后不可修改。即使系统只有单一知识库，也必须保留此字段。
 

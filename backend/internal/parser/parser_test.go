@@ -249,13 +249,13 @@ func TestParsePptxConvertsTablesToMarkdown(t *testing.T) {
 	}
 
 	want := strings.Join([]string{
-		"幻灯片 1",
+		"Slide 1",
 		"概览",
 		"",
 		"| 指标 | 数值 |",
 		"| --- | --- |",
 		"| 收入 | 100 |",
-		"备注: 补充说明",
+		"Notes: 补充说明",
 	}, "\n")
 	if got.Text != want {
 		t.Fatalf("unexpected text:\n%s\nwant:\n%s", got.Text, want)
@@ -377,7 +377,7 @@ func TestParsePptxReturnsBlocks(t *testing.T) {
 			got.Blocks[1].PageStart,
 		)
 	}
-	if got.Blocks[0].SectionTitle != "幻灯片 1" {
+	if got.Blocks[0].SectionTitle != "Slide 1" {
 		t.Errorf("unexpected SectionTitle: %q", got.Blocks[0].SectionTitle)
 	}
 }
@@ -386,7 +386,7 @@ func TestExtractMarkdownRefs(t *testing.T) {
 	input := "See [Go docs](https://go.dev) and ![logo](img/logo.png) for details."
 	text, refs := extractMarkdownRefs(input)
 
-	if text != "See Go docs and [图片: logo] for details." {
+	if text != "See Go docs and [Image: logo] for details." {
 		t.Fatalf("unexpected text: %q", text)
 	}
 	if len(refs) != 2 {
@@ -501,7 +501,7 @@ func TestParseDocxExtractsImageRef(t *testing.T) {
 		t.Errorf("unexpected ref: %+v", allRefs[0])
 	}
 	// placeholder text should appear in the document text
-	if !strings.Contains(got.Text, "[图片: Figure caption]") {
+	if !strings.Contains(got.Text, "[Image: Figure caption]") {
 		t.Errorf("expected image placeholder in text, got: %q", got.Text)
 	}
 }
@@ -538,7 +538,7 @@ func TestParsePptxExtractsImageRef(t *testing.T) {
 	if ref.RefType != "image" || ref.Label != "Chart overview" {
 		t.Errorf("unexpected ref: %+v", ref)
 	}
-	if !strings.Contains(got.Blocks[0].Text, "[图片: Chart overview]") {
+	if !strings.Contains(got.Blocks[0].Text, "[Image: Chart overview]") {
 		t.Errorf("expected image placeholder in block text: %q", got.Blocks[0].Text)
 	}
 }

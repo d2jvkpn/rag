@@ -192,7 +192,7 @@ Loader 将 snake_case 字段规范化为 camelCase，兼容旧版 camelCase 配�
 
 ## 配置参考
 
-配置文件：`backend/configs/local.yaml`，通过 viper 加载。
+默认配置路径为 `backend/configs/local.yaml`；仓库提供示例配置 `backend/examples/local.yaml`，通过 `--config` 指定后由 viper 加载。
 
 | 键 | 默认值 | 说明 |
 |---|---|---|

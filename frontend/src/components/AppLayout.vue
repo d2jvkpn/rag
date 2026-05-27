@@ -119,6 +119,7 @@ import { getConfig } from '../config/app-config.js'
 import { authService } from '../services/auth.js'
 import { useI18n } from '../i18n/index.js'
 import { LOCALES } from '../stores/locale.js'
+import { toDataURL } from 'qrcode'
 
 const router = useRouter()
 const route = useRoute()
@@ -287,7 +288,6 @@ async function startTOTPSetup() {
   totpError.value = ''
   try {
     const data = await authService.totpSetup()
-    const { toDataURL } = await import('qrcode')
     totpSecret.value = data.secret
     totpQRDataUrl.value = await toDataURL(data.qr_url, { width: 200, margin: 1 })
     totpStep.value = 'setup'

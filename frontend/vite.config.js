@@ -6,6 +6,13 @@ export default defineConfig({
   build: {
     outDir: 'target/dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/naive-ui')) return 'vendor-naive-ui'
+        },
+      },
+    },
   },
   server: {
     port: 3062,

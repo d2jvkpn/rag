@@ -29,14 +29,14 @@
 
 - 后端项目骨架和基础配置
 - `gin` 路由骨架
-- `configs/local.yaml` + `viper` 配置加载
+- `examples/local.yaml` 示例配置 + `viper` 配置加载（默认仍支持 `configs/local.yaml`）
 - `--release`、`--addr`、`--config` 启动参数
 - `users`、`documents`、`document_chunks` 基础 migration
 - 登录态与基础鉴权
 - 文档上传接口
 - 文档列表、详情、删除接口
 - 异步解析与切分 worker
-- chunk JSON 快照写入 `backend/data/chunks/`
+- chunk JSON 快照写入 `backend/data/documents/{yyyy}/{mm}/{dd}/{yyyy-mm-dd}_{document_id}/chunks-vN.json`
 - chunk 列表查询接口
 - `rechunk` 接口
 - 统一错误响应、参数校验、结构化日志
@@ -45,14 +45,14 @@
 
 - HTTP 服务使用 `gin`
 - 状态存储：`JSONStore`（本地 JSON）和 `PostgresStore`（`gorm` + `lib/pq`）双实现，通过 `database.dsn` 配置选择
-- 异步处理使用进程内 goroutine 队列（`Asynq` 待接入）
+- 异步处理支持进程内 goroutine 队列和 Redis-backed Asynq，通过 `redis.dsn` 配置选择
 - 鉴权使用 `JWT + HttpOnly Cookie`（`github.com/golang-jwt/jwt/v5`）
 
 第一阶段不包含：
 
-- 人工 chunk 合并、驳回、审核通过
-- embedding 外部 API 接入
-- Milvus 写入与检索
+- 高级审核协作能力
+- 强制依赖外部 embedding 服务
+- 强制依赖 Milvus 服务
 - OCR
 - 多知识库高级权限模型
 
@@ -73,24 +73,27 @@
 
 - 第 1、2、3、4、5、7、8、9、10 步已完成最小骨架
 - `rechunk` 已提前落地
-- 第 6 步当前用进程内 goroutine 队列替代 `Asynq`
-- `PostgresStore` 已完整实现，通过 `database.dsn` 启用；Milvus 和 embedding 仍未开始
+- 第 6 步已抽象为 `TaskQueue`，默认使用进程内 goroutine 队列，配置 `redis.dsn` 后启用 Asynq
+- `PostgresStore` 已完整实现，通过 `database.dsn` 启用
+- embedding、Milvus、LLM 已提供可配置实现；未配置时使用 Noop，不作为第一阶段本地验收阻塞
 
 ## 前端落地顺序
 
-第一阶段前端只做最小页面：
+第一阶段前端当前页面：
 
 - 登录页
 - 文档列表页
 - 文档上传入口
 - 文档详情页
-- chunk 预览页
+- chunk 审核/预览页
+- 知识库查询页
+- 用户列表页（需要 `view_user_list` 权限）
 
 联调顺序：
 
 1. 先接登录态
 2. 再接文档上传和状态轮询
-3. 最后接 chunk 列表展示和删除动作
+3. 最后接 chunk 列表展示、审核动作、搜索页和用户列表权限校验
 
 ## 验收标准
 

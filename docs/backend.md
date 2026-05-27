@@ -47,18 +47,18 @@
 - 鉴权使用 `JWT`（HS256，`github.com/golang-jwt/jwt/v5`），令牌存 `HttpOnly Cookie`
 - 密码哈希使用 **bcrypt**（`golang.org/x/crypto/bcrypt`，`DefaultCost`）
 - TOTP 两步验证（`github.com/pquerna/otp/totp`，RFC 6238，30 秒窗口）
-- 配置文件固定使用 `backend/configs/local.yaml`
+- 默认配置路径为 `backend/configs/local.yaml`；仓库示例配置为 `backend/examples/local.yaml`
 - 配置读取使用 `viper`，统一通过 `viper.GetString/GetXX` 获取
 - 启动参数使用命令行 flag，不使用环境变量
 - 存储双实现：`JSONStore`（本地 JSON 文件，`state_path` 指定）和 `PostgresStore`（`gorm` + `lib/pq`），通过 `database.dsn` 配置自动选择
-- 异步处理先使用进程内 goroutine 队列（channel 容量 32）
+- 异步处理支持进程内 goroutine 队列（channel 容量 32）和 Redis-backed Asynq，通过 `redis.dsn` 自动选择
 - 原始文件和 chunk 快照写入同一个 `backend/data/documents/{yyyy}/{mm}/{dd}/{yyyy-mm-dd}_{document_id}/` 目录
 
 当前启动参数：
 
 - `--release bool`
 - `--addr string`
-- `--config configs/local.yaml`
+- `--config string`（示例：`examples/local.yaml`）
 
 当前退出行为：
 
@@ -70,8 +70,8 @@
 当前实现取舍（第一阶段历史记录）：
 
 - 先验证”上传 -> 解析 -> 切分 -> 快照 -> 查询 -> 删除”闭环
-- 第一阶段未引入 `Asynq`，使用进程内 goroutine 队列；第三阶段已补充
-- 第一阶段未接入 `Milvus` 和 embedding API；第三阶段已补充
+- 当前已支持 `GoroutineQueue` 和 Redis-backed `AsynqQueue`；未配置 `redis.dsn` 时使用进程内队列
+- 当前已支持 OpenAI-compatible embedding 和 Milvus；未配置时使用 Noop 实现
 - 第一阶段 `Logout` 为 no-op；现已实现 JTI + `TokenBlacklist`（内存/Redis 双实现）
 - TOTP 两步验证：用户可自行开启/关闭；登录时若 `totp_enabled=true` 且未提交 `totp_code`，返回 `{"totp_required": true}`（HTTP 200），前端切换到验证码输入步骤后再次提交
 
@@ -222,10 +222,11 @@ chunk 快照约定：
 - 第一版默认不强制人工审核，审核能力作为可选流程
 - `documents` 初始状态为 `uploaded`
 - 第一版不引入独立的 `document_resources` 表，图片、表格、链接引用先写入 `document_chunks.resource_refs`
+- 解析器会在正文中保留图片占位符：无标签时为 `[Image]`，有标签时为 `[Image: label]`；PPTX 备注以 `Notes: ...` 附加到幻灯片文本
 - `docx` / `pptx` 遇到原生表格时，会转成 Markdown 表格文本并写入 `document_chunks.text`；正文段落、标题、列表等其他元素仅提取纯文本，不转 Markdown 格式
 - `docx` 中检测到 `w:pStyle` heading 样式（`Heading1`–N、`1`–`6`、`标题N`）时按标题边界拆分为结构化 blocks，每个 block 带 `SectionTitle`；无标题文档退回单 block
 - `docx` 中相邻且列数一致的连续表会按续表处理并合并；若后一张表首行与前一张表表头一致，会自动去掉重复表头
-- `pptx` 每张幻灯片作为独立 block，`SectionTitle` = "幻灯片 N"，`PageStart` = 幻灯片编号
+- `pptx` 每张幻灯片作为独立 block，`SectionTitle` = "Slide N"，`PageStart` = 幻灯片编号
 - `markdown` 中原有表格语法保持原样，不做二次转换；按 `#/##/…` 标题边界拆分为 blocks
 - `pdf` 通过 Python 脚本调用 `pdfplumber` 提取文本，并将识别到的页内表格转成 Markdown 表格文本；正文抽取会尽量排除表格区域，减少重复内容；会尝试合并相邻页列数一致的续页表并去掉重复表头；内容尺寸的图片、表格和 PDF 超链接会写入 `resource_refs`，PDF 图片会渲染为 PNG 并保存到 `data/static/{yyyy}/{mm}/{dd}/{yyyy-mm-dd}_{document_id}`；每页作为独立 block，`PageStart` = 页码；要求运行环境可执行 `python3` 且安装 `pdfplumber`
 - 扫描版 PDF 或其他无可提取文本的 PDF 仍会直接失败，不做 OCR
@@ -383,7 +384,7 @@ backend/
 backend/
   Makefile
   cmd/server/                # 入口
-  configs/local.yaml         # 本地配置（gitignore）
+  examples/local.yaml         # 示例配置
   data/                      # 文档/快照（gitignore）
   logs/                      # 运行日志（gitignore）
   internal/
@@ -421,7 +422,7 @@ backend/
 
 - `backend/` Go 模块和最小目录骨架
 - `gin` 路由与鉴权中间件骨架
-- `configs/local.yaml` + `viper` 配置加载
+- `examples/local.yaml` 示例配置 + `viper` 配置加载（默认仍支持 `configs/local.yaml`）
 - `--release`、`--addr`、`--config` 启动参数
 - `users`、`documents`、`document_chunks` 表落地，含 `human_review`、`uploader_id/name`、`totp_secret/enabled` 等字段
 - `repository.Store` 接口；`JSONStore` 和 `PostgresStore` 双实现

@@ -97,7 +97,7 @@
     "caption": "系统架构图",
     "page": 5,
     "anchor_text": "见图 3",
-    "storage_path": "backend/data/resources/kb_001/doc_123/images/img_001.png"
+    "storage_path": "2026/05/27/2026-05-27_doc_123/img_001.png"
   },
   {
     "ref_id": "tbl_002",
@@ -106,7 +106,7 @@
     "caption": "模型评测结果",
     "page": 8,
     "anchor_text": "如表 2 所示",
-    "storage_path": "backend/data/resources/kb_001/doc_123/tables/tbl_002.json"
+    "storage_path": "2026/05/27/2026-05-27_doc_123/tbl_002.json"
   },
   {
     "ref_id": "lnk_003",
@@ -125,7 +125,7 @@
 - `text` 中的链接优先保留锚文本，必要时保留简短可读 URL，不要把过长链接参数直接灌进正文
 - `resource_refs` 中保存结构化引用，不要只把资源引用内嵌到纯文本
 - `ref_type` 第一版可先支持 `image`、`table` 和 `link`
-- `storage_path` 可指向抽取出的图片文件、表格 JSON 或其他派生资源
+- `storage_path` 可指向抽取出的图片文件、表格 JSON 或其他派生资源；当前实现保存为相对 `{app.data_dir}/static` 的路径，前端用 `static_base` 拼接访问
 - `url` 用于保存链接类引用的完整地址
 - 如果第一版不落独立资源表，`ref_id` 只需在单文档范围内唯一
 

@@ -2,14 +2,29 @@
 
 ## 范围
 
-第一版 API 只覆盖这些能力：
+第一版 API 覆盖这些能力：
 
-1. 登录
+1. 登录、退出、当前用户、密码修改和 TOTP
 2. 文档上传
-3. 文档状态查询
-4. chunk 草稿查询
-5. chunk 审核与确认入库
+3. 文档列表、标签、状态查询
+4. chunk 查询、重切分、合并、编辑、拒绝、恢复和审核
+5. embedding 与向量入库触发/重试
 6. 文档删除
+7. 用户列表、启用和禁用
+8. 知识库列表和语义检索
+
+## 系统接口
+
+### `GET /healthz`
+
+- 健康检查接口，不需要登录
+- 响应：`{ "status": "ok" }`
+
+### `GET /static/*filepath`
+
+- 静态资源访问路径，不需要登录
+- 文件根目录为 `{app.data_dir}/static`
+- 若配置了 `http.base_path`，该前缀同样作用于 `/healthz`、`/static` 和所有 `/api` 路由
 
 ## 统一响应格式
 
@@ -270,6 +285,7 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 ### `POST /api/documents/:document_id/chunks/merge`
 
 - 合并相邻 chunks
+- 请求体：`{ "chunk_ids": ["...", "..."] }`，至少 2 个 chunk ID
 
 ### `POST /api/documents/:document_id/chunks/:chunk_id/reject`
 
@@ -428,7 +444,7 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
     "caption": "系统架构图",
     "page": 5,
     "anchor_text": "见图 3",
-    "storage_path": "backend/data/resources/kb_001/doc_123/images/img_001.png"
+    "storage_path": "2026/05/27/2026-05-27_doc_123/img_001.png"
   },
   {
     "ref_id": "lnk_002",
