@@ -23,7 +23,7 @@ var (
 	docxHyperlinkRe      = regexp.MustCompile(`(?s)<w:hyperlink\s([^>]*)>(.*?)</w:hyperlink>`)
 	docxHyperlinkRidAttr = regexp.MustCompile(`r:id="([^"]*)"`)
 	docxRunTextRe        = regexp.MustCompile(`(?s)<w:t[^>]*>([^<]*)</w:t>`)
-	docxDrawingRe        = regexp.MustCompile(`<w:drawing[\s>]`)
+	docxDrawingBlockRe   = regexp.MustCompile(`(?s)<w:drawing[\s>].*?</w:drawing>`)
 	docxDocPrDescrRe     = regexp.MustCompile(`<wp:docPr\b[^>]*\bdescr="([^"]*)"`)
 	docxDocPrTitleRe     = regexp.MustCompile(`<wp:docPr\b[^>]*\btitle="([^"]*)"`)
 
@@ -99,9 +99,9 @@ func extractMarkdownRefs(text string) (string, []model.ResourceRef) {
 			IsExternal: isExternalURL(url),
 		})
 		if alt != "" {
-			return "[图片: " + alt + "]"
+			return "[Image: " + alt + "]"
 		}
-		return "[图片]"
+		return "[Image]"
 	})
 
 	// links: keep anchor text, strip URL
@@ -150,21 +150,17 @@ func extractDocxParaRefs(paraXML string, rels map[string]string, imageRels map[s
 		})
 	}
 
-	if docxDrawingRe.MatchString(paraXML) {
+	var placeholders []string
+	for _, drawXML := range docxDrawingBlockRe.FindAllString(paraXML, -1) {
 		label := ""
-		if m := docxDocPrDescrRe.FindStringSubmatch(paraXML); m != nil {
+		if m := docxDocPrDescrRe.FindStringSubmatch(drawXML); m != nil {
 			label = htmlUnescape(m[1])
-		} else if m := docxDocPrTitleRe.FindStringSubmatch(paraXML); m != nil {
+		} else if m := docxDocPrTitleRe.FindStringSubmatch(drawXML); m != nil {
 			label = htmlUnescape(m[1])
-		}
-		if label != "" {
-			imgPlaceholder = "[图片: " + label + "]"
-		} else {
-			imgPlaceholder = "[图片]"
 		}
 		storePath := ""
 		if imageRels != nil {
-			if bm := blipEmbedRe.FindStringSubmatch(paraXML); bm != nil {
+			if bm := blipEmbedRe.FindStringSubmatch(drawXML); bm != nil {
 				storePath = imageRels[bm[1]]
 			}
 		}
@@ -174,8 +170,13 @@ func extractDocxParaRefs(paraXML string, rels map[string]string, imageRels map[s
 			Label:       label,
 			StoragePath: storePath,
 		})
+		if label != "" {
+			placeholders = append(placeholders, "[Image: "+label+"]")
+		} else {
+			placeholders = append(placeholders, "[Image]")
+		}
 	}
-
+	imgPlaceholder = strings.Join(placeholders, "\n")
 	return imgPlaceholder, refs
 }
 

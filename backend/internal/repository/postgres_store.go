@@ -251,6 +251,20 @@ func (s *PostgresStore) UpdateChunk(chunk model.DocumentChunk) error {
 	return s.db.Save(chunkToRow(chunk)).Error
 }
 
+func (s *PostgresStore) BulkUpdateChunks(chunks []model.DocumentChunk) error {
+	if len(chunks) == 0 {
+		return nil
+	}
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		for _, c := range chunks {
+			if err := tx.Save(chunkToRow(c)).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func (s *PostgresStore) ReplaceChunks(documentID string, chunks []model.DocumentChunk) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Delete(&chunkRow{}, "document_id = ?", documentID).Error; err != nil {

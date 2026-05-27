@@ -636,3 +636,33 @@ func writeZipFixture(path string, files map[string]string) error {
 	}
 	return zw.Close()
 }
+
+func TestCleanTextSpecialChars(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"nbsp mid-word", "foo bar", "foo bar"},
+		{"nbsp trimmed", " text ", "text"},
+		{"soft hyphen removed", "computa­tion", "computation"},
+		{"zero-width space removed", "foo​bar", "foobar"},
+		{"zero-width non-joiner removed", "foo‌bar", "foobar"},
+		{"zero-width joiner removed", "foo‍bar", "foobar"},
+		{"word joiner removed", "foo⁠bar", "foobar"},
+		{"replacement char removed", "ok�end", "okend"},
+		{"object replacement removed", "ok￼end", "okend"},
+		{"line separator to newline", "line1 line2", "line1\nline2"},
+		{"para separator to blank line", "para1 para2", "para1\n\npara2"},
+		{"unmapped PUA removed", "text", "text"},
+		{"mapped PUA kept as bullet", " item", "• item"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := CleanText(c.input)
+			if got != c.want {
+				t.Fatalf("CleanText(%q) = %q, want %q", c.input, got, c.want)
+			}
+		})
+	}
+}

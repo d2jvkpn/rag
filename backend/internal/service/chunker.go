@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -37,6 +38,20 @@ func isSentenceEnd(r rune) bool {
 // SectionTitle and PageStart metadata that is propagated to its chunks.
 // If the total number of chunks produced is <= minChunks, the entire document
 // is returned as a single chunk.
+func newChunk(documentID, filename string, chunkVersion int, status string, now time.Time) model.DocumentChunk {
+	return model.DocumentChunk{
+		ChunkID:      uuid.Must(uuid.NewV7()).String(),
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		DocumentID:   documentID,
+		ChunkVersion: chunkVersion,
+		Status:       status,
+		Source:       "auto",
+		IsCurrent:    true,
+		Filename:     filename,
+	}
+}
+
 func BuildChunks(documentID, filename string, blocks []parser.ParseBlock, chunkVersion, chunkSize, overlap, minChunks int, approved bool) []model.DocumentChunk {
 	status := "draft"
 	if approved {
@@ -59,28 +74,19 @@ func BuildChunks(documentID, filename string, blocks []parser.ParseBlock, chunkV
 			if seg == "" {
 				continue
 			}
-			allChunks = append(allChunks, model.DocumentChunk{
-				ChunkID:        uuid.Must(uuid.NewV7()).String(),
-				CreatedAt:      now,
-				UpdatedAt:      now,
-				DocumentID:     documentID,
-				ChunkIndex:     len(allChunks),
-				SectionTitle:   block.SectionTitle,
-				PageStart:      block.PageStart,
-				PageEnd:        block.PageStart,
-				Text:           seg,
-				NormalizedText: seg,
-				Status:         status,
-				ChunkVersion:   chunkVersion,
-				Source:         "auto",
-				IsCurrent:      true,
-				Filename:       filename,
-				ResourceRefs:   blockRefs,
-			})
+			c := newChunk(documentID, filename, chunkVersion, status, now)
+			c.ChunkIndex = len(allChunks)
+			c.SectionTitle = block.SectionTitle
+			c.PageStart = block.PageStart
+			c.PageEnd = block.PageStart
+			c.Text = seg
+			c.NormalizedText = seg
+			c.ResourceRefs = blockRefs
+			allChunks = append(allChunks, c)
 		}
 	}
 
-	if len(allChunks) <= minChunks {
+	if len(allChunks) < minChunks {
 		var texts []string
 		var allRefs []model.ResourceRef
 		for _, b := range blocks {
@@ -96,21 +102,11 @@ func BuildChunks(documentID, filename string, blocks []parser.ParseBlock, chunkV
 		if fullText == "" {
 			return nil
 		}
-		return []model.DocumentChunk{{
-			ChunkID:        uuid.Must(uuid.NewV7()).String(),
-			CreatedAt:      now,
-			UpdatedAt:      now,
-			DocumentID:     documentID,
-			ChunkIndex:     0,
-			Text:           fullText,
-			NormalizedText: fullText,
-			Status:         status,
-			ChunkVersion:   chunkVersion,
-			Source:         "auto",
-			IsCurrent:      true,
-			Filename:       filename,
-			ResourceRefs:   allRefs,
-		}}
+		c := newChunk(documentID, filename, chunkVersion, status, now)
+		c.Text = fullText
+		c.NormalizedText = fullText
+		c.ResourceRefs = allRefs
+		return []model.DocumentChunk{c}
 	}
 
 	for i := range allChunks {
@@ -154,6 +150,7 @@ func splitByLength(text string, chunkSize, overlap int) []string {
 	paragraphs := strings.Split(text, "\n\n")
 	segments := make([]string, 0)
 	current := ""
+	currentLen := 0
 
 	for _, paragraph := range paragraphs {
 		paragraph = strings.TrimSpace(paragraph)
@@ -161,27 +158,37 @@ func splitByLength(text string, chunkSize, overlap int) []string {
 			continue
 		}
 
+		paraLen := utf8.RuneCountInString(paragraph)
+
 		// oversized tables are split by row before being accumulated
-		if isMarkdownTable(paragraph) && len([]rune(paragraph)) > chunkSize {
+		if isMarkdownTable(paragraph) && paraLen > chunkSize {
 			if current != "" {
 				segments = append(segments, current)
 				current = ""
+				currentLen = 0
 			}
 			segments = append(segments, splitMarkdownTable(paragraph, chunkSize)...)
 			continue
 		}
 
-		candidate := paragraph
+		candidateLen := paraLen
 		if current != "" {
-			candidate = current + "\n\n" + paragraph
+			candidateLen = currentLen + 2 + paraLen // +2 for \n\n
 		}
-		if len([]rune(candidate)) <= chunkSize {
-			current = candidate
+		if candidateLen <= chunkSize {
+			if current != "" {
+				current = current + "\n\n" + paragraph
+			} else {
+				current = paragraph
+			}
+			currentLen = candidateLen
 			continue
 		}
 		if current != "" {
 			segments = append(segments, current)
-			current = overlapTail(current, overlap) + "\n\n" + paragraph
+			tail := overlapTail(current, overlap)
+			current = tail + "\n\n" + paragraph
+			currentLen = utf8.RuneCountInString(tail) + 2 + paraLen
 			continue
 		}
 		segments = append(segments, splitRunes(paragraph, chunkSize, overlap)...)

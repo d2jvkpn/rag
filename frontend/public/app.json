@@ -1,5 +1,5 @@
 {
-  "apiBase": "",
-  "appTitle": "RAG 文档管理",
-  "pollIntervalMs": 3000
+  "api_base": "http://localhost:3061",
+  "static_base": "http://localhost:3061/static",
+  "poll_interval_ms": 3000
 }

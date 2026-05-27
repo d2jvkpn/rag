@@ -175,6 +175,7 @@
                 <n-text v-if="ref.caption" depth="3" style="font-size:12px;display:block">{{ ref.caption }}</n-text>
                 <n-text v-if="ref.anchor_text" depth="3" style="font-size:12px;display:block">{{ t('chunks.anchorText') }}: {{ ref.anchor_text }}</n-text>
                 <a v-if="ref.url" :href="ref.url" target="_blank" rel="noreferrer" style="font-size:12px">{{ ref.url }}</a>
+                <img v-if="ref.ref_type === 'image' && ref.storage_path" :src="staticUrl(ref.storage_path)" :alt="ref.label || ref.ref_id" style="max-width:320px;max-height:240px;object-fit:contain;display:block;margin-top:6px;border-radius:4px" />
                 <n-text v-if="ref.storage_path" code style="font-size:11px;display:block;margin-top:4px">{{ ref.storage_path }}</n-text>
                 <n-tag v-if="ref.is_external" size="tiny" style="margin-top:6px">{{ t('chunks.externalResource') }}</n-tag>
               </div>
@@ -195,6 +196,7 @@ import { chunksService } from '../services/chunks.js'
 import { STATUS_TYPE, CHUNK_STATUS_TYPE } from '../utils/status.js'
 import { useFormat } from '../utils/format.js'
 import { useI18n } from '../i18n/index.js'
+import { getConfig } from '../config/app-config.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -204,6 +206,11 @@ const { t } = useI18n()
 const { formatDate, rfc3339 } = useFormat()
 
 const documentId = route.params.documentId
+const { staticBase } = getConfig()
+
+function staticUrl(storagePath) {
+  return staticBase.replace(/\/+$/, '') + '/' + storagePath.replace(/^static\//, '')
+}
 
 const doc = ref(null)
 const chunks = ref([])

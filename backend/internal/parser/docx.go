@@ -111,6 +111,8 @@ func extractDocxBlocks(content string, rels map[string]string, imageRels map[str
 		imgPlaceholder, paraRefs := extractDocxParaRefs(raw, rels, imageRels)
 		if paraText == "" {
 			paraText = imgPlaceholder
+		} else if imgPlaceholder != "" {
+			paraText += "\n" + imgPlaceholder
 		}
 		isHeading := false
 		headingText := ""

@@ -109,7 +109,7 @@ def rows_to_markdown(rows) -> str:
 
 def table_label(table, table_index: int) -> str:
     page_label = format_page_range(table["pages"])
-    return f"表格 {table_index}（第 {page_label} 页）"
+    return f"Table {table_index} (Page {page_label})"
 
 
 def render_table(table, table_index: int) -> str:
@@ -131,7 +131,7 @@ def build_table_ref(table, table_index: int):
 
 
 def image_label(page_number: int, image_index: int) -> str:
-    return f"图片 {image_index}（第 {page_number} 页）"
+    return f"Image {image_index} (Page {page_number})"
 
 
 def save_page_image(page, image, page_number: int, image_index: int, media_dir, storage_base):

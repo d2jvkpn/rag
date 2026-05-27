@@ -122,13 +122,13 @@ milvus:
 
 **Services** (`services/`) wrap `fetch` via `services/http.js`. All requests use `credentials: 'include'`. Errors are thrown as `HttpError` with `.status`, `.code`, `.message`, `.details`.
 
-**Polling:** `DocumentDetailPage` polls `GET /api/documents/:id` every `pollIntervalMs` ms (from `app.json`, default 3000) while the document status is not in `['indexed', 'failed', 'review_pending']`. The timer is cleared on `onUnmounted`.
+**Polling:** `DocumentDetailPage` polls `GET /api/documents/:id` every `poll_interval_ms` ms (from `app.json`, exposed to code as `pollIntervalMs`, default 3000) while the document status is not in `['indexed', 'failed', 'review_pending']`. The timer is cleared on `onUnmounted`.
 
 **Status/type mapping** is centralised in `utils/status.js`. Use `STATUS_LABEL`, `STATUS_TYPE`, `isTerminal()` — do not duplicate these mappings in components.
 
 **Naive UI** is registered globally via `app.use(naive)` in `main.js`. Import components only when needed for render functions (e.g., inside `columns` definitions in `DocumentsPage`).
 
-**Runtime config** lives in `frontend/public/app.json`. The frontend never reads build-time environment variables. Fields: `apiBase`, `appTitle`, `pollIntervalMs`.
+**Runtime config** lives in `frontend/public/app.json`. The frontend never reads build-time environment variables. Fields: `api_base`, `static_base`, `poll_interval_ms`. The loader normalizes these to camelCase for frontend code and still accepts the old camelCase names for compatibility.
 
 ## Documentation Sync
 

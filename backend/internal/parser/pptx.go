@@ -83,9 +83,9 @@ func parsePptx(path, mediaDir string) (ParseResult, error) {
 		// append image placeholders so the text reflects image presence
 		for _, ref := range refs {
 			if ref.RefType == "image" {
-				placeholder := "[图片]"
+				placeholder := "[Image]"
 				if ref.Label != "" {
-					placeholder = "[图片: " + ref.Label + "]"
+					placeholder = "[Image: " + ref.Label + "]"
 				}
 				section = strings.TrimSpace(section + "\n" + placeholder)
 			}
@@ -93,11 +93,11 @@ func parsePptx(path, mediaDir string) (ParseResult, error) {
 		noteName := filepath.Join("ppt", "notesSlides", "notesSlide"+slideNumberFromName(name)+".xml")
 		note := strings.TrimSpace(noteText[noteName])
 		if note != "" {
-			section = strings.TrimSpace(section + "\n备注: " + note)
+			section = strings.TrimSpace(section + "\nNotes: " + note)
 		}
 		if section != "" {
 			slideNum := idx + 1
-			label := "幻灯片 " + strconv.Itoa(slideNum)
+			label := "Slide " + strconv.Itoa(slideNum)
 			blocks = append(blocks, ParseBlock{
 				Text:         label + "\n" + section,
 				SectionTitle: label,

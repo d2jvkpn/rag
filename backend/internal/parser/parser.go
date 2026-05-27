@@ -23,11 +23,19 @@ type ParseResult struct {
 	Blocks    []ParseBlock // nil falls back to Text; populated when structure is available
 }
 
-var pdfGlyphReplacer = strings.NewReplacer(
-	"\uf06c", "•",
-	"\uf0b7", "•", // common private-use bullet from Symbol/Wingdings-like fonts
-	"\uf0a7", "•",
-	"\uf0d8", "•",
+// textNormalizer handles character-level normalization before line processing.
+// Order matters: \r\n must precede \r to avoid double-replacing.
+var textNormalizer = strings.NewReplacer(
+	"\r\n", "\n",
+	"\r", "\n",
+	" ", " ",    // non-breaking space → regular space
+	" ", "\n",   // Unicode line separator → newline
+	" ", "\n\n", // Unicode paragraph separator → double newline
+	// PUA bullets from Symbol/Wingdings fonts
+	"", "•",
+	"", "•",
+	"", "•",
+	"", "•",
 )
 
 // Parse parses the file at path according to sourceType. mediaDir, when
@@ -49,9 +57,7 @@ func Parse(path, sourceType, mediaDir string) (ParseResult, error) {
 }
 
 func CleanText(input string) string {
-	input = strings.ReplaceAll(input, "\r\n", "\n")
-	input = strings.ReplaceAll(input, "\r", "\n")
-	input = pdfGlyphReplacer.Replace(input)
+	input = textNormalizer.Replace(input)
 
 	var builder strings.Builder
 	lastBlank := false
@@ -73,6 +79,17 @@ func CleanText(input string) string {
 	cleaned := strings.TrimSpace(builder.String())
 	return strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) && r != '\n' && r != '\t' {
+			return -1
+		}
+		switch r {
+		case '­',                      // soft hyphen
+			'​', '‌', '‍',   // zero-width space / non-joiner / joiner
+			'⁠',                        // word joiner
+			'￼', '�':              // object replacement, replacement character
+			return -1
+		}
+		// remove remaining unmapped PUA characters (Symbol/Wingdings artifacts)
+		if r >= '' && r <= '' {
 			return -1
 		}
 		return r

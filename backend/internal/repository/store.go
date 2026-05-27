@@ -270,6 +270,32 @@ func (s *JSONStore) UpdateChunk(chunk model.DocumentChunk) error {
 	return ErrNotFound
 }
 
+func (s *JSONStore) BulkUpdateChunks(chunks []model.DocumentChunk) error {
+	if len(chunks) == 0 {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// build per-document update maps to scan each list only once
+	byDoc := make(map[string]map[string]model.DocumentChunk, 1)
+	for _, c := range chunks {
+		if byDoc[c.DocumentID] == nil {
+			byDoc[c.DocumentID] = make(map[string]model.DocumentChunk)
+		}
+		byDoc[c.DocumentID][c.ChunkID] = c
+	}
+	for docID, updates := range byDoc {
+		list := s.data.Chunks[docID]
+		for i, c := range list {
+			if updated, ok := updates[c.ChunkID]; ok {
+				list[i] = updated
+			}
+		}
+		s.data.Chunks[docID] = list
+	}
+	return s.persistLocked()
+}
+
 func (s *JSONStore) ReplaceChunks(documentID string, chunks []model.DocumentChunk) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

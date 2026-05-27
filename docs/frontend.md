@@ -139,9 +139,9 @@
 
 `app.json` 当前字段：
 
-- `apiBase`：后端 API 基础地址（开发环境为空字符串，走 Vite 代理）
-- `appTitle`：默认页面标题（实际显示由 i18n 字典覆盖）
-- `pollIntervalMs`：详情页轮询处理中文档的间隔，默认 3000
+- `api_base`：后端 API 基础地址
+- `static_base`：后端静态资源基础地址
+- `poll_interval_ms`：详情页轮询处理中文档的间隔，默认 3000
 
 > 上传流程统一进入人工审核；前端不再提供 `human_review` 开关，并在提交时固定发送 `human_review=true`。
 > 上传弹窗中，选择知识库后应立即清除对应的必填校验提示，并展示该 collection 参数。
@@ -152,6 +152,7 @@
 - 前端代码中不要硬编码环境差异配置
 - 配置读取失败时，应显示明确错误，而不是静默降级
 - `services/http.js` 等请求模块应依赖运行时加载后的配置
+- 配置加载层会将 snake_case 字段规范化为前端代码使用的 camelCase 字段，并兼容旧 camelCase 配置
 
 ## 前端数据刷新策略
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -33,6 +34,17 @@ func (h *Handler) Routes() http.Handler {
 	router := gin.New()
 	router.Use(gin.Recovery(), infra.RequestLogger(), h.cors())
 
+	router.GET("/healthz", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	staticDir := filepath.Join(h.cfg.GetString("app.data_dir"), "static")
+	router.Static("/static", staticDir)
+
+	router.NoRoute(func(c *gin.Context) {
+		writeError(c, 404, "not_found", "route not found", nil)
+	})
+
 	apiGroup := router.Group("/api")
 	apiGroup.POST("/login", h.handleLogin)
 	apiGroup.POST("/logout", h.withAuth(), h.handleLogout)
@@ -60,10 +72,6 @@ func (h *Handler) Routes() http.Handler {
 	apiGroup.POST("/query", h.withAuth(), h.handleQuery)
 	apiGroup.GET("/knowledge-bases", h.withAuth(), h.handleListKnowledgeBases)
 	apiGroup.GET("/knowledge-bases/available", h.withAuth(), h.handleListAvailableKnowledgeBases)
-
-	router.NoRoute(func(c *gin.Context) {
-		writeError(c, 404, "not_found", "route not found", nil)
-	})
 
 	return router
 }

@@ -19,4 +19,5 @@ type Store interface {
 	GetChunks(documentID string) ([]model.DocumentChunk, error)
 	GetChunk(chunkID string) (model.DocumentChunk, error)
 	UpdateChunk(chunk model.DocumentChunk) error
+	BulkUpdateChunks(chunks []model.DocumentChunk) error
 }

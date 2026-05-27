@@ -256,14 +256,16 @@ func (s *DocumentService) ApproveChunks(documentID string) error {
 		return err
 	}
 	now := time.Now().UTC()
+	var toApprove []model.DocumentChunk
 	for i := range chunks {
 		if chunks[i].Status == "draft" {
 			chunks[i].Status = "approved"
 			chunks[i].UpdatedAt = now
-			if err := s.store.UpdateChunk(chunks[i]); err != nil {
-				return err
-			}
+			toApprove = append(toApprove, chunks[i])
 		}
+	}
+	if err := s.store.BulkUpdateChunks(toApprove); err != nil {
+		return err
 	}
 	document.Status = "approved"
 	document.UpdatedAt = now
@@ -369,15 +371,6 @@ func (s *DocumentService) MergeChunks(documentID string, chunkIDs []string) erro
 
 	now := time.Now().UTC()
 
-	// mark old chunks not current
-	for _, c := range selected {
-		c.IsCurrent = false
-		c.UpdatedAt = now
-		if err := s.store.UpdateChunk(c); err != nil {
-			return err
-		}
-	}
-
 	// create merged chunk at the first chunk's index position
 	newChunk := model.DocumentChunk{
 		ChunkID:        uuid.Must(uuid.NewV7()).String(),
@@ -475,10 +468,10 @@ func (s *DocumentService) runIndex(document model.Document) {
 		approved[i].EmbeddingModel = s.embedder.Model()
 		approved[i].Embedding = embeddings[i]
 		approved[i].UpdatedAt = now
-		if err := s.store.UpdateChunk(approved[i]); err != nil {
-			s.failDocument(document, "embed", err)
-			return
-		}
+	}
+	if err := s.store.BulkUpdateChunks(approved); err != nil {
+		s.failDocument(document, "embed", err)
+		return
 	}
 
 	snapshotPath, err := s.writeSnapshot(document, approved, document.ChunkVersion, document.ChunkConfigHash)
