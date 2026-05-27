@@ -39,6 +39,7 @@
 前端构建产物目录约定：
 
 - 前端打包文件输出到 `frontend/target/dist`
+- 前端打包 base 由 `BASE_PATH` 环境变量控制；`make build` 使用 `/ui/`，容器镜像将 `target/dist` 复制到后端运行目录 `target/ui`，后端检测到该目录时提供 `/ui` 路由；`/static` 仍由后端业务静态文件路由提供
 
 ## 前端分层建议
 

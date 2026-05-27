@@ -226,3 +226,5 @@ Loader 将 snake_case 字段规范化为 camelCase，兼容旧版 camelCase 配�
 | `llm.model` | `gpt-4o-mini` | LLM 模型名 |
 
 未配置 `database.dsn` 时使用 JSONStore；未配置 `redis.dsn` 时使用 GoroutineQueue 和 MemoryBlacklist；未配置 `embedder.*` / `milvus.addr` / `llm.*` 时对应组件回落 Noop 实现。
+
+后端运行目录存在 `{app.data_dir}/ui/index.html` 或 `target/ui/index.html` 时自动托管前端 SPA：`/ui` 为前端入口，`/` 和 `/index.html` 重定向到 `/ui/index.html`；`/api`、`/healthz`、`/static` 保持后端路由，其中 `/static` 服务 `{app.data_dir}/static`。

@@ -177,6 +177,107 @@ func TestAuthRequired(t *testing.T) {
 	}
 }
 
+func TestDataUIServesSPAWithoutCapturingBackendRoutes(t *testing.T) {
+	previousWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get wd: %v", err)
+	}
+	tmpDir := t.TempDir()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(previousWD); err != nil {
+			t.Fatalf("restore wd: %v", err)
+		}
+	})
+
+	webDir := filepath.Join(tmpDir, "data", "ui")
+	if err := os.MkdirAll(filepath.Join(webDir, "assets"), 0o755); err != nil {
+		t.Fatalf("create web dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(webDir, "index.html"), []byte("<html>spa</html>"), 0o644); err != nil {
+		t.Fatalf("write index: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(webDir, "assets", "app.js"), []byte("console.log('spa')"), 0o644); err != nil {
+		t.Fatalf("write asset: %v", err)
+	}
+
+	v := testConfig(tmpDir)
+	handler := NewHandler(v, nil, nil).Routes()
+
+	tests := []struct {
+		name         string
+		path         string
+		wantCode     int
+		wantBody     string
+		wantLocation string
+	}{
+		{name: "root redirects to ui index", path: "/", wantCode: http.StatusMovedPermanently, wantLocation: "/ui/index.html"},
+		{name: "index redirects to ui index", path: "/index.html", wantCode: http.StatusMovedPermanently, wantLocation: "/ui/index.html"},
+		{name: "ui redirects with slash", path: "/ui", wantCode: http.StatusMovedPermanently, wantLocation: "/ui/"},
+		{name: "ui root", path: "/ui/", wantCode: http.StatusOK, wantBody: "<html>spa</html>"},
+		{name: "frontend route", path: "/ui/documents/123", wantCode: http.StatusOK, wantBody: "<html>spa</html>"},
+		{name: "frontend asset", path: "/ui/assets/app.js", wantCode: http.StatusOK, wantBody: "console.log('spa')"},
+		{name: "api route stays backend", path: "/api/missing", wantCode: http.StatusNotFound, wantBody: "route not found"},
+		{name: "static route stays backend", path: "/static/missing.txt", wantCode: http.StatusNotFound, wantBody: "route not found"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != tc.wantCode {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			if tc.wantLocation != "" && rec.Header().Get("Location") != tc.wantLocation {
+				t.Fatalf("expected location %q, got %q", tc.wantLocation, rec.Header().Get("Location"))
+			}
+			if tc.wantBody != "" && !strings.Contains(rec.Body.String(), tc.wantBody) {
+				t.Fatalf("expected body to contain %q, got %q", tc.wantBody, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestTargetUIServesSPAWhenDataUIIsAbsent(t *testing.T) {
+	previousWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get wd: %v", err)
+	}
+	tmpDir := t.TempDir()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(previousWD); err != nil {
+			t.Fatalf("restore wd: %v", err)
+		}
+	})
+
+	webDir := filepath.Join(tmpDir, "target", "ui")
+	if err := os.MkdirAll(webDir, 0o755); err != nil {
+		t.Fatalf("create web dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(webDir, "index.html"), []byte("<html>target spa</html>"), 0o644); err != nil {
+		t.Fatalf("write index: %v", err)
+	}
+
+	v := testConfig(tmpDir)
+	handler := NewHandler(v, nil, nil).Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/ui/", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "<html>target spa</html>") {
+		t.Fatalf("unexpected body: %q", rec.Body.String())
+	}
+}
+
 func TestUserListRequiresPermission(t *testing.T) {
 	t.Parallel()
 

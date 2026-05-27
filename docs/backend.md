@@ -330,7 +330,7 @@ accounts:
 
 **LLM** 实现：Noop（默认，`answer` 返回 `""`）和 OpenAI-compatible。`POST /api/query` 在有 LLM 时用检索结果上下文生成回答。
 
-**Config 补充字段：** `http.base_path`（所有路由的 URL 前缀，默认 `""`，例如 `"/rag"`）。
+**Config 补充字段：** `http.base_path`（所有路由的 URL 前缀，默认 `""`，例如 `"/rag"`）。后端运行目录存在 `{app.data_dir}/ui/index.html` 或 `target/ui/index.html` 时自动启用前端 SPA 托管，路径为 `/ui`，并将 `/` 和 `/index.html` 重定向到 `/ui/index.html`；`/static` 仍只服务 `{app.data_dir}/static`。
 
 ## 推荐目录结构
 

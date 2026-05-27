@@ -24,7 +24,13 @@
 
 - 静态资源访问路径，不需要登录
 - 文件根目录为 `{app.data_dir}/static`
-- 若配置了 `http.base_path`，该前缀同样作用于 `/healthz`、`/static` 和所有 `/api` 路由
+- 若配置了 `http.base_path`，该前缀同样作用于 `/healthz`、`/static`、`/ui` 和所有 `/api` 路由
+
+### `GET /ui/*filepath`
+
+- 后端运行目录存在 `{app.data_dir}/ui/index.html` 或 `target/ui/index.html` 时启用，用于托管前端 SPA
+- `/ui` 重定向到 `/ui/`，`/ui/*` 优先返回 `{app.data_dir}/ui` 或 `target/ui` 下的真实文件，未命中时 fallback 到 `{app.data_dir}/ui/index.html` 或 `target/ui/index.html`
+- `/` 和 `/index.html` 重定向到 `/ui/index.html`
 
 ## 统一响应格式
 

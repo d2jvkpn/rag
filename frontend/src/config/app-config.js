@@ -1,8 +1,9 @@
 let config = null
 
 export async function loadConfig() {
-  const res = await fetch('/app.json')
-  if (!res.ok) throw new Error(`/app.json 返回 ${res.status}`)
+  const configPath = new URL('app.json', window.location.origin + import.meta.env.BASE_URL).pathname
+  const res = await fetch(configPath)
+  if (!res.ok) throw new Error(`${configPath} 返回 ${res.status}`)
   config = normalizeConfig(await res.json())
 }
 

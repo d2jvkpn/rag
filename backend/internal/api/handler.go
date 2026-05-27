@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -38,14 +39,27 @@ func (h *Handler) Routes() http.Handler {
 	router := gin.New()
 	router.Use(gin.Recovery(), infra.RequestLogger(), h.cors())
 
-	router.NoRoute(func(c *gin.Context) {
-		writeError(c, 404, "not_found", "route not found", nil)
-	})
-
 	basePath := strings.TrimRight(h.cfg.GetString("http.base_path"), "/")
 	if basePath != "" && !strings.HasPrefix(basePath, "/") {
 		basePath = "/" + basePath
 	}
+	webDir := detectWebDir(h.cfg.GetString("app.data_dir"))
+	if webDir != "" {
+		router.GET(basePath+"/", func(c *gin.Context) {
+			c.Redirect(http.StatusMovedPermanently, basePath+"/ui/index.html")
+		})
+		router.GET(basePath+"/index.html", func(c *gin.Context) {
+			c.Redirect(http.StatusMovedPermanently, basePath+"/ui/index.html")
+		})
+	}
+
+	router.NoRoute(func(c *gin.Context) {
+		if webDir != "" && h.serveUIAsset(c, basePath, webDir) {
+			return
+		}
+		writeError(c, 404, "not_found", "route not found", nil)
+	})
+
 	root := router.Group(basePath)
 
 	root.GET("/healthz", func(c *gin.Context) {
@@ -134,6 +148,43 @@ func (h *Handler) Routes() http.Handler {
 	apiGroup.GET("/knowledge-bases/available", h.withAuth(), h.handleListAvailableKnowledgeBases)
 
 	return router
+}
+
+func detectWebDir(dataDir string) string {
+	for _, webDir := range []string{filepath.Join(dataDir, "ui"), filepath.Join("target", "ui")} {
+		if info, err := os.Stat(filepath.Join(webDir, "index.html")); err == nil && !info.IsDir() {
+			return webDir
+		}
+	}
+	return ""
+}
+
+func (h *Handler) serveUIAsset(c *gin.Context, basePath, webDir string) bool {
+	if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
+		return false
+	}
+
+	requestPath := c.Request.URL.Path
+	uiPath := basePath + "/ui"
+	if requestPath == uiPath {
+		c.Redirect(http.StatusMovedPermanently, uiPath+"/")
+		return true
+	}
+	if requestPath != uiPath+"/" && !strings.HasPrefix(requestPath, uiPath+"/") {
+		return false
+	}
+
+	relPath := strings.TrimPrefix(requestPath, uiPath+"/")
+	if relPath != "" {
+		assetPath := filepath.Join(webDir, filepath.FromSlash(relPath))
+		if info, err := os.Stat(assetPath); err == nil && !info.IsDir() {
+			c.File(assetPath)
+			return true
+		}
+	}
+
+	c.File(filepath.Join(webDir, "index.html"))
+	return true
 }
 
 func (h *Handler) handleLogin(c *gin.Context) {

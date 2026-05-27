@@ -1,10 +1,14 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
+const outDir = process.env.OUT_DIR || 'target/dist'
+const basePath = process.env.BASE_PATH || '/'
+
 export default defineConfig({
+  base: basePath,
   plugins: [vue()],
   build: {
-    outDir: 'target/dist',
+    outDir: outDir,
     emptyOutDir: true,
     rollupOptions: {
       output: {
