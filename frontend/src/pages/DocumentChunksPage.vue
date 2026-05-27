@@ -94,86 +94,32 @@
           <div class="split-view__right">
             <n-card v-if="selectedChunk" size="small" style="height:100%">
               <template #header>
-                <div style="display:flex;align-items:center;gap:8px;flex:1">
-                  <n-text>Chunk #{{ selectedChunk.chunk_index + 1 }}</n-text>
-                  <n-tag size="small" :type="CHUNK_STATUS_TYPE[selectedChunk.status] || 'default'">
-                    {{ t(`chunkStatus.${selectedChunk.status}`) || selectedChunk.status }}
-                  </n-tag>
-                  <n-text v-if="selectedChunk.section_title" depth="3" style="font-size:12px">
-                    {{ selectedChunk.section_title }}
-                  </n-text>
-                  <div style="margin-left:auto">
+                <div class="chunk-detail-header">
+                  <n-space size="small" align="center" class="chunk-detail-title">
+                    <n-text>Chunk #{{ selectedChunk.chunk_index + 1 }}</n-text>
+                    <n-tag size="small" :type="CHUNK_STATUS_TYPE[selectedChunk.status] || 'default'">
+                      {{ t(`chunkStatus.${selectedChunk.status}`) || selectedChunk.status }}
+                    </n-tag>
+                    <n-text v-if="selectedChunk.section_title" depth="3" class="chunk-detail-section">
+                      {{ selectedChunk.section_title }}
+                    </n-text>
+                  </n-space>
+                  <n-space size="small" align="center" class="chunk-detail-actions">
+                    <n-button size="small" @click="showDetailsModal = true">
+                      {{ t('chunks.detailsAndRefs', { n: selectedResourceRefs.length }) }}
+                    </n-button>
                     <template v-if="!editing">
-                      <n-button v-if="selectedChunk.status !== 'rejected'" text size="tiny" @click="startEdit">{{ t('chunks.edit') }}</n-button>
+                      <n-button v-if="selectedChunk.status !== 'rejected'" size="small" type="primary" secondary @click="startEdit">{{ t('chunks.edit') }}</n-button>
                     </template>
                     <template v-else>
-                      <n-button size="tiny" type="primary" :loading="saving" @click="saveEdit" style="margin-right:4px">{{ t('chunks.save') }}</n-button>
-                      <n-button size="tiny" @click="cancelEdit">{{ t('chunks.cancel') }}</n-button>
+                      <n-button size="small" type="primary" :loading="saving" @click="saveEdit">{{ t('chunks.save') }}</n-button>
+                      <n-button size="small" @click="cancelEdit">{{ t('chunks.cancel') }}</n-button>
                     </template>
-                  </div>
+                  </n-space>
                 </div>
               </template>
 
               <n-scrollbar style="max-height:calc(100vh - 180px)">
-                <n-card size="small" style="background:#fcfcfd;margin-bottom:12px">
-                  <div class="chunk-meta-grid">
-                    <div class="chunk-meta-item">
-                      <span class="chunk-meta-item__label">{{ t('chunks.meta.chunkId') }}</span>
-                      <n-text code style="font-size:11px">{{ selectedChunk.chunk_id }}</n-text>
-                    </div>
-                    <div class="chunk-meta-item">
-                      <span class="chunk-meta-item__label">{{ t('chunks.meta.documentId') }}</span>
-                      <n-text code style="font-size:11px">{{ selectedChunk.document_id }}</n-text>
-                    </div>
-                    <div class="chunk-meta-item">
-                      <span class="chunk-meta-item__label">{{ t('chunks.version') }}</span>
-                      <n-text>v{{ selectedChunk.chunk_version }}</n-text>
-                    </div>
-                    <div class="chunk-meta-item">
-                      <span class="chunk-meta-item__label">{{ t('chunks.source') }}</span>
-                      <n-text>{{ selectedChunk.source }}</n-text>
-                    </div>
-                    <div v-if="selectedChunk.filename" class="chunk-meta-item">
-                      <span class="chunk-meta-item__label">{{ t('chunks.meta.filename') }}</span>
-                      <n-text>{{ selectedChunk.filename }}</n-text>
-                    </div>
-                    <div class="chunk-meta-item">
-                      <span class="chunk-meta-item__label">{{ t('chunks.meta.chunkIndex') }}</span>
-                      <n-text>#{{ selectedChunk.chunk_index + 1 }}</n-text>
-                    </div>
-                    <div v-if="selectedChunk.section_title" class="chunk-meta-item">
-                      <span class="chunk-meta-item__label">{{ t('chunks.meta.sectionTitle') }}</span>
-                      <n-text>{{ selectedChunk.section_title }}</n-text>
-                    </div>
-                    <div v-if="selectedChunk.page_start" class="chunk-meta-item">
-                      <span class="chunk-meta-item__label">{{ t('chunks.page') }}</span>
-                      <n-text>{{ selectedChunk.page_start }}{{ selectedChunk.page_end && selectedChunk.page_end !== selectedChunk.page_start ? '–' + selectedChunk.page_end : '' }}</n-text>
-                    </div>
-                    <div class="chunk-meta-item">
-                      <span class="chunk-meta-item__label">{{ t('chunks.meta.currentVersion') }}</span>
-                      <n-tag size="tiny" :type="selectedChunk.is_current ? 'success' : 'default'">
-                        {{ selectedChunk.is_current ? t('chunks.meta.yes') : t('chunks.meta.no') }}
-                      </n-tag>
-                    </div>
-                    <div v-if="selectedChunk.embedding_model" class="chunk-meta-item">
-                      <span class="chunk-meta-item__label">{{ t('chunks.meta.embeddingModel') }}</span>
-                      <n-text>{{ selectedChunk.embedding_model }}</n-text>
-                    </div>
-                    <div class="chunk-meta-item">
-                      <span class="chunk-meta-item__label">{{ t('chunks.meta.createdAt') }}</span>
-                      <n-text :title="rfc3339(selectedChunk.created_at)">{{ formatDate(selectedChunk.created_at) }}</n-text>
-                    </div>
-                    <div class="chunk-meta-item">
-                      <span class="chunk-meta-item__label">{{ t('chunks.meta.updatedAt') }}</span>
-                      <n-text :title="rfc3339(selectedChunk.updated_at)">{{ formatDate(selectedChunk.updated_at) }}</n-text>
-                    </div>
-                  </div>
-                  <div v-if="selectedChunk.review_comment" style="margin-top:10px">
-                    <span class="chunk-meta-item__label">{{ t('chunks.meta.reviewComment') }}</span>
-                    <n-text depth="3" style="display:block;font-size:12px;white-space:pre-wrap">{{ selectedChunk.review_comment }}</n-text>
-                  </div>
-                </n-card>
-
                 <n-input
                   v-if="editing"
                   v-model:value="editText"
@@ -191,27 +137,6 @@
                     <pre style="white-space:pre-wrap;font-size:12px;font-family:inherit;margin:0;color:#666">{{ selectedChunk.normalized_text }}</pre>
                   </n-card>
                 </template>
-
-                <template v-if="selectedChunk.resource_refs?.length">
-                  <n-text style="font-size:12px;font-weight:600;display:block;margin-bottom:6px">
-                    {{ t('chunks.resourceRefs', { n: selectedChunk.resource_refs.length }) }}
-                  </n-text>
-                  <n-card
-                    v-for="ref in selectedChunk.resource_refs"
-                    :key="ref.ref_id"
-                    size="small"
-                    style="margin-bottom:8px"
-                  >
-                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-                      <n-tag size="tiny">{{ ref.ref_type }}</n-tag>
-                      <n-text style="font-size:12px;font-weight:600">{{ ref.label }}</n-text>
-                    </div>
-                    <n-text v-if="ref.caption" depth="3" style="font-size:12px;display:block">{{ ref.caption }}</n-text>
-                    <n-text v-if="ref.anchor_text" depth="3" style="font-size:12px;display:block">{{ t('chunks.anchorText') }}: {{ ref.anchor_text }}</n-text>
-                    <a v-if="ref.url" :href="ref.url" target="_blank" style="font-size:12px">{{ ref.label || ref.url }}</a>
-                    <n-text v-if="ref.storage_path" code style="font-size:11px;display:block;margin-top:2px">{{ ref.storage_path }}</n-text>
-                  </n-card>
-                </template>
               </n-scrollbar>
             </n-card>
 
@@ -219,6 +144,44 @@
           </div>
         </div>
       </n-spin>
+
+      <n-modal v-model:show="showDetailsModal" preset="card" :title="t('chunks.detailsAndRefsTitle')" style="max-width:820px">
+        <n-scrollbar style="max-height:70vh">
+          <section v-if="selectedChunk" class="chunk-modal-section">
+            <div class="chunk-modal-section__title">{{ t('chunks.metadata') }}</div>
+            <div class="chunk-meta-grid">
+              <div class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.meta.chunkId') }}</span><n-text code style="font-size:11px">{{ selectedChunk.chunk_id }}</n-text></div>
+              <div class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.meta.documentId') }}</span><n-text code style="font-size:11px">{{ selectedChunk.document_id }}</n-text></div>
+              <div class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.version') }}</span><n-text>v{{ selectedChunk.chunk_version }}</n-text></div>
+              <div class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.source') }}</span><n-text>{{ selectedChunk.source || '—' }}</n-text></div>
+              <div v-if="selectedChunk.filename" class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.meta.filename') }}</span><n-text>{{ selectedChunk.filename }}</n-text></div>
+              <div class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.meta.chunkIndex') }}</span><n-text>#{{ selectedChunk.chunk_index + 1 }}</n-text></div>
+              <div v-if="selectedChunk.section_title" class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.meta.sectionTitle') }}</span><n-text>{{ selectedChunk.section_title }}</n-text></div>
+              <div v-if="selectedChunk.page_start" class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.page') }}</span><n-text>{{ selectedChunk.page_start }}{{ selectedChunk.page_end && selectedChunk.page_end !== selectedChunk.page_start ? '–' + selectedChunk.page_end : '' }}</n-text></div>
+              <div class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.meta.currentVersion') }}</span><n-tag size="tiny" :type="selectedChunk.is_current ? 'success' : 'default'">{{ selectedChunk.is_current ? t('chunks.meta.yes') : t('chunks.meta.no') }}</n-tag></div>
+              <div v-if="selectedChunk.embedding_model" class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.meta.embeddingModel') }}</span><n-text>{{ selectedChunk.embedding_model }}</n-text></div>
+              <div class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.meta.createdAt') }}</span><n-text :title="rfc3339(selectedChunk.created_at)">{{ formatDate(selectedChunk.created_at) }}</n-text></div>
+              <div class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.meta.updatedAt') }}</span><n-text :title="rfc3339(selectedChunk.updated_at)">{{ formatDate(selectedChunk.updated_at) }}</n-text></div>
+              <div v-if="selectedChunk.review_comment" class="chunk-meta-item chunk-meta-item--wide"><span class="chunk-meta-item__label">{{ t('chunks.meta.reviewComment') }}</span><n-text depth="3" style="display:block;font-size:12px;white-space:pre-wrap">{{ selectedChunk.review_comment }}</n-text></div>
+            </div>
+          </section>
+
+          <section class="chunk-modal-section">
+            <div class="chunk-modal-section__title">{{ t('chunks.resourceRefs', { n: selectedResourceRefs.length }) }}</div>
+            <n-empty v-if="!selectedResourceRefs.length" :description="t('chunks.noResourceRefs')" />
+            <div v-else class="resource-ref-list">
+              <div v-for="ref in selectedResourceRefs" :key="ref.ref_id" class="resource-ref-item">
+                <div class="resource-ref-item__header"><n-space size="small" align="center"><n-tag size="tiny">{{ ref.ref_type || 'ref' }}</n-tag><n-text style="font-size:13px;font-weight:600">{{ ref.label || ref.ref_id }}</n-text></n-space><n-text v-if="ref.page" depth="3" style="font-size:12px">{{ t('chunks.page') }} {{ ref.page }}</n-text></div>
+                <n-text v-if="ref.caption" depth="3" style="font-size:12px;display:block">{{ ref.caption }}</n-text>
+                <n-text v-if="ref.anchor_text" depth="3" style="font-size:12px;display:block">{{ t('chunks.anchorText') }}: {{ ref.anchor_text }}</n-text>
+                <a v-if="ref.url" :href="ref.url" target="_blank" rel="noreferrer" style="font-size:12px">{{ ref.url }}</a>
+                <n-text v-if="ref.storage_path" code style="font-size:11px;display:block;margin-top:4px">{{ ref.storage_path }}</n-text>
+                <n-tag v-if="ref.is_external" size="tiny" style="margin-top:6px">{{ t('chunks.externalResource') }}</n-tag>
+              </div>
+            </div>
+          </section>
+        </n-scrollbar>
+      </n-modal>
     </div>
   </div>
 </template>
@@ -249,12 +212,14 @@ const error = ref('')
 const rechunking = ref(false)
 const approving = ref(false)
 const merging = ref(false)
+const showDetailsModal = ref(false)
 
 // single-click selects for detail view; checkbox tracks multi-select for merge
 const selectedId = ref(null)
 const selectedIds = ref([])
 
 const selectedChunk = computed(() => chunks.value.find(c => c.chunk_id === selectedId.value) || null)
+const selectedResourceRefs = computed(() => selectedChunk.value?.resource_refs || [])
 
 const editing = ref(false)
 const editText = ref('')
@@ -410,6 +375,39 @@ onMounted(loadAll)
 </script>
 
 <style scoped>
+.chunk-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.chunk-detail-title {
+  min-width: 0;
+  flex: 1 1 260px;
+}
+.chunk-detail-section {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.chunk-detail-actions {
+  flex: 0 0 auto;
+}
+.chunk-modal-section + .chunk-modal-section {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #edf0f5;
+}
+.chunk-modal-section__title {
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
 .chunk-meta-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -417,6 +415,9 @@ onMounted(loadAll)
 }
 .chunk-meta-item {
   min-width: 0;
+}
+.chunk-meta-item--wide {
+  grid-column: 1 / -1;
 }
 .chunk-meta-item__label {
   display: block;
@@ -441,4 +442,7 @@ onMounted(loadAll)
 .chunk-item__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
 .chunk-item__section { font-size: 12px; color: #555; margin-bottom: 2px; }
 .chunk-item__pages { font-size: 11px; color: #999; }
+.resource-ref-list { display: grid; gap: 10px; }
+.resource-ref-item { padding: 10px 12px; border: 1px solid #e7e9ef; border-radius: 6px; background: #fff; }
+.resource-ref-item__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
 </style>

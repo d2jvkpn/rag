@@ -211,6 +211,11 @@ export default {
     version: 'Version',
     source: 'Source',
     page: 'Page',
+    metadata: 'Metadata',
+    detailsAndRefs: 'Details / Refs ({n})',
+    detailsAndRefsTitle: 'Chunk Details',
+    noResourceRefs: 'No resource refs',
+    externalResource: 'External resource',
     meta: {
       chunkId: 'Chunk ID',
       documentId: 'Document ID',

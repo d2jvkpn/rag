@@ -82,6 +82,7 @@
               :options="kbOptions"
               :placeholder="t('documents.uploadModal.selectKb')"
               style="width:100%"
+              @update:value="handleUploadKbChange"
             />
             <div v-if="currentUploadKbConfig" class="upload-modal__kb-meta">
               <n-text depth="3" class="upload-modal__kb-meta-item">
@@ -153,7 +154,7 @@ const selectedFile = ref(null)
 const uploadForm = ref({ knowledgeBaseId: '', title: '', tags: [] })
 
 const uploadRules = computed(() => ({
-  knowledgeBaseId: { required: true, message: t('documents.uploadModal.kbRequired'), trigger: 'blur' },
+  knowledgeBaseId: { required: true, message: t('documents.uploadModal.kbRequired'), trigger: ['blur', 'change'] },
 }))
 
 const statusOptions = computed(() =>
@@ -226,6 +227,10 @@ watch(() => filters.knowledgeBaseId, async () => {
 
 function onFileChange({ fileList }) {
   selectedFile.value = fileList[0]?.file || null
+}
+
+function handleUploadKbChange() {
+  uploadFormRef.value?.restoreValidation()
 }
 
 async function handleUpload() {

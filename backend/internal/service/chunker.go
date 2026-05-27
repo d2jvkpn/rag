@@ -50,6 +50,10 @@ func BuildChunks(documentID, filename string, blocks []llm.ParseBlock, chunkVers
 		if normalized == "" {
 			continue
 		}
+		blockRefs := block.Refs
+		if blockRefs == nil {
+			blockRefs = []model.ResourceRef{}
+		}
 		for _, seg := range splitByLength(normalized, chunkSize, overlap) {
 			seg = strings.TrimSpace(seg)
 			if seg == "" {
@@ -71,17 +75,22 @@ func BuildChunks(documentID, filename string, blocks []llm.ParseBlock, chunkVers
 				Source:         "auto",
 				IsCurrent:      true,
 				Filename:       filename,
-				ResourceRefs:   []model.ResourceRef{},
+				ResourceRefs:   blockRefs,
 			})
 		}
 	}
 
 	if len(allChunks) <= minChunks {
 		var texts []string
+		var allRefs []model.ResourceRef
 		for _, b := range blocks {
 			if t := strings.TrimSpace(b.Text); t != "" {
 				texts = append(texts, t)
 			}
+			allRefs = append(allRefs, b.Refs...)
+		}
+		if allRefs == nil {
+			allRefs = []model.ResourceRef{}
 		}
 		fullText := strings.TrimSpace(strings.Join(texts, "\n\n"))
 		if fullText == "" {
@@ -100,7 +109,7 @@ func BuildChunks(documentID, filename string, blocks []llm.ParseBlock, chunkVers
 			Source:         "auto",
 			IsCurrent:      true,
 			Filename:       filename,
-			ResourceRefs:   []model.ResourceRef{},
+			ResourceRefs:   allRefs,
 		}}
 	}
 

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"backend/internal/model"
 )
 
 func TestCleanText(t *testing.T) {
@@ -26,7 +28,26 @@ func TestCleanTextNormalizesPDFBulletGlyphs(t *testing.T) {
 
 func TestParsePDFUsesPythonScript(t *testing.T) {
 	scriptPath := filepath.Join(t.TempDir(), "fake_parse_pdf.py")
-	script := "#!/usr/bin/env python3\nimport json\nprint(json.dumps({'text':'hello\\nworld','page_count':2}))\n"
+	script := `#!/usr/bin/env python3
+import json
+print(json.dumps({
+    'text': 'hello\nworld',
+    'page_count': 2,
+    'pages': [{
+        'text': 'hello',
+        'page': 1,
+        'refs': [{
+            'ref_id': 'pdf-link-1-1',
+            'ref_type': 'link',
+            'label': 'Example',
+            'anchor_text': 'Example',
+            'page': 1,
+            'url': 'https://example.com',
+            'is_external': True,
+        }],
+    }],
+}))
+`
 	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
 		t.Fatalf("write fake parser: %v", err)
 	}
@@ -34,7 +55,7 @@ func TestParsePDFUsesPythonScript(t *testing.T) {
 	t.Setenv("PDF_PARSER_SCRIPT", scriptPath)
 	t.Setenv("PDF_PARSER_PYTHON", "python3")
 
-	got, err := Parse("ignored.pdf", "pdf")
+	got, err := Parse("ignored.pdf", "pdf", "")
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -43,6 +64,16 @@ func TestParsePDFUsesPythonScript(t *testing.T) {
 	}
 	if got.Text != "hello\nworld" {
 		t.Fatalf("unexpected text: %q", got.Text)
+	}
+	if len(got.Blocks) != 1 {
+		t.Fatalf("expected 1 block, got %d", len(got.Blocks))
+	}
+	if len(got.Blocks[0].Refs) != 1 {
+		t.Fatalf("expected 1 ref, got %d", len(got.Blocks[0].Refs))
+	}
+	ref := got.Blocks[0].Refs[0]
+	if ref.RefType != "link" || ref.AnchorText != "Example" || ref.URL != "https://example.com" || !ref.IsExternal {
+		t.Fatalf("unexpected ref: %+v", ref)
 	}
 }
 
@@ -57,7 +88,7 @@ func TestParsePDFSample(t *testing.T) {
 
 	t.Setenv("PDF_PARSER_PYTHON", "python3")
 
-	got, err := Parse(path, "pdf")
+	got, err := Parse(path, "pdf", "")
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -97,7 +128,7 @@ func TestParseDocxConvertsTablesToMarkdown(t *testing.T) {
 		t.Fatalf("write docx fixture: %v", err)
 	}
 
-	got, err := Parse(path, "docx")
+	got, err := Parse(path, "docx", "")
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -150,7 +181,7 @@ func TestParseDocxMergesAdjacentContinuationTables(t *testing.T) {
 		t.Fatalf("write docx fixture: %v", err)
 	}
 
-	got, err := Parse(path, "docx")
+	got, err := Parse(path, "docx", "")
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -208,7 +239,7 @@ func TestParsePptxConvertsTablesToMarkdown(t *testing.T) {
 		t.Fatalf("write pptx fixture: %v", err)
 	}
 
-	got, err := Parse(path, "pptx")
+	got, err := Parse(path, "pptx", "")
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -252,7 +283,7 @@ func TestParseDocxHeadingBlocks(t *testing.T) {
 	if err := writeZipFixture(path, files); err != nil {
 		t.Fatalf("write docx fixture: %v", err)
 	}
-	got, err := Parse(path, "docx")
+	got, err := Parse(path, "docx", "")
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -281,7 +312,7 @@ func TestParseDocxNoHeadingsFallback(t *testing.T) {
 	if err := writeZipFixture(path, files); err != nil {
 		t.Fatalf("write docx fixture: %v", err)
 	}
-	got, err := Parse(path, "docx")
+	got, err := Parse(path, "docx", "")
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -331,7 +362,7 @@ func TestParsePptxReturnsBlocks(t *testing.T) {
 	if err := writeZipFixture(path, files); err != nil {
 		t.Fatalf("write pptx fixture: %v", err)
 	}
-	got, err := Parse(path, "pptx")
+	got, err := Parse(path, "pptx", "")
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -343,6 +374,244 @@ func TestParsePptxReturnsBlocks(t *testing.T) {
 	}
 	if got.Blocks[0].SectionTitle != "幻灯片 1" {
 		t.Errorf("unexpected SectionTitle: %q", got.Blocks[0].SectionTitle)
+	}
+}
+
+func TestExtractMarkdownRefs(t *testing.T) {
+	input := "See [Go docs](https://go.dev) and ![logo](img/logo.png) for details."
+	text, refs := extractMarkdownRefs(input)
+
+	if text != "See Go docs and [图片: logo] for details." {
+		t.Fatalf("unexpected text: %q", text)
+	}
+	if len(refs) != 2 {
+		t.Fatalf("expected 2 refs, got %d", len(refs))
+	}
+	// image is extracted first
+	if refs[0].RefType != "image" || refs[0].Label != "logo" || refs[0].URL != "img/logo.png" {
+		t.Errorf("unexpected image ref: %+v", refs[0])
+	}
+	if refs[1].RefType != "link" || refs[1].AnchorText != "Go docs" || refs[1].URL != "https://go.dev" || !refs[1].IsExternal {
+		t.Errorf("unexpected link ref: %+v", refs[1])
+	}
+}
+
+func TestSplitMarkdownBlocksExtractsRefs(t *testing.T) {
+	md := "# Section\n\nSee [example](https://example.com)."
+	blocks := splitMarkdownBlocks(md)
+	if len(blocks) != 1 {
+		t.Fatalf("expected 1 block, got %d", len(blocks))
+	}
+	if len(blocks[0].Refs) != 1 {
+		t.Fatalf("expected 1 ref, got %d", len(blocks[0].Refs))
+	}
+	if blocks[0].Refs[0].RefType != "link" || blocks[0].Refs[0].URL != "https://example.com" {
+		t.Errorf("unexpected ref: %+v", blocks[0].Refs[0])
+	}
+	if strings.Contains(blocks[0].Text, "https://example.com") {
+		t.Errorf("URL should have been stripped from text: %q", blocks[0].Text)
+	}
+}
+
+func TestParseDocxExtractsHyperlinkRefs(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "links.docx")
+	files := map[string]string{
+		"word/_rels/document.xml.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com" TargetMode="External"/>
+</Relationships>`,
+		"word/document.xml": `<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    <w:p>
+      <w:hyperlink r:id="rId1">
+        <w:r><w:t>Visit Example</w:t></w:r>
+      </w:hyperlink>
+    </w:p>
+    <w:p><w:r><w:t>Normal paragraph.</w:t></w:r></w:p>
+  </w:body>
+</w:document>`,
+	}
+	if err := writeZipFixture(path, files); err != nil {
+		t.Fatalf("write docx fixture: %v", err)
+	}
+
+	got, err := Parse(path, "docx", "")
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if len(got.Blocks) == 0 {
+		t.Fatal("expected at least one block")
+	}
+	var allRefs []model.ResourceRef
+	for _, b := range got.Blocks {
+		allRefs = append(allRefs, b.Refs...)
+	}
+	if len(allRefs) != 1 {
+		t.Fatalf("expected 1 ref, got %d: %+v", len(allRefs), allRefs)
+	}
+	if allRefs[0].RefType != "link" || allRefs[0].AnchorText != "Visit Example" || allRefs[0].URL != "https://example.com" {
+		t.Errorf("unexpected ref: %+v", allRefs[0])
+	}
+}
+
+func TestParseDocxExtractsImageRef(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "img.docx")
+	files := map[string]string{
+		"word/document.xml": `<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">
+  <w:body>
+    <w:p>
+      <w:r>
+        <w:drawing>
+          <wp:inline><wp:docPr id="1" name="fig1" descr="Figure caption"/></wp:inline>
+        </w:drawing>
+      </w:r>
+    </w:p>
+    <w:p><w:r><w:t>后续段落。</w:t></w:r></w:p>
+  </w:body>
+</w:document>`,
+	}
+	if err := writeZipFixture(path, files); err != nil {
+		t.Fatalf("write docx fixture: %v", err)
+	}
+
+	got, err := Parse(path, "docx", "")
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	var allRefs []model.ResourceRef
+	for _, b := range got.Blocks {
+		allRefs = append(allRefs, b.Refs...)
+	}
+	if len(allRefs) != 1 {
+		t.Fatalf("expected 1 ref, got %d", len(allRefs))
+	}
+	if allRefs[0].RefType != "image" || allRefs[0].Label != "Figure caption" {
+		t.Errorf("unexpected ref: %+v", allRefs[0])
+	}
+	// placeholder text should appear in the document text
+	if !strings.Contains(got.Text, "[图片: Figure caption]") {
+		t.Errorf("expected image placeholder in text, got: %q", got.Text)
+	}
+}
+
+func TestParsePptxExtractsImageRef(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "img.pptx")
+	files := map[string]string{
+		"ppt/slides/slide1.xml": `<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:sp><p:txBody><a:p><a:r><a:t>Slide text</a:t></a:r></a:p></p:txBody></p:sp>
+    <p:pic>
+      <p:nvPicPr><p:cNvPr id="3" name="Picture 1" descr="Chart overview"/></p:nvPicPr>
+    </p:pic>
+  </p:spTree></p:cSld>
+</p:sld>`,
+	}
+	if err := writeZipFixture(path, files); err != nil {
+		t.Fatalf("write pptx fixture: %v", err)
+	}
+
+	got, err := Parse(path, "pptx", "")
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if len(got.Blocks) != 1 {
+		t.Fatalf("expected 1 block, got %d", len(got.Blocks))
+	}
+	if len(got.Blocks[0].Refs) != 1 {
+		t.Fatalf("expected 1 ref, got %d", len(got.Blocks[0].Refs))
+	}
+	ref := got.Blocks[0].Refs[0]
+	if ref.RefType != "image" || ref.Label != "Chart overview" {
+		t.Errorf("unexpected ref: %+v", ref)
+	}
+	if !strings.Contains(got.Blocks[0].Text, "[图片: Chart overview]") {
+		t.Errorf("expected image placeholder in block text: %q", got.Blocks[0].Text)
+	}
+}
+
+func TestParseDocxExtractsImageToStoragePath(t *testing.T) {
+	imgData := []byte{0x89, 0x50, 0x4e, 0x47} // minimal PNG header bytes
+	path := filepath.Join(t.TempDir(), "img.docx")
+	files := map[string]string{
+		"word/_rels/document.xml.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/img.png"/>
+</Relationships>`,
+		"word/document.xml": `<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+            xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    <w:p>
+      <w:r>
+        <w:drawing>
+          <wp:inline><wp:docPr id="1" name="fig" descr="Test image"/></wp:inline>
+          <a:blip r:embed="rId1"/>
+        </w:drawing>
+      </w:r>
+    </w:p>
+    <w:p><w:r><w:t>Content.</w:t></w:r></w:p>
+  </w:body>
+</w:document>`,
+	}
+	// write image bytes as a real zip entry
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	zw := zip.NewWriter(f)
+	for name, content := range files {
+		w, _ := zw.Create(name)
+		_, _ = w.Write([]byte(content))
+	}
+	w, _ := zw.Create("word/media/img.png")
+	_, _ = w.Write(imgData)
+	_ = zw.Close()
+	_ = f.Close()
+
+	staticBase := t.TempDir()                            // acts as data/static/
+	mediaDir := filepath.Join(staticBase, "doc-abc-123") // data/static/{docID}
+	got, err := Parse(path, "docx", mediaDir)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	var imgRef *model.ResourceRef
+	for bi := range got.Blocks {
+		for ri := range got.Blocks[bi].Refs {
+			r := &got.Blocks[bi].Refs[ri]
+			if r.RefType == "image" {
+				imgRef = r
+			}
+		}
+	}
+	if imgRef == nil {
+		t.Fatal("no image ref found")
+	}
+	if imgRef.StoragePath == "" {
+		t.Fatal("StoragePath should be set after media extraction")
+	}
+	// StoragePath must be relative to staticBase (data/static/), not absolute
+	if filepath.IsAbs(imgRef.StoragePath) {
+		t.Errorf("StoragePath should be relative, got: %q", imgRef.StoragePath)
+	}
+	// must start with the docID segment
+	if !strings.HasPrefix(imgRef.StoragePath, "doc-abc-123/") {
+		t.Errorf("StoragePath should start with docID, got: %q", imgRef.StoragePath)
+	}
+	diskPath := filepath.Join(staticBase, imgRef.StoragePath)
+	if _, statErr := os.Stat(diskPath); statErr != nil {
+		t.Fatalf("image file not written to disk at %q: %v", diskPath, statErr)
+	}
+	disk, _ := os.ReadFile(diskPath)
+	if string(disk) != string(imgData) {
+		t.Error("written image content mismatch")
 	}
 }
 

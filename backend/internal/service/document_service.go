@@ -556,7 +556,8 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 		zap.Bool("rechunk", rechunk),
 	)
 
-	parsed, err := llm.Parse(document.StoragePath, document.SourceType)
+	mediaDir := filepath.Join(s.cfg.GetString("app.data_dir"), "static", document.DocumentID)
+	parsed, err := llm.Parse(document.StoragePath, document.SourceType, mediaDir)
 	if err != nil {
 		infra.L.Warn("parse failed",
 			zap.String("document_id", document.DocumentID),

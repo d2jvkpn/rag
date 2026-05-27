@@ -230,7 +230,7 @@ chunk 快照约定：
 - `docx` 中相邻且列数一致的连续表会按续表处理并合并；若后一张表首行与前一张表表头一致，会自动去掉重复表头
 - `pptx` 每张幻灯片作为独立 block，`SectionTitle` = "幻灯片 N"，`PageStart` = 幻灯片编号
 - `markdown` 中原有表格语法保持原样，不做二次转换；按 `#/##/…` 标题边界拆分为 blocks
-- `pdf` 通过 Python 脚本调用 `pdfplumber` 提取文本，并将识别到的页内表格转成 Markdown 表格文本；正文抽取会尽量排除表格区域，减少重复内容；会尝试合并相邻页列数一致的续页表并去掉重复表头；每页作为独立 block，`PageStart` = 页码；要求运行环境可执行 `python3` 且安装 `pdfplumber`
+- `pdf` 通过 Python 脚本调用 `pdfplumber` 提取文本，并将识别到的页内表格转成 Markdown 表格文本；正文抽取会尽量排除表格区域，减少重复内容；会尝试合并相邻页列数一致的续页表并去掉重复表头；内容尺寸的图片、表格和 PDF 超链接会写入 `resource_refs`，PDF 图片会渲染为 PNG 并保存到 `data/static/{document_id}`；每页作为独立 block，`PageStart` = 页码；要求运行环境可执行 `python3` 且安装 `pdfplumber`
 - 扫描版 PDF 或其他无可提取文本的 PDF 仍会直接失败，不做 OCR
 - embedding 输入只使用 `document_chunks.text`
 - chunk 切分完成后直接写入 `document_chunks`；快照延后到 embedding 完成时再落盘

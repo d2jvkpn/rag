@@ -106,9 +106,112 @@ def rows_to_markdown(rows) -> str:
     return format_markdown_table(rows)
 
 
-def render_table(table, table_index: int) -> str:
+def table_label(table, table_index: int) -> str:
     page_label = format_page_range(table["pages"])
-    return f"表格 {table_index}（第 {page_label} 页）\n\n{rows_to_markdown(table['rows'])}"
+    return f"表格 {table_index}（第 {page_label} 页）"
+
+
+def render_table(table, table_index: int) -> str:
+    return f"{table_label(table, table_index)}\n\n{rows_to_markdown(table['rows'])}"
+
+
+def build_table_ref(table, table_index: int):
+    label = table_label(table, table_index)
+    pages = table.get("pages") or []
+    page = pages[0] if pages else 0
+    page_part = format_page_range(pages) or str(page)
+    return {
+        "ref_id": f"pdf-table-{page_part}-{table_index}",
+        "ref_type": "table",
+        "label": label,
+        "caption": label,
+        "page": page,
+    }
+
+
+def image_label(page_number: int, image_index: int) -> str:
+    return f"图片 {image_index}（第 {page_number} 页）"
+
+
+def save_page_image(page, image, page_number: int, image_index: int, media_dir, storage_base):
+    if media_dir is None or storage_base is None:
+        return ""
+    try:
+        media_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"pdf-page-{page_number}-image-{image_index}.png"
+        disk_path = media_dir / filename
+        px0, ptop, px1, pbottom = page.bbox
+        bbox = (
+            max(float(image["x0"]), float(px0)),
+            max(float(image["top"]), float(ptop)),
+            min(float(image["x1"]), float(px1)),
+            min(float(image["bottom"]), float(pbottom)),
+        )
+        if bbox[0] >= bbox[2] or bbox[1] >= bbox[3]:
+            return ""
+        page.crop(bbox).to_image(resolution=144).save(str(disk_path), format="PNG")
+        return str(disk_path.relative_to(storage_base))
+    except Exception:
+        return ""
+
+
+def extract_page_images(page, page_number: int, media_dir=None, storage_base=None):
+    refs = []
+    image_index = 0
+    for image in getattr(page, "images", []) or []:
+        width = float(image.get("width") or 0)
+        height = float(image.get("height") or 0)
+        # Ignore tiny decorative icons and avatars; keep content-sized figures.
+        if width < 48 or height < 48:
+            continue
+        image_index += 1
+        label = image_label(page_number, image_index)
+        ref = {
+            "ref_id": f"pdf-image-{page_number}-{image_index}",
+            "ref_type": "image",
+            "label": label,
+            "caption": f"{label}，约 {round(width)}×{round(height)} pt",
+            "page": page_number,
+        }
+        storage_path = save_page_image(page, image, page_number, image_index, media_dir, storage_base)
+        if storage_path:
+            ref["storage_path"] = storage_path
+        refs.append(ref)
+    return refs
+
+
+def extract_page_links(page, page_number: int):
+    links = []
+    for index, link in enumerate(getattr(page, "hyperlinks", []) or [], start=1):
+        url = link.get("uri") or link.get("url")
+        if not url:
+            continue
+        anchor_text = ""
+        bbox = (link.get("x0"), link.get("top"), link.get("x1"), link.get("bottom"))
+        if all(v is not None for v in bbox):
+            try:
+                anchor_text = (page.crop(bbox).extract_text() or "").strip()
+            except Exception:
+                anchor_text = ""
+        links.append({
+            "ref_id": f"pdf-link-{page_number}-{index}",
+            "ref_type": "link",
+            "label": anchor_text or url,
+            "anchor_text": anchor_text,
+            "page": page_number,
+            "url": url,
+            "is_external": True,
+        })
+    return links
+
+
+def build_page_refs(page_item):
+    refs = []
+    refs.extend(page_item.get("images") or [])
+    for index, table in enumerate(page_item["tables"], start=1):
+        refs.append(build_table_ref(table, index))
+    refs.extend(page_item.get("links") or [])
+    return refs
 
 
 def format_page_range(pages) -> str:
@@ -208,20 +311,19 @@ def merge_cross_page_tables(page_items):
             first_current = current["tables"][0]
             if can_merge_tables(last_prev, first_current):
                 previous["tables"][-1] = merge_tables(last_prev, first_current)
-                current = {
-                    "text": current["text"],
-                    "tables": current["tables"][1:],
-                    "page": current["page"],
-                }
+                current = dict(current)
+                current["tables"] = current["tables"][1:]
         merged_pages.append(current)
     return merged_pages
 
 
-def extract_page_content(page, page_number: int) -> str:
+def extract_page_content(page, page_number: int, media_dir=None, storage_base=None):
     tables, table_bboxes = extract_page_tables(page, page_number)
     text_page = remove_table_text(page, table_bboxes)
     text = extract_page_text(text_page)
-    return {"text": text, "tables": tables}
+    images = extract_page_images(page, page_number, media_dir, storage_base)
+    links = extract_page_links(page, page_number)
+    return {"text": text, "tables": tables, "images": images, "links": links}
 
 
 def render_page_content(page_item) -> str:
@@ -234,12 +336,15 @@ def render_page_content(page_item) -> str:
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
-        return fail("usage: parse_pdf.py <pdf_path>")
+    if len(sys.argv) not in (2, 3):
+        return fail("usage: parse_pdf.py <pdf_path> [media_dir]")
 
     path = Path(sys.argv[1])
     if not path.is_file():
         return fail(f"pdf file not found: {path}")
+
+    media_dir = Path(sys.argv[2]) if len(sys.argv) == 3 and sys.argv[2] else None
+    storage_base = media_dir.parent if media_dir is not None else None
 
     try:
         import pdfplumber
@@ -257,7 +362,7 @@ def main() -> int:
         failed_pages = 0
         for index, page in enumerate(pdf.pages, start=1):
             try:
-                page_item = extract_page_content(page, index)
+                page_item = extract_page_content(page, index, media_dir, storage_base)
                 page_item["page"] = index
             except Exception as exc:
                 failed_pages += 1
@@ -270,8 +375,9 @@ def main() -> int:
         page_data = []
         for page_item in page_items:
             rendered = render_page_content(page_item)
-            if rendered:
-                page_data.append({"text": rendered, "page": page_item["page"]})
+            refs = build_page_refs(page_item)
+            if rendered or refs:
+                page_data.append({"text": rendered, "page": page_item["page"], "refs": refs})
 
     if not page_data:
         return fail(

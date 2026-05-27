@@ -219,15 +219,13 @@
 
 右侧详情展示：
 
-- `chunk_id / document_id`
-- `filename / chunk_index / chunk_version / is_current`
-- `created_at / updated_at / embedding_model / review_comment`
 - `text`
 - `normalized_text`
-- `resource_refs`
 - 页码范围
 - 章节信息
 - `chunk_version`
+- `metadata` 不在详情正文区直接铺开，通过点击详情按钮在合并弹窗中展示 `chunk_id / document_id / filename / chunk_index / chunk_version / is_current / created_at / updated_at / embedding_model / review_comment` 等字段
+- `resource_refs` 在同一个详情弹窗中展示，避免正文区被结构化引用挤占
 
 支持的操作：
 

@@ -19,12 +19,32 @@ class FakeTable:
         return self._rows
 
 
+class FakePageImage:
+    def save(self, path, format=None):
+        pathlib.Path(path).write_bytes(b"png")
+
+
+class FakeCroppedPage:
+    def __init__(self, text):
+        self._text = text
+
+    def extract_text(self, **kwargs):
+        return self._text
+
+    def to_image(self, resolution=144):
+        return FakePageImage()
+
+
 class FakePage:
-    def __init__(self, texts=None, filtered_text="", tables=None, objects=None):
+    def __init__(self, texts=None, filtered_text="", tables=None, objects=None, hyperlinks=None, images=None, crop_text=""):
         self._texts = texts or {(): ""}
         self._filtered_text = filtered_text
         self._tables = tables or []
         self._objects = objects or []
+        self.hyperlinks = hyperlinks or []
+        self.images = images or []
+        self.bbox = (0, 0, 600, 800)
+        self._crop_text = crop_text
 
     def extract_text(self, **kwargs):
         key = tuple(sorted(kwargs.items()))
@@ -39,7 +59,10 @@ class FakePage:
     def filter(self, predicate):
         kept = [obj for obj in self._objects if predicate(obj)]
         text = self._filtered_text if len(kept) != len(self._objects) else self._texts.get((), "")
-        return FakePage(texts=self._texts, filtered_text=self._filtered_text, tables=self._tables, objects=kept)._with_default_text(text)
+        return FakePage(texts=self._texts, filtered_text=self._filtered_text, tables=self._tables, objects=kept, hyperlinks=self.hyperlinks, images=self.images, crop_text=self._crop_text)._with_default_text(text)
+
+    def crop(self, bbox):
+        return FakeCroppedPage(self._crop_text)
 
     def _with_default_text(self, text):
         self._texts = {(): text}
@@ -88,6 +111,56 @@ class ParsePDFTests(unittest.TestCase):
             got,
             "正文\n表格线性文本\n\n表格 1（第 2 页）\n\n| 指标 | 值 |\n| --- | --- |\n| 收入 | 100 |",
         )
+
+
+    def test_extract_page_content_returns_image_table_and_link_refs(self):
+        page = FakePage(
+            texts={(): "正文"},
+            tables=[FakeTable(rows=[["列1", "列2"], ["A", "B"]], bbox=(10, 10, 100, 60))],
+            hyperlinks=[{"uri": "https://example.com", "x0": 1, "top": 2, "x1": 3, "bottom": 4}],
+            images=[
+                {"width": 12, "height": 12},
+                {"width": 120, "height": 80},
+            ],
+            crop_text="Example",
+        )
+
+        page_item = parse_pdf.extract_page_content(page, 5)
+        refs = parse_pdf.build_page_refs(page_item)
+
+        self.assertEqual(len(refs), 3)
+        self.assertEqual(refs[0]["ref_type"], "image")
+        self.assertEqual(refs[0]["label"], "图片 1（第 5 页）")
+        self.assertEqual(refs[0]["page"], 5)
+        self.assertEqual(refs[1]["ref_type"], "table")
+        self.assertEqual(refs[1]["label"], "表格 1（第 5 页）")
+        self.assertEqual(refs[1]["page"], 5)
+        self.assertEqual(refs[2]["ref_type"], "link")
+        self.assertEqual(refs[2]["anchor_text"], "Example")
+        self.assertEqual(refs[2]["url"], "https://example.com")
+
+
+    def test_extract_page_images_writes_storage_path(self):
+        media_dir = pathlib.Path(self.id().replace('.', '_'))
+        root = pathlib.Path(self._testMethodName)
+        storage_base = pathlib.Path(self._testMethodName + "_base")
+        media_dir = storage_base / "doc-1"
+        page = FakePage(images=[{"width": 120, "height": 80, "x0": 1, "top": 2, "x1": 121, "bottom": 82}])
+
+        try:
+            refs = parse_pdf.extract_page_images(page, 7, media_dir, storage_base)
+
+            self.assertEqual(len(refs), 1)
+            self.assertEqual(refs[0]["storage_path"], "doc-1/pdf-page-7-image-1.png")
+            self.assertTrue((storage_base / refs[0]["storage_path"]).is_file())
+        finally:
+            if storage_base.exists():
+                for child in sorted(storage_base.rglob("*"), reverse=True):
+                    if child.is_file():
+                        child.unlink()
+                    else:
+                        child.rmdir()
+                storage_base.rmdir()
 
     def test_merge_cross_page_tables_deduplicates_repeated_header(self):
         page_items = [

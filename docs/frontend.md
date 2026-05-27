@@ -144,6 +144,7 @@
 - `pollIntervalMs`：详情页轮询处理中文档的间隔，默认 3000
 
 > 上传流程统一进入人工审核；前端不再提供 `human_review` 开关，并在提交时固定发送 `human_review=true`。
+> 上传弹窗中，选择知识库后应立即清除对应的必填校验提示，并展示该 collection 参数。
 
 设计要求：
 
@@ -214,6 +215,11 @@
 - 成功或失败短反馈使用 `message`
 - 危险操作确认使用 `dialog`
 - 不混用多套提示机制
+
+
+## Chunk 审核页交互约定
+
+`/documents/:documentId/chunks` 右侧详情区优先展示 chunk 正文和清洗后文本。chunk metadata 与 `resource_refs` 不直接铺在正文区，通过详情头部的同一个按钮打开合并弹窗查看；`resource_refs` 区域在无引用时显示空态，有引用时展示类型、标签、页码、caption、锚文本、URL、资源路径和外部资源标识。
 
 ## 前端上传约定
 
