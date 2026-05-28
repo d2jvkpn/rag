@@ -297,7 +297,7 @@ func (s *DocumentService) ListKnowledgeBases() []model.KnowledgeBase {
 }
 
 func (s *DocumentService) ListAvailableKnowledgeBases() []model.KnowledgeBase {
-	return s.store.ListKnowledgeBases()
+	return s.ListKnowledgeBases()
 }
 
 var ErrKnowledgeBaseExists = errors.New("knowledge base already exists")
@@ -380,13 +380,11 @@ func (s *DocumentService) DeleteDocument(documentID string) error {
 		staticStorageDir(s.cfg.GetString("app.data_dir"), document.DocumentID, document.CreatedAt),
 	)
 	_ = os.RemoveAll(filepath.Join(s.cfg.GetString("app.data_dir"), "static", document.DocumentID))
-	if document.Status == "indexed" {
-		_ = s.vectorStore.DeleteByDocument(
-			context.Background(),
-			document.KnowledgeBaseID,
-			document.DocumentID,
-		)
-	}
+	_ = s.vectorStore.DeleteByDocument(
+		context.Background(),
+		document.KnowledgeBaseID,
+		document.DocumentID,
+	)
 	return nil
 }
 
@@ -401,12 +399,18 @@ func (s *DocumentService) ApproveChunks(documentID string) error {
 	}
 	now := time.Now().UTC()
 	var toApprove []model.DocumentChunk
+	alreadyApproved := 0
 	for i := range chunks {
 		if chunks[i].Status == "draft" {
 			chunks[i].Status = "approved"
 			chunks[i].UpdatedAt = now
 			toApprove = append(toApprove, chunks[i])
+		} else if chunks[i].Status == "approved" {
+			alreadyApproved++
 		}
+	}
+	if len(toApprove) == 0 && alreadyApproved == 0 {
+		return errors.New("no chunks to approve: all chunks have been rejected")
 	}
 	if err := s.store.BulkUpdateChunks(toApprove); err != nil {
 		return err
@@ -558,6 +562,22 @@ func (s *DocumentService) IndexDocument(documentID string) error {
 	if document.Status != "approved" && document.Status != "failed" {
 		return errors.New("document must be in approved or failed state to trigger indexing")
 	}
+	if document.Status == "failed" {
+		chunks, err := s.store.GetChunks(documentID)
+		if err != nil {
+			return err
+		}
+		hasApproved := false
+		for _, c := range chunks {
+			if c.Status == "approved" && c.IsCurrent {
+				hasApproved = true
+				break
+			}
+		}
+		if !hasApproved {
+			return errors.New("document has no approved chunks; re-process before indexing")
+		}
+	}
 
 	now := time.Now().UTC()
 	document.Status = "processing"
@@ -636,7 +656,9 @@ func (s *DocumentService) runIndex(document model.Document) {
 
 	document.Stage = "index"
 	document.UpdatedAt = now
-	_ = s.store.UpdateDocument(document)
+	if err := s.store.UpdateDocument(document); err != nil {
+		infra.L.Warn("failed to persist index stage", zap.String("document_id", document.DocumentID), zap.Error(err))
+	}
 
 	records := llm.BuildRecords(document, approved, embeddings)
 	if err := s.vectorStore.Upsert(context.Background(), records); err != nil {
@@ -649,7 +671,9 @@ func (s *DocumentService) runIndex(document model.Document) {
 	document.Stage = "done"
 	document.FinishedAt = &done
 	document.UpdatedAt = done
-	_ = s.store.UpdateDocument(document)
+	if err := s.store.UpdateDocument(document); err != nil {
+		infra.L.Warn("failed to persist indexed status", zap.String("document_id", document.DocumentID), zap.Error(err))
+	}
 
 	infra.L.Info("document indexed",
 		zap.String("document_id", document.DocumentID),
@@ -697,7 +721,9 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 	document.StartedAt = &now
 	document.UpdatedAt = now
 	document.ErrorMessage = ""
-	_ = s.store.UpdateDocument(document)
+	if err := s.store.UpdateDocument(document); err != nil {
+		infra.L.Warn("failed to persist processing status", zap.String("document_id", document.DocumentID), zap.Error(err))
+	}
 
 	infra.L.Info("processing document",
 		zap.String("document_id", document.DocumentID),
@@ -746,7 +772,9 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 
 	document.Stage = "chunk"
 	document.UpdatedAt = time.Now().UTC()
-	_ = s.store.UpdateDocument(document)
+	if err := s.store.UpdateDocument(document); err != nil {
+		infra.L.Warn("failed to persist chunk stage", zap.String("document_id", document.DocumentID), zap.Error(err))
+	}
 
 	chunkVersion := 1
 	if rechunk && document.ChunkVersion > 0 {
@@ -794,7 +822,9 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 	document.ChunkSnapshotPath = ""
 	document.FinishedAt = &done
 	document.UpdatedAt = done
-	_ = s.store.UpdateDocument(document)
+	if err := s.store.UpdateDocument(document); err != nil {
+		infra.L.Warn("failed to persist processed status", zap.String("document_id", document.DocumentID), zap.Error(err))
+	}
 
 	if !document.HumanReview {
 		if err := s.IndexDocument(document.DocumentID); err != nil {
@@ -973,7 +1003,9 @@ func (s *DocumentService) failDocument(document model.Document, stage string, re
 	document.ErrorMessage = reason.Error()
 	document.FinishedAt = &now
 	document.UpdatedAt = now
-	_ = s.store.UpdateDocument(document)
+	if err := s.store.UpdateDocument(document); err != nil {
+		infra.L.Warn("failed to persist failed status", zap.String("document_id", document.DocumentID), zap.Error(err))
+	}
 }
 
 func detectSourceType(filename string) (string, error) {

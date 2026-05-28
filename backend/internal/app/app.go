@@ -38,9 +38,10 @@ func New(v *viper.Viper) (*App, error) {
 		return nil, err
 	}
 
+	v.SetDefault("http.jwt_token_ttl", "8h")
 	tokenTTL, err := time.ParseDuration(v.GetString("http.jwt_token_ttl"))
 	if err != nil || tokenTTL <= 0 {
-		tokenTTL = 0 // falls back to defaultTokenTTL in NewAuthService
+		return nil, errors.New("invalid http.jwt_token_ttl: must be a positive duration (e.g. \"8h\")")
 	}
 	blacklist := initBlacklist(v)
 	authService := service.NewAuthService(

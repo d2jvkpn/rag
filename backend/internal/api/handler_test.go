@@ -55,7 +55,7 @@ func TestDocumentLifecycle(t *testing.T) {
 	defer documentService.Close()
 	createKnowledgeBaseForAPITest(t, documentService, "kb-1")
 
-	authService := service.NewAuthService(store, "test-secret", 0, accounts)
+	authService := service.NewAuthService(store, "test-secret", time.Hour, accounts)
 	handler := NewHandler(v, authService, documentService).Routes()
 
 	sessionCookie := loginForTest(t, handler, "admin", "admin123")
@@ -180,7 +180,7 @@ func TestCreateKnowledgeBaseEndpoint(t *testing.T) {
 	}
 	defer documentService.Close()
 
-	authService := service.NewAuthService(store, "test-secret", 0, accounts)
+	authService := service.NewAuthService(store, "test-secret", time.Hour, accounts)
 	handler := NewHandler(v, authService, documentService).Routes()
 	adminCookie := loginForTest(t, handler, "admin", "admin123")
 	userCookie := loginForTest(t, handler, "user1", "user123")
@@ -239,7 +239,7 @@ func TestAuthRequired(t *testing.T) {
 	defer documentService.Close()
 	createKnowledgeBaseForAPITest(t, documentService, "kb-1")
 
-	authService := service.NewAuthService(store, "test-secret", 0, accounts)
+	authService := service.NewAuthService(store, "test-secret", time.Hour, accounts)
 	handler := NewHandler(v, authService, documentService).Routes()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/documents", nil)
@@ -372,7 +372,7 @@ func TestUserListRequiresPermission(t *testing.T) {
 	defer documentService.Close()
 	createKnowledgeBaseForAPITest(t, documentService, "kb-1")
 
-	authService := service.NewAuthService(store, "test-secret", 0, accounts)
+	authService := service.NewAuthService(store, "test-secret", time.Hour, accounts)
 	handler := NewHandler(v, authService, documentService).Routes()
 
 	adminCookie := loginForTest(t, handler, "admin", "admin123")
@@ -414,7 +414,7 @@ func TestDocumentTagsEndpoint(t *testing.T) {
 	createKnowledgeBaseForAPITest(t, documentService, "kb-1")
 	createKnowledgeBaseForAPITest(t, documentService, "kb-2")
 
-	authService := service.NewAuthService(store, "test-secret", 0, accounts)
+	authService := service.NewAuthService(store, "test-secret", time.Hour, accounts)
 	handler := NewHandler(v, authService, documentService).Routes()
 	sessionCookie := loginForTest(t, handler, "admin", "admin123")
 
@@ -495,7 +495,7 @@ func TestDisableUserBlocksFurtherRequests(t *testing.T) {
 	defer documentService.Close()
 	createKnowledgeBaseForAPITest(t, documentService, "kb-1")
 
-	authService := service.NewAuthService(store, "test-secret", 0, accounts)
+	authService := service.NewAuthService(store, "test-secret", time.Hour, accounts)
 	handler := NewHandler(v, authService, documentService).Routes()
 
 	adminCookie := loginForTest(t, handler, "admin", "admin123")
@@ -555,7 +555,7 @@ func TestDeleteDocumentPermissionOverridesOwnership(t *testing.T) {
 	defer documentService.Close()
 	createKnowledgeBaseForAPITest(t, documentService, "kb-1")
 
-	authService := service.NewAuthService(store, "test-secret", 0, accounts)
+	authService := service.NewAuthService(store, "test-secret", time.Hour, accounts)
 	handler := NewHandler(v, authService, documentService).Routes()
 
 	userCookie := loginForTest(t, handler, "user1", "user123")

@@ -19,8 +19,6 @@ var ErrTOTPRequired = errors.New("totp_required")
 var ErrUserDisabled = errors.New("user_disabled")
 var ErrCannotChangeOwnStatus = errors.New("cannot change your own status")
 
-const defaultTokenTTL = 8 * time.Hour
-
 type claims struct {
 	UserID string `json:"user_id"`
 	jwt.RegisteredClaims
@@ -41,9 +39,6 @@ func NewAuthService(
 	accounts []repository.AccountSeed,
 	bl ...TokenBlacklist,
 ) *AuthService {
-	if tokenTTL <= 0 {
-		tokenTTL = defaultTokenTTL
-	}
 	svc := &AuthService{
 		store:       store,
 		jwtSecret:   []byte(jwtSecret),
