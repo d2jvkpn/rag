@@ -9,6 +9,7 @@ import (
 
 func RequestLogger() gin.HandlerFunc {
 	log := L.WithOptions(zap.WithCaller(false))
+
 	return func(c *gin.Context) {
 		start := time.Now()
 		c.Next()
@@ -24,7 +25,7 @@ func RequestLogger() gin.HandlerFunc {
 			zap.String("method", c.Request.Method),
 			zap.String("path", path),
 			zap.Int("status", status),
-			zap.Duration("latency", time.Since(start)),
+			zap.Duration("latency", time.Since(start).Truncate(time.Millisecond)),
 		}
 
 		if len(c.Params) > 0 {

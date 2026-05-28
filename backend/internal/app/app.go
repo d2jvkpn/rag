@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"time"
 
@@ -26,32 +27,52 @@ type App struct {
 }
 
 func New(v *viper.Viper) (*App, error) {
-	accounts := readAccounts(v)
-	store, err := initStore(v, accounts)
-	if err != nil {
+	var (
+		err             error
+		accounts        []repository.AccountSeed
+		store           repository.Store
+		opts            []func(*service.DocumentService)
+		documentService *service.DocumentService
+		blacklist       service.TokenBlacklist
+		tokenTTL        time.Duration
+		authService     *service.AuthService
+		handler         *api.Handler
+	)
+
+	if accounts, err = readAccounts(v); err != nil {
 		return nil, err
 	}
 
-	opts := buildServiceOpts(v)
-	documentService, err := service.NewDocumentService(v, store, opts...)
+	if store, err = initStore(v, accounts); err != nil {
+		return nil, err
+	}
+
+	if opts, err = buildServiceOpts(v); err != nil {
+		return nil, err
+	}
+	documentService, err = service.NewDocumentService(v, store, opts...)
 	if err != nil {
 		return nil, err
 	}
 
 	v.SetDefault("http.jwt_token_ttl", "8h")
-	tokenTTL, err := time.ParseDuration(v.GetString("http.jwt_token_ttl"))
+	tokenTTL, err = time.ParseDuration(v.GetString("http.jwt_token_ttl"))
 	if err != nil || tokenTTL <= 0 {
-		return nil, errors.New("invalid http.jwt_token_ttl: must be a positive duration (e.g. \"8h\")")
+		return nil, errors.New("invalid http.jwt_token_ttl: must be a positive duration")
 	}
-	blacklist := initBlacklist(v)
-	authService := service.NewAuthService(
+
+	if blacklist, err = initBlacklist(v); err != nil {
+		return nil, err
+	}
+
+	authService = service.NewAuthService(
 		store,
 		v.GetString("http.jwt_secret"),
 		tokenTTL,
 		accounts,
 		blacklist,
 	)
-	handler := api.NewHandler(v, authService, documentService)
+	handler = api.NewHandler(v, authService, documentService)
 
 	return &App{
 		Handler:         handler,
@@ -62,76 +83,96 @@ func New(v *viper.Viper) (*App, error) {
 	}, nil
 }
 
-func (a *App) Shutdown(ctx context.Context) error {
-	var err error
+func (a *App) Shutdown(ctx context.Context) (err error) {
+	var (
+		ok bool
+		fn interface{ Close(context.Context) error }
+		c  interface{ Close() error }
+	)
 
 	if a.DocumentService != nil {
 		err = errors.Join(err, a.DocumentService.Shutdown(ctx))
 	}
-	if c, ok := a.vectorStore.(interface{ Close(context.Context) error }); ok {
-		err = errors.Join(err, c.Close(ctx))
+
+	if fn, ok = a.vectorStore.(interface{ Close(context.Context) error }); ok {
+		err = errors.Join(err, fn.Close(ctx))
 	}
-	if c, ok := a.blacklist.(interface{ Close() error }); ok {
+
+	if c, ok = a.blacklist.(interface{ Close() error }); ok {
 		err = errors.Join(err, c.Close())
 	}
-	if c, ok := a.store.(interface{ Close() error }); ok {
+
+	if c, ok = a.store.(interface{ Close() error }); ok {
 		err = errors.Join(err, c.Close())
 	}
 
 	return err
 }
 
-func readAccounts(v *viper.Viper) []repository.AccountSeed {
-	var raw []struct {
-		Username    string   `mapstructure:"username"`
-		Password    string   `mapstructure:"password"`
-		Permissions []string `mapstructure:"permissions"`
+func readAccounts(v *viper.Viper) (accounts []repository.AccountSeed, err error) {
+	var raw []repository.AccountSeed
+
+	if err = v.UnmarshalKey("accounts", &raw); err != nil {
+		return nil, err
 	}
-	_ = v.UnmarshalKey("accounts", &raw)
-	out := make([]repository.AccountSeed, 0, len(raw))
-	for _, a := range raw {
-		if a.Username != "" && a.Password != "" {
-			out = append(out, repository.AccountSeed{
-				Username:    a.Username,
-				Password:    a.Password,
-				Permissions: append([]string(nil), a.Permissions...),
-			})
+
+	accounts = make([]repository.AccountSeed, 0, len(raw))
+	for _, v := range raw {
+		if v.Username != "" && v.Password != "" {
+			accounts = append(accounts, v)
 		}
 	}
-	return out
+
+	return accounts, nil
 }
 
 func initStore(v *viper.Viper, accounts []repository.AccountSeed) (repository.Store, error) {
-	if dsn := v.GetString("database.dsn"); dsn != "" {
+	var str string
+
+	if str = v.GetString("database.dsn"); str != "" {
 		infra.L.Info("store: postgres")
-		return repository.NewPostgresStore(dsn, accounts)
+		return repository.NewPostgresStore(str, accounts)
 	}
-	statePath := v.GetString("app.state_path")
-	if statePath == "" {
-		statePath = filepath.Join(v.GetString("app.data_dir"), "app-state.json")
+
+	str = v.GetString("app.state_path")
+	if str == "" {
+		str = filepath.Join(v.GetString("app.data_dir"), "app-state.json")
 	}
-	infra.L.Info("store: json file", zap.String("path", statePath))
-	return repository.NewJSONStore(statePath, accounts)
+	infra.L.Info("store: json file", zap.String("path", str))
+
+	return repository.NewJSONStore(str, accounts)
 }
 
-func initBlacklist(v *viper.Viper) service.TokenBlacklist {
-	if dsn := v.GetString("redis.dsn"); dsn != "" {
-		infra.L.Info("token blacklist: redis", zap.String("dsn", dsn))
-		opt, err := redis.ParseURL(dsn)
-		if err != nil {
-			infra.L.Fatal("parse redis dsn", zap.Error(err))
+func initBlacklist(v *viper.Viper) (blacklist service.TokenBlacklist, err error) {
+	var (
+		str  string
+		opts *redis.Options
+	)
+
+	if str = v.GetString("redis.dsn"); str != "" {
+		infra.L.Info("token blacklist: redis", zap.String("dsn", str))
+		if opts, err = redis.ParseURL(str); err != nil {
+			// infra.L.Fatal("parse redis dsn", zap.Error(err))
+			return nil, fmt.Errorf("parse redis dsn: %w", err)
 		}
-		return service.NewRedisBlacklist(redis.NewClient(opt))
+		return service.NewRedisBlacklist(redis.NewClient(opts)), nil
 	}
+
 	infra.L.Info("token blacklist: memory")
-	return service.NewMemoryBlacklist()
+	return service.NewMemoryBlacklist(), nil
 }
 
-func buildServiceOpts(v *viper.Viper) []func(*service.DocumentService) {
-	var opts []func(*service.DocumentService)
+func buildServiceOpts(v *viper.Viper) (opts []func(*service.DocumentService), err error) {
+	var (
+		embedBaseURL string
+		embedAPIKey  string
+		addr         string
+		db           string
+		milvus       *llm.Milvus
+	)
 
-	embedBaseURL := v.GetString("embedder.base_url")
-	embedAPIKey := v.GetString("embedder.api_key")
+	embedBaseURL = v.GetString("embedder.base_url")
+	embedAPIKey = v.GetString("embedder.api_key")
 	if embedBaseURL != "" && embedAPIKey != "" {
 		model := v.GetString("embedder.model")
 		batchSize := v.GetInt("embedder.batch_size")
@@ -140,37 +181,26 @@ func buildServiceOpts(v *viper.Viper) []func(*service.DocumentService) {
 			zap.String("model", model),
 			zap.Int("batch_size", batchSize),
 		)
-		opts = append(
-			opts,
-			service.WithEmbedder(
-				llm.NewOpenAIEmbedder(embedBaseURL, embedAPIKey, model, batchSize),
-			),
+		v := service.WithEmbedder(
+			llm.NewOpenAIEmbedder(embedBaseURL, embedAPIKey, model, batchSize),
 		)
+
+		opts = append(opts, v)
 	} else {
 		infra.L.Info("embedder: noop")
 	}
 
-	if addr := v.GetString("milvus.addr"); addr != "" {
-		db := v.GetString("milvus.db")
+	if addr = v.GetString("milvus.addr"); addr != "" {
+		db = v.GetString("milvus.db")
 		infra.L.Info("vectorstore: milvus", zap.String("addr", addr), zap.String("db", db))
-		vs, err := llm.NewMilvus(addr, db, nil)
-		if err != nil {
-			infra.L.Fatal("init milvus", zap.Error(err))
+
+		if milvus, err = llm.NewMilvus(addr, db, nil); err != nil {
+			return nil, err
 		}
-		opts = append(opts, service.WithVectorStore(vs))
+		opts = append(opts, service.WithVectorStore(milvus))
 	} else {
 		infra.L.Info("vectorstore: noop")
 	}
 
-	llmBaseURL := v.GetString("llm.base_url")
-	llmAPIKey := v.GetString("llm.api_key")
-	if llmBaseURL != "" && llmAPIKey != "" {
-		model := v.GetString("llm.model")
-		infra.L.Info("llm: openai-compatible", zap.String("model", model))
-		opts = append(opts, service.WithLLM(llm.NewOpenAILLM(llmBaseURL, llmAPIKey, model)))
-	} else {
-		infra.L.Info("llm: noop (no answer generation)")
-	}
-
-	return opts
+	return opts, nil
 }

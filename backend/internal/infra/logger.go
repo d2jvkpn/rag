@@ -2,8 +2,8 @@ package infra
 
 import (
 	"os"
-	"path/filepath"
 
+	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -12,21 +12,17 @@ import (
 // L is initialized to a no-op logger so tests that skip Init() don't panic.
 var L = zap.NewNop()
 
-func Init(logDir string, release bool) {
-	if err := os.MkdirAll(logDir, 0o755); err != nil {
-		panic("logger: cannot create log dir: " + err.Error())
-	}
-
+func Init(config *viper.Viper) {
 	fileWriter := zapcore.AddSync(&lumberjack.Logger{
-		Filename:   filepath.Join(logDir, "app.log"),
-		MaxSize:    100, // MB
-		MaxBackups: 7,
-		MaxAge:     30, // days
-		Compress:   true,
+		Filename:   config.GetString("logging.path"),
+		MaxSize:    config.GetInt("logging.max_size_mb"), // MB
+		MaxBackups: config.GetInt("logging.max_backups"),
+		MaxAge:     config.GetInt("logging.max_age_days"), // days
+		Compress:   config.GetBool("logging.compress"),
 	})
 
 	level := zapcore.DebugLevel
-	if release {
+	if config.GetBool("app.release") {
 		level = zapcore.InfoLevel
 	}
 

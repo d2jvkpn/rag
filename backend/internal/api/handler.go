@@ -40,13 +40,16 @@ func (h *Handler) Routes() http.Handler {
 	router := gin.New()
 	router.Use(gin.Recovery(), infra.RequestLogger(), h.cors())
 
-	basePath := strings.TrimRight(h.cfg.GetString("http.base_path"), "/")
-	if basePath != "" && !strings.HasPrefix(basePath, "/") {
-		basePath = "/" + basePath
+	basePath := h.cfg.GetString("http.base_path")
+
+	webDir := ""
+	info, err := os.Stat(filepath.Join("target", "ui", "index.html"))
+	if err == nil && !info.IsDir() {
+		webDir = filepath.Join("target", "ui")
 	}
-	webDir := detectWebDir(h.cfg.GetString("app.data_dir"))
+
 	if webDir != "" {
-		router.GET(basePath+"/", func(c *gin.Context) {
+		router.GET(basePath, func(c *gin.Context) {
 			c.Redirect(http.StatusMovedPermanently, basePath+"/ui/index.html")
 		})
 		router.GET(basePath+"/index.html", func(c *gin.Context) {
@@ -58,7 +61,7 @@ func (h *Handler) Routes() http.Handler {
 		if webDir != "" && h.serveUIAsset(c, basePath, webDir) {
 			return
 		}
-		writeError(c, 404, "not_found", "route not found", nil)
+		writeError(c, 404, "route_not_found", "route not found", nil)
 	})
 
 	root := router.Group(basePath)
@@ -70,100 +73,61 @@ func (h *Handler) Routes() http.Handler {
 	staticDir := filepath.Join(h.cfg.GetString("app.data_dir"), "static")
 	root.Static("/static", staticDir)
 
-	apiGroup := root.Group("/api")
-	apiGroup.POST("/login", h.handleLogin)
-	apiGroup.POST("/logout", h.withAuth(), h.handleLogout)
-	apiGroup.GET("/me", h.withAuth(), h.handleMe)
-	apiGroup.PUT("/me/password", h.withAuth(), h.handleChangePassword)
-	apiGroup.POST("/me/totp/setup", h.withAuth(), h.handleTOTPSetup)
-	apiGroup.POST("/me/totp/enable", h.withAuth(), h.handleTOTPEnable)
-	apiGroup.POST("/me/totp/disable", h.withAuth(), h.handleTOTPDisable)
-	apiGroup.POST("/documents", h.withAuth(), h.handleCreateDocument)
-	apiGroup.GET("/documents", h.withAuth(), h.handleListDocuments)
-	apiGroup.GET("/document-tags", h.withAuth(), h.handleListDocumentTags)
-	apiGroup.GET("/documents/:document_id", h.withAuth(), h.handleGetDocument)
+	root.POST("/api/login", h.handleLogin)
+
+	apiGroup := root.Group("/api", h.withAuth())
+	apiGroup.POST("/logout", h.handleLogout)
+
+	apiGroup.GET("/me", h.handleMe)
+	apiGroup.PUT("/me/password", h.handleChangePassword)
+	apiGroup.POST("/me/totp/setup", h.handleTOTPSetup)
+	apiGroup.POST("/me/totp/enable", h.handleTOTPEnable)
+	apiGroup.POST("/me/totp/disable", h.handleTOTPDisable)
+
+	apiGroup.POST("/documents", h.handleCreateDocument)
+	apiGroup.GET("/documents", h.handleListDocuments)
+	apiGroup.GET("/document-tags", h.handleListDocumentTags)
+	apiGroup.GET("/documents/:document_id", h.handleGetDocument)
+
 	apiGroup.DELETE(
 		"/documents/:document_id",
-		h.withAuth(),
 		h.withDocumentOwnerOrPermission("delete_documents"),
 		h.handleDeleteDocument,
 	)
-	apiGroup.GET("/documents/:document_id/chunks", h.withAuth(), h.handleGetChunks)
-	apiGroup.POST(
-		"/documents/:document_id/chunks/rechunk",
-		h.withAuth(),
-		h.withDocumentOwner(),
-		h.handleRechunk,
-	)
-	apiGroup.POST(
-		"/documents/:document_id/chunks/approve",
-		h.withAuth(),
-		h.withDocumentOwner(),
-		h.handleApproveChunks,
-	)
-	apiGroup.POST(
-		"/documents/:document_id/chunks/merge",
-		h.withAuth(),
-		h.withDocumentOwner(),
-		h.handleMergeChunks,
-	)
-	apiGroup.PUT(
-		"/documents/:document_id/chunks/:chunk_id",
-		h.withAuth(),
-		h.withDocumentOwner(),
-		h.handleEditChunk,
-	)
-	apiGroup.POST(
-		"/documents/:document_id/chunks/:chunk_id/reject",
-		h.withAuth(),
-		h.withDocumentOwner(),
-		h.handleRejectChunk,
-	)
-	apiGroup.POST(
-		"/documents/:document_id/chunks/:chunk_id/restore",
-		h.withAuth(),
-		h.withDocumentOwner(),
-		h.handleRestoreChunk,
-	)
-	apiGroup.POST(
-		"/documents/:document_id/index",
-		h.withAuth(),
-		h.withDocumentOwner(),
-		h.handleIndexDocument,
-	)
-	apiGroup.GET("/users", h.withAuth(), h.withPermission("view_user_list"), h.handleListUsers)
+	apiGroup.GET("/documents/:document_id/chunks", h.handleGetChunks)
+
+	documentOwner := apiGroup.Group("/documents", h.withDocumentOwner())
+	documentOwner.POST("/:document_id/chunks/rechunk", h.handleRechunk)
+	documentOwner.POST("/:document_id/chunks/approve", h.handleApproveChunks)
+	documentOwner.POST("/:document_id/chunks/merge", h.handleMergeChunks)
+	documentOwner.PUT("/:document_id/chunks/:chunk_id", h.handleEditChunk)
+	documentOwner.POST("/:document_id/chunks/:chunk_id/reject", h.handleRejectChunk)
+	documentOwner.POST("/:document_id/chunks/:chunk_id/restore", h.handleRestoreChunk)
+	documentOwner.POST("/:document_id/index", h.handleIndexDocument)
+
+	apiGroup.GET("/users", h.withPermission("view_user_list"), h.handleListUsers)
 	apiGroup.POST(
 		"/users/:user_id/disable",
-		h.withAuth(),
 		h.withPermission("disable_users"),
 		h.handleDisableUser,
 	)
+
 	apiGroup.POST(
 		"/users/:user_id/enable",
-		h.withAuth(),
 		h.withPermission("disable_users"),
 		h.handleEnableUser,
 	)
-	apiGroup.POST("/query", h.withAuth(), h.handleQuery)
-	apiGroup.GET("/knowledge-bases", h.withAuth(), h.handleListKnowledgeBases)
+	apiGroup.POST("/query", h.handleQuery)
+
+	apiGroup.GET("/knowledge-bases", h.handleListKnowledgeBases)
 	apiGroup.POST(
 		"/knowledge-bases",
-		h.withAuth(),
 		h.withPermission("create_knowledge_bases"),
 		h.handleCreateKnowledgeBase,
 	)
-	apiGroup.GET("/knowledge-bases/available", h.withAuth(), h.handleListAvailableKnowledgeBases)
+	apiGroup.GET("/knowledge-bases/available", h.handleListAvailableKnowledgeBases)
 
 	return router
-}
-
-func detectWebDir(dataDir string) string {
-	for _, webDir := range []string{filepath.Join(dataDir, "ui"), filepath.Join("target", "ui")} {
-		if info, err := os.Stat(filepath.Join(webDir, "index.html")); err == nil && !info.IsDir() {
-			return webDir
-		}
-	}
-	return ""
 }
 
 func (h *Handler) serveUIAsset(c *gin.Context, basePath, webDir string) bool {
@@ -200,10 +164,12 @@ func (h *Handler) handleLogin(c *gin.Context) {
 		Password string `json:"password"`
 		TOTPCode string `json:"totp_code"`
 	}
+
 	if err := json.NewDecoder(c.Request.Body).Decode(&request); err != nil {
 		writeError(c, 400, "validation_error", "invalid request body", nil)
 		return
 	}
+
 	if strings.TrimSpace(request.Username) == "" || strings.TrimSpace(request.Password) == "" {
 		writeError(c, 400, "validation_error", "username and password are required", []fieldError{
 			{Field: "username", Reason: "required"},
@@ -227,15 +193,17 @@ func (h *Handler) handleLogin(c *gin.Context) {
 	}
 
 	c.SetSameSite(http.SameSiteLaxMode)
+
 	c.SetCookie(
-		h.cfg.GetString("http.session_cookie"),
-		token,
-		int(h.authService.TokenTTL().Seconds()),
-		"/",
-		"",
-		gin.Mode() == gin.ReleaseMode,
-		true,
+		h.cfg.GetString("http.session_cookie"),  // name
+		token,                                   // value
+		int(h.authService.TokenTTL().Seconds()), // maxAge
+		h.cfg.GetString("http.base_path"),       // path
+		"",                                      // domain
+		gin.Mode() == gin.ReleaseMode,           // secure
+		true,                                    // httpOnly
 	)
+
 	writeData(c, 200, h.sanitizeUser(user))
 }
 
@@ -244,16 +212,18 @@ func (h *Handler) handleLogout(c *gin.Context) {
 	if err == nil {
 		_ = h.authService.Logout(cookie.Value)
 	}
+
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(
-		h.cfg.GetString("http.session_cookie"),
-		"",
-		-1,
-		"/",
-		"",
-		gin.Mode() == gin.ReleaseMode,
-		true,
+		h.cfg.GetString("http.session_cookie"), // name
+		"",                                     // token
+		-1,                                     // maxAge
+		h.cfg.GetString("http.base_path"),      // path
+		"",                                     // domain
+		gin.Mode() == gin.ReleaseMode,          // secure
+		true,                                   // httpOnly
 	)
+
 	writeData(c, 200, map[string]any{"accepted": true})
 }
 
@@ -273,10 +243,12 @@ func (h *Handler) handleListUsers(c *gin.Context) {
 
 func (h *Handler) handleDisableUser(c *gin.Context) {
 	actor := c.MustGet("current_user").(model.User)
+
 	if err := h.authService.SetUserStatus(actor, c.Param("user_id"), "disabled"); err != nil {
 		h.writeActionError(c, err)
 		return
 	}
+
 	writeData(c, 200, map[string]any{"accepted": true})
 }
 
@@ -310,9 +282,9 @@ func (h *Handler) handleChangePassword(c *gin.Context) {
 		writeError(c, 400, "validation_error", "missing required fields", errs)
 		return
 	}
-	if err := h.authService.ChangePassword(
-		user.UserID, body.OldPassword, body.NewPassword,
-	); err != nil {
+
+	err := h.authService.ChangePassword(user.UserID, body.OldPassword, body.NewPassword)
+	if err != nil {
 		if err.Error() == "incorrect current password" {
 			writeError(
 				c,

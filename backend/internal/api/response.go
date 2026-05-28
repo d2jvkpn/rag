@@ -33,9 +33,7 @@ func writeError(c *gin.Context, status int, code, message string, details []fiel
 	if len(details) > 0 {
 		payload["details"] = details
 	}
-	c.JSON(status, map[string]any{
-		"error": payload,
-	})
+	c.JSON(status, map[string]any{"error": payload})
 }
 
 func trimSourcePath(file string) string {

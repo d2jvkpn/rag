@@ -18,9 +18,9 @@ import (
 
 // AccountSeed describes an account to ensure exists on startup.
 type AccountSeed struct {
-	Username    string
-	Password    string   // plaintext or bcrypt hash (detected automatically)
-	Permissions []string // config-only permissions; never persisted
+	Username    string   `mapstructure:"username"`
+	Password    string   `mapstructure:"password"`    // plaintext or bcrypt hash (detected automatically)
+	Permissions []string `mapstructure:"permissions"` // config-only permissions; never persisted
 }
 
 var ErrNotFound = errors.New("not found")

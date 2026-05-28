@@ -24,20 +24,16 @@ http:
 
 # Set database.dsn to enable PostgreSQL. Leave empty to use the JSON store.
 database:
-  # Example: "postgres://rag:rag@127.0.0.1:5432/ragdb?sslmode=disable"
-  dsn: ""
+  dsn: "postgres://username:password@127.0.0.1:5432/rag?sslmode=disable"
 
 # Set redis.dsn to enable Redis-backed token blacklist and Asynq tasks.
 redis:
-  # Example: "redis://127.0.0.1:6379/0"
-  dsn: ""
+  dsn: "redis://:xxxxxxxx@127.0.0.1:6379/0"
 
 # OpenAI-compatible embedding endpoint. Leave base_url/api_key empty for Noop.
 embedder:
-  # Example: "https://api.openai.com/v1"
-  # Example: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-  base_url: ""
-  api_key: ""
+  base_url: "https://api.openai.com/v1"
+  api_key: "sk-xxxxxxxx"
   model: "text-embedding-3-small"
   batch_size: 10
   # Vector dimension of the embedding model. Used for newly created knowledge bases.
@@ -45,8 +41,7 @@ embedder:
 
 # Milvus is enabled only when addr is non-empty. Collections are created from the UI.
 milvus:
-  # Example: "127.0.0.1:19530"
-  addr: ""
+  addr: "127.0.0.1:19530"
   db: "rag"
 
 # OpenAI-compatible chat completion endpoint. Leave base_url/api_key empty for Noop.

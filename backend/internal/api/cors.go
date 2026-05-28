@@ -8,31 +8,15 @@ import (
 )
 
 func (h *Handler) cors() gin.HandlerFunc {
-	allowed, allowAny := parseAllowOrigins(h.cfg.GetStringSlice("http.allow_origins"))
-	return cors.New(cors.Config{
-		AllowOriginFunc: func(origin string) bool {
-			origin = strings.TrimSpace(origin)
-			return origin != "" && (allowAny || allowed[origin])
-		},
-		AllowMethods: []string{
-			httpMethodGet,
-			httpMethodPost,
-			httpMethodPut,
-			httpMethodDelete,
-			httpMethodOptions,
-		},
-		AllowHeaders: []string{
-			"Authorization",
-			"Content-Type",
-			"X-Requested-With",
-		},
-		AllowCredentials: true,
-	})
-}
+	var (
+		values   []string
+		allowed  map[string]bool
+		allowAny bool
+	)
 
-func parseAllowOrigins(values []string) (map[string]bool, bool) {
-	allowed := make(map[string]bool, len(values))
-	allowAny := false
+	values = h.cfg.GetStringSlice("http.allow_origins")
+	allowed = make(map[string]bool, len(values))
+
 	for _, value := range values {
 		for _, part := range strings.Split(value, ",") {
 			origin := strings.TrimSpace(part)
@@ -46,13 +30,24 @@ func parseAllowOrigins(values []string) (map[string]bool, bool) {
 			allowed[origin] = true
 		}
 	}
-	return allowed, allowAny
-}
 
-const (
-	httpMethodGet     = "GET"
-	httpMethodPost    = "POST"
-	httpMethodPut     = "PUT"
-	httpMethodDelete  = "DELETE"
-	httpMethodOptions = "OPTIONS"
-)
+	return cors.New(cors.Config{
+		AllowOriginFunc: func(origin string) bool {
+			origin = strings.TrimSpace(origin)
+			return origin != "" && (allowAny || allowed[origin])
+		},
+		AllowMethods: []string{
+			"GET",
+			"POST",
+			"PUT",
+			"DELETE",
+			"OPTIONS",
+		},
+		AllowHeaders: []string{
+			"Authorization",
+			"Content-Type",
+			"X-Requested-With",
+		},
+		AllowCredentials: true,
+	})
+}

@@ -4,13 +4,15 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"log"
+	"net"
 	"net/http"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/spf13/viper"
 	"go.uber.org/zap"
 
 	"backend/internal/app"
@@ -18,67 +20,96 @@ import (
 )
 
 func main() {
-	release := flag.Bool("release", false, "run in release mode")
-	addr := flag.String("addr", "", "http listen address override")
-	configPath := flag.String("config", filepath.Join("configs", "local.yaml"), "config file path")
+	var (
+		err         error
+		release     bool
+		addr        string
+		configPath  string
+		basePath    string
+		config      *viper.Viper
+		listener    net.Listener
+		server      *http.Server
+		ctx         context.Context
+		stop        context.CancelFunc
+		shutdownCtx context.Context
+		cancel      context.CancelFunc
+	)
+
+	flag.BoolVar(&release, "release", false, "run in release mode")
+	flag.StringVar(&addr, "addr", ":3061", "http listen address override")
+	flag.StringVar(&configPath, "config", "configs/local.yaml", "config file path")
+	flag.StringVar(&basePath, "base_path", "", "http base path")
 	flag.Parse()
 
-	v := app.LoadConfig(*configPath)
-	if *addr != "" {
-		v.Set("http.addr", *addr)
+	config = app.LoadConfig(configPath)
+	config.Set("app.config", configPath)
+	config.Set("app.release", release)
+	if basePath != "" {
+		config.Set("http.base_path", basePath)
 	}
 
-	infra.Init(filepath.Join(filepath.Dir(*configPath), "..", "logs"), *release)
+	if listener, err = net.Listen("tcp", addr); err != nil {
+		log.Fatalf("listen tcp %s: %v\n", addr, err)
+	}
+
+	infra.Init(config)
 	defer infra.Sync()
 
-	if *release {
+	if release {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	application, err := app.New(v)
+	application, err := app.New(config)
 	if err != nil {
 		infra.L.Fatal("init app", zap.Error(err))
 	}
 
-	server := &http.Server{
-		Addr:              v.GetString("http.addr"),
+	server = &http.Server{
+		Addr:              addr,
 		Handler:           application.Handler.Routes(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop = signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	go func() {
 		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		var (
+			err         error
+			shutdownCtx context.Context
+			cancel      context.CancelFunc
+		)
+
+		shutdownCtx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, context.Canceled) {
+
+		err = server.Shutdown(shutdownCtx)
+		if err != nil && !errors.Is(err, context.Canceled) {
 			infra.L.Warn("http server shutdown", zap.Error(err))
 		}
 	}()
 
 	logFields := []zap.Field{
-		zap.Bool("release", *release),
-		zap.String("addr", v.GetString("http.addr")),
-		zap.String("config", *configPath),
+		zap.Bool("release", release),
+		zap.String("addr", addr),
+		zap.String("config", configPath),
+		zap.String("base_path", config.GetString("http.base_path")),
 	}
-	if bp := v.GetString("http.base_path"); bp != "" {
-		logFields = append(logFields, zap.String("base_path", bp))
-	}
+
 	infra.L.Info("server starting", logFields...)
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
+	if err = server.Serve(listener); err != nil && err != http.ErrServerClosed {
+		shutdownCtx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
 		if shutdownErr := application.Shutdown(shutdownCtx); shutdownErr != nil {
 			infra.L.Warn("application shutdown after listen failure", zap.Error(shutdownErr))
 		}
+		cancel()
 		infra.L.Fatal("listen", zap.Error(err))
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdownCtx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := application.Shutdown(shutdownCtx); err != nil && !errors.Is(err, context.Canceled) {
+	if err = application.Shutdown(shutdownCtx); err != nil && !errors.Is(err, context.Canceled) {
 		infra.L.Warn("application shutdown", zap.Error(err))
 	}
 }

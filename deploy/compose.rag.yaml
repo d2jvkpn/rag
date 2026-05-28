@@ -17,4 +17,4 @@ services:
     #- ./configs/app.json:/app/target/ui/app.json
     environment:
       TZ: Asia/Shanghai
-    command: ["target/main", "--release", "--config=configs/local.yaml", "--addr=:3060"]
+    command: ["target/server", "--release", "--config=configs/local.yaml", "--addr=:3060"]
