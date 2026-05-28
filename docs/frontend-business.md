@@ -60,7 +60,8 @@
 4. 文档详情页
 5. chunk 审核页
 6. 知识库查询页
-7. 用户列表页（仅对具备权限的用户显示）
+7. 知识库管理页
+8. 用户列表页（仅对具备权限的用户显示）
 
 ## 页面设计
 
@@ -226,6 +227,7 @@
 - `chunk_version`
 - `metadata` 不在详情正文区直接铺开，通过点击详情按钮在合并弹窗中展示 `chunk_id / document_id / filename / chunk_index / chunk_version / is_current / created_at / updated_at / embedding_model / review_comment` 等字段
 - `resource_refs` 在同一个详情弹窗中展示，避免正文区被结构化引用挤占
+- Chunk 详情按钮显示当前 chunk 的 `resource_refs` 数量，左侧 chunk 列表对有引用的条目显示引用计数标签
 
 支持的操作：
 
@@ -240,6 +242,22 @@
 - 未启用人工审核时，可隐藏“审核通过”主按钮，保留只读查看和重切分操作
 - 启用人工审核时，只有审核通过后的 chunk 版本才能进入入库流程
 - 被忽略或拒绝的 chunk 需要有清晰状态标识
+
+### 知识库管理页
+
+用途：
+
+- 创建知识库，并由后端同步创建 Milvus collection
+- 查看知识库的文档数量、向量维度、分词器和切分参数
+
+页面元素：
+
+- 列表表格：知识库 ID、文档数、dim、analyzer、chunk_size / chunk_overlap / min_chunks、创建者、更新时间
+- 创建弹窗：知识库 ID、analyzer、chunk_size、chunk_overlap、min_chunks；dim 由服务端 `embedder.dim` 决定，仅展示不编辑
+
+权限：
+
+- 登录用户可查看知识库管理页；仅 `create_knowledge_bases` 权限用户可看到创建按钮并调用创建接口
 
 ### 知识库查询页
 

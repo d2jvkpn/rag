@@ -12,6 +12,7 @@ accounts:
   - "view_user_list"
   - "delete_documents"
   - "disable_users"
+  - "create_knowledge_bases"
 
 http:
   base_path: ""
@@ -39,19 +40,14 @@ embedder:
   api_key: ""
   model: "text-embedding-3-small"
   batch_size: 10
+  # Vector dimension of the embedding model. Used for newly created knowledge bases.
+  dim: 1024
 
-# Milvus is enabled only when addr is non-empty. Collection names are knowledge_base_id values.
+# Milvus is enabled only when addr is non-empty. Collections are created from the UI.
 milvus:
   # Example: "127.0.0.1:19530"
   addr: ""
   db: "rag"
-  collections:
-  - collection: "public"
-    dim: 1536
-    analyzer: "chinese"
-    chunk_size: 1000
-    chunk_overlap: 150
-    min_chunks: 3
 
 # OpenAI-compatible chat completion endpoint. Leave base_url/api_key empty for Noop.
 llm:

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/milvus-io/milvus/client/v2/column"
@@ -22,6 +23,7 @@ var searchOutputFields = []string{
 // Requires Milvus 2.5+ for BM25 full-text search support.
 type Milvus struct {
 	client      *milvusclient.Client
+	mu          sync.RWMutex
 	collections map[string]CollectionConfig
 }
 
@@ -66,18 +68,25 @@ func (m *Milvus) Close(ctx context.Context) error {
 }
 
 func (m *Milvus) ValidateKnowledgeBase(kbID string) error {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	if _, ok := m.collections[kbID]; !ok {
-		return fmt.Errorf("knowledge base %q is not configured in milvus.collections", kbID)
+		return fmt.Errorf("knowledge base %q is not configured", kbID)
 	}
 	return nil
 }
 
-func (m *Milvus) ListKnowledgeBases() []string {
-	names := make([]string, 0, len(m.collections))
-	for name := range m.collections {
-		names = append(names, name)
+func (m *Milvus) CreateKnowledgeBase(ctx context.Context, cfg CollectionConfig) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if existing, ok := m.collections[cfg.Name]; ok {
+		cfg = existing
 	}
-	return names
+	if err := m.ensureCollection(ctx, cfg); err != nil {
+		return err
+	}
+	m.collections[cfg.Name] = cfg
+	return nil
 }
 
 func (m *Milvus) Upsert(ctx context.Context, records []VectorRecord) error {
@@ -88,7 +97,9 @@ func (m *Milvus) Upsert(ctx context.Context, records []VectorRecord) error {
 	if err := m.ValidateKnowledgeBase(collection); err != nil {
 		return err
 	}
+	m.mu.RLock()
 	dim := m.collections[collection].Dim
+	m.mu.RUnlock()
 
 	ids := make([]string, len(records))
 	kbIDs := make([]string, len(records))

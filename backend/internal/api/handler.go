@@ -145,6 +145,12 @@ func (h *Handler) Routes() http.Handler {
 	)
 	apiGroup.POST("/query", h.withAuth(), h.handleQuery)
 	apiGroup.GET("/knowledge-bases", h.withAuth(), h.handleListKnowledgeBases)
+	apiGroup.POST(
+		"/knowledge-bases",
+		h.withAuth(),
+		h.withPermission("create_knowledge_bases"),
+		h.handleCreateKnowledgeBase,
+	)
 	apiGroup.GET("/knowledge-bases/available", h.withAuth(), h.handleListAvailableKnowledgeBases)
 
 	return router
@@ -527,36 +533,62 @@ func (h *Handler) handleIndexDocument(c *gin.Context) {
 }
 
 func (h *Handler) handleListKnowledgeBases(c *gin.Context) {
-	all := h.documentService.ListDocuments("", "")
-	counts := make(map[string]int)
-	for _, d := range all {
-		counts[d.KnowledgeBaseID]++
-	}
-	type kbItem struct {
+	items := h.documentService.ListKnowledgeBases()
+	writeData(c, 200, map[string]any{
+		"items":       items,
+		"total":       len(items),
+		"default_dim": h.documentService.DefaultKnowledgeBaseDim(),
+	})
+}
+
+func (h *Handler) handleCreateKnowledgeBase(c *gin.Context) {
+	var body struct {
 		KnowledgeBaseID string `json:"knowledge_base_id"`
-		DocumentCount   int    `json:"document_count"`
+		Analyzer        string `json:"analyzer"`
+		ChunkSize       int    `json:"chunk_size"`
+		ChunkOverlap    int    `json:"chunk_overlap"`
+		MinChunks       int    `json:"min_chunks"`
 	}
-	items := make([]any, 0, len(counts))
-	for kb, n := range counts {
-		items = append(items, kbItem{KnowledgeBaseID: kb, DocumentCount: n})
+	if err := json.NewDecoder(c.Request.Body).Decode(&body); err != nil {
+		writeError(c, 400, "validation_error", "invalid request body", nil)
+		return
 	}
-	writeData(c, 200, map[string]any{"items": items})
+	if body.ChunkSize == 0 {
+		body.ChunkSize = service.DefaultChunkSize
+	}
+	if body.ChunkOverlap == 0 {
+		body.ChunkOverlap = service.DefaultChunkOverlap
+	}
+	if body.MinChunks == 0 {
+		body.MinChunks = service.DefaultMinChunks
+	}
+	user := c.MustGet("current_user").(model.User)
+	kb, err := h.documentService.CreateKnowledgeBase(
+		body.KnowledgeBaseID,
+		body.Analyzer,
+		body.ChunkSize,
+		body.ChunkOverlap,
+		body.MinChunks,
+		user.Username,
+	)
+	if err != nil {
+		if errors.Is(err, service.ErrKnowledgeBaseExists) {
+			writeError(c, 409, "conflict", err.Error(), nil)
+			return
+		}
+		writeError(c, 400, "validation_error", err.Error(), nil)
+		return
+	}
+	writeData(c, 201, kb)
 }
 
 func (h *Handler) handleListAvailableKnowledgeBases(c *gin.Context) {
-	cfgs := h.documentService.ListAvailableKnowledgeBases()
-	items := make([]any, 0, len(cfgs))
-	for _, cfg := range cfgs {
-		items = append(items, map[string]any{
-			"knowledge_base_id": cfg.Name,
-			"dim":               cfg.Dim,
-			"analyzer":          cfg.Analyzer,
-			"chunk_size":        cfg.ChunkSize,
-			"chunk_overlap":     cfg.ChunkOverlap,
-			"min_chunks":        cfg.MinChunks,
-		})
-	}
-	writeData(c, 200, map[string]any{"items": items})
+	items := h.documentService.ListAvailableKnowledgeBases()
+	writeData(c, 200, map[string]any{
+		"items":       items,
+		"total":       len(items),
+		"default_dim": h.documentService.DefaultKnowledgeBaseDim(),
+	})
 }
 
 func (h *Handler) handleQuery(c *gin.Context) {

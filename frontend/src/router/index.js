@@ -6,6 +6,7 @@ import DocumentsPage from '../pages/DocumentsPage.vue'
 import DocumentDetailPage from '../pages/DocumentDetailPage.vue'
 import DocumentChunksPage from '../pages/DocumentChunksPage.vue'
 import SearchPage from '../pages/SearchPage.vue'
+import KnowledgeBasesPage from '../pages/KnowledgeBasesPage.vue'
 import UsersPage from '../pages/UsersPage.vue'
 
 const routes = [
@@ -20,6 +21,7 @@ const routes = [
       { path: 'documents/:documentId', component: DocumentDetailPage },
       { path: 'documents/:documentId/chunks', component: DocumentChunksPage },
       { path: 'search', component: SearchPage },
+      { path: 'knowledge-bases', component: KnowledgeBasesPage },
       { path: 'users', component: UsersPage, meta: { requiresPermission: 'view_user_list' } },
     ],
   },

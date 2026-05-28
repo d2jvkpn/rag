@@ -42,7 +42,7 @@ uploaded
 3. 检索时的过滤边界，阻止跨知识库召回
 4. 向量写入和删除时选择对应 Milvus collection
 
-`knowledge_base_id` 在上传时验证，必须匹配 `milvus.collections[*].collection` 中已配置的 collection 名称。上传后不可修改。即使系统只有单一知识库，也必须保留此字段。
+`knowledge_base_id` 在上传时验证，必须匹配后端 Store 中已创建的知识库。知识库通过前端 UI 创建，并在创建时同步创建对应 Milvus collection。上传后不可修改。即使系统只有单一知识库，也必须保留此字段。
 
 ## 数据查询行为
 

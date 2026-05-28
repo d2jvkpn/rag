@@ -14,6 +14,19 @@ type User struct {
 	TOTPEnabled  bool       `json:"totp_enabled"`
 }
 
+type KnowledgeBase struct {
+	KnowledgeBaseID string    `json:"knowledge_base_id"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+	CreatedBy       string    `json:"created_by,omitempty"`
+	Dim             int       `json:"dim"`
+	Analyzer        string    `json:"analyzer"`
+	ChunkSize       int       `json:"chunk_size"`
+	ChunkOverlap    int       `json:"chunk_overlap"`
+	MinChunks       int       `json:"min_chunks"`
+	DocumentCount   int       `json:"document_count,omitempty"`
+}
+
 type Document struct {
 	DocumentID        string     `json:"document_id"`
 	CreatedAt         time.Time  `json:"created_at"`

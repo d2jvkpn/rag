@@ -57,6 +57,9 @@
                       <n-text style="font-size:12px;font-weight:600">#{{ chunk.chunk_index + 1 }}</n-text>
                     </n-space>
                     <n-space size="small" align="center">
+                      <n-tag v-if="resourceRefCount(chunk) > 0" size="tiny" type="info" :bordered="false">
+                        {{ t('chunks.resourceRefCount', { n: resourceRefCount(chunk) }) }}
+                      </n-tag>
                       <n-tag size="tiny" :type="CHUNK_STATUS_TYPE[chunk.status] || 'default'">
                         {{ t(`chunkStatus.${chunk.status}`) || chunk.status }}
                       </n-tag>
@@ -227,6 +230,10 @@ const selectedIds = ref([])
 
 const selectedChunk = computed(() => chunks.value.find(c => c.chunk_id === selectedId.value) || null)
 const selectedResourceRefs = computed(() => selectedChunk.value?.resource_refs || [])
+
+function resourceRefCount(chunk) {
+  return Array.isArray(chunk?.resource_refs) ? chunk.resource_refs.length : 0
+}
 
 const editing = ref(false)
 const editText = ref('')

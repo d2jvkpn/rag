@@ -20,6 +20,7 @@ import {
   NFormItem,
   NIcon,
   NInput,
+  NInputNumber,
   NLayout,
   NLayoutContent,
   NLayoutSider,
@@ -66,6 +67,7 @@ async function bootstrap() {
   app.component('NFormItem', NFormItem)
   app.component('NIcon', NIcon)
   app.component('NInput', NInput)
+  app.component('NInputNumber', NInputNumber)
   app.component('NLayout', NLayout)
   app.component('NLayoutContent', NLayoutContent)
   app.component('NLayoutSider', NLayoutSider)

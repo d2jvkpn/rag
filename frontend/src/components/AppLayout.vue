@@ -156,6 +156,7 @@ const activeKey = computed(() => {
   const p = route.path
   if (p.startsWith('/documents')) return 'documents'
   if (p.startsWith('/search')) return 'search'
+  if (p.startsWith('/knowledge-bases')) return 'knowledge-bases'
   if (p.startsWith('/users')) return 'users'
   return null
 })
@@ -169,6 +170,7 @@ const menuOptions = computed(() => {
     { label: t('nav.documents'), key: 'documents', icon: icon(DocumentOutline) },
     { label: t('nav.search'), key: 'search', icon: icon(SearchOutline) },
   ]
+  items.push({ label: t('nav.knowledgeBases'), key: 'knowledge-bases', icon: icon(DocumentOutline) })
   if (auth.user?.permissions?.includes('view_user_list')) {
     items.push({ label: t('nav.users'), key: 'users', icon: icon(PeopleOutline) })
   }

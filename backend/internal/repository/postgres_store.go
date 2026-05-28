@@ -137,6 +137,78 @@ func (s *PostgresStore) ListUsers() []model.User {
 	return users
 }
 
+func (s *PostgresStore) CreateKnowledgeBase(kb model.KnowledgeBase) error {
+	return s.db.Create(knowledgeBaseToRow(kb)).Error
+}
+
+func (s *PostgresStore) GetKnowledgeBase(knowledgeBaseID string) (model.KnowledgeBase, error) {
+	var row knowledgeBaseRow
+	if err := s.db.First(&row, "knowledge_base_id = ?", knowledgeBaseID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return model.KnowledgeBase{}, ErrNotFound
+		}
+		return model.KnowledgeBase{}, err
+	}
+	return knowledgeBaseFromRow(row), nil
+}
+
+func (s *PostgresStore) ListKnowledgeBases() []model.KnowledgeBase {
+	type resultRow struct {
+		KnowledgeBaseID string    `gorm:"column:knowledge_base_id"`
+		CreatedAt       time.Time `gorm:"column:created_at"`
+		UpdatedAt       time.Time `gorm:"column:updated_at"`
+		CreatedBy       string    `gorm:"column:created_by"`
+		Dim             int       `gorm:"column:dim"`
+		Analyzer        string    `gorm:"column:analyzer"`
+		ChunkSize       int       `gorm:"column:chunk_size"`
+		ChunkOverlap    int       `gorm:"column:chunk_overlap"`
+		MinChunks       int       `gorm:"column:min_chunks"`
+		DocumentCount   int       `gorm:"column:document_count"`
+	}
+	var rows []resultRow
+	sql := `
+		SELECT kb.*, count(d.document_id)::int AS document_count
+		FROM knowledge_bases kb
+		LEFT JOIN documents d ON d.knowledge_base_id = kb.knowledge_base_id
+		GROUP BY kb.knowledge_base_id
+		ORDER BY kb.created_at ASC
+	`
+	s.db.Raw(sql).Scan(&rows)
+	items := make([]model.KnowledgeBase, len(rows))
+	for i, r := range rows {
+		items[i] = model.KnowledgeBase{
+			KnowledgeBaseID: r.KnowledgeBaseID,
+			CreatedAt:       r.CreatedAt,
+			UpdatedAt:       r.UpdatedAt,
+			CreatedBy:       r.CreatedBy,
+			Dim:             r.Dim,
+			Analyzer:        r.Analyzer,
+			ChunkSize:       r.ChunkSize,
+			ChunkOverlap:    r.ChunkOverlap,
+			MinChunks:       r.MinChunks,
+			DocumentCount:   r.DocumentCount,
+		}
+	}
+	return items
+}
+
+func (s *PostgresStore) EnsureKnowledgeBasesFromDocuments(dim int) error {
+	sql := `
+		INSERT INTO knowledge_bases (
+			knowledge_base_id, created_at, updated_at, created_by,
+			dim, analyzer, chunk_size, chunk_overlap, min_chunks
+		)
+		SELECT
+			knowledge_base_id, min(created_at), max(updated_at), '',
+			?, 'chinese', 1000, 150, 3
+		FROM documents
+		WHERE knowledge_base_id <> ''
+		GROUP BY knowledge_base_id
+		ON CONFLICT (knowledge_base_id) DO NOTHING
+	`
+	return s.db.Exec(sql, dim).Error
+}
+
 func (s *PostgresStore) CreateDocument(document model.Document) error {
 	var count int64
 	s.db.Model(&documentRow{}).
@@ -315,6 +387,20 @@ type userRow struct {
 
 func (userRow) TableName() string { return "users" }
 
+type knowledgeBaseRow struct {
+	KnowledgeBaseID string    `gorm:"column:knowledge_base_id;primaryKey"`
+	CreatedAt       time.Time `gorm:"column:created_at;autoCreateTime:false"`
+	UpdatedAt       time.Time `gorm:"column:updated_at;autoUpdateTime:false"`
+	CreatedBy       string    `gorm:"column:created_by"`
+	Dim             int       `gorm:"column:dim"`
+	Analyzer        string    `gorm:"column:analyzer"`
+	ChunkSize       int       `gorm:"column:chunk_size"`
+	ChunkOverlap    int       `gorm:"column:chunk_overlap"`
+	MinChunks       int       `gorm:"column:min_chunks"`
+}
+
+func (knowledgeBaseRow) TableName() string { return "knowledge_bases" }
+
 type documentRow struct {
 	DocumentID        string         `gorm:"column:document_id;primaryKey"`
 	CreatedAt         time.Time      `gorm:"column:created_at;autoCreateTime:false"`
@@ -460,6 +546,34 @@ func documentToRow(d model.Document) documentRow {
 		HumanReview:       d.HumanReview,
 		UploaderID:        d.UploaderID,
 		UploaderName:      d.UploaderName,
+	}
+}
+
+func knowledgeBaseFromRow(r knowledgeBaseRow) model.KnowledgeBase {
+	return model.KnowledgeBase{
+		KnowledgeBaseID: r.KnowledgeBaseID,
+		CreatedAt:       r.CreatedAt,
+		UpdatedAt:       r.UpdatedAt,
+		CreatedBy:       r.CreatedBy,
+		Dim:             r.Dim,
+		Analyzer:        r.Analyzer,
+		ChunkSize:       r.ChunkSize,
+		ChunkOverlap:    r.ChunkOverlap,
+		MinChunks:       r.MinChunks,
+	}
+}
+
+func knowledgeBaseToRow(kb model.KnowledgeBase) knowledgeBaseRow {
+	return knowledgeBaseRow{
+		KnowledgeBaseID: kb.KnowledgeBaseID,
+		CreatedAt:       kb.CreatedAt,
+		UpdatedAt:       kb.UpdatedAt,
+		CreatedBy:       kb.CreatedBy,
+		Dim:             kb.Dim,
+		Analyzer:        kb.Analyzer,
+		ChunkSize:       kb.ChunkSize,
+		ChunkOverlap:    kb.ChunkOverlap,
+		MinChunks:       kb.MinChunks,
 	}
 }
 

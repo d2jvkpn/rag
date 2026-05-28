@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -25,6 +26,7 @@ func testConfig(tmpDir string) *viper.Viper {
 	v.Set("http.session_cookie", "rag_session")
 	v.Set("admin.username", "admin")
 	v.Set("admin.password", "admin123")
+	v.Set("embedder.dim", 1536)
 	return v
 }
 
@@ -51,6 +53,7 @@ func TestDocumentLifecycle(t *testing.T) {
 		t.Fatalf("init document service: %v", err)
 	}
 	defer documentService.Close()
+	createKnowledgeBaseForAPITest(t, documentService, "kb-1")
 
 	authService := service.NewAuthService(store, "test-secret", 0, accounts)
 	handler := NewHandler(v, authService, documentService).Routes()
@@ -149,6 +152,66 @@ func TestDocumentLifecycle(t *testing.T) {
 	})
 }
 
+func TestCreateKnowledgeBaseEndpoint(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	v := testConfig(tmpDir)
+	accounts := []repository.AccountSeed{
+		{Username: "admin", Password: "admin123", Permissions: []string{"create_knowledge_bases"}},
+		{Username: "user1", Password: "user123"},
+	}
+	store, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
+	if err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+	documentService, err := service.NewDocumentService(v, store)
+	if err != nil {
+		t.Fatalf("init document service: %v", err)
+	}
+	defer documentService.Close()
+
+	authService := service.NewAuthService(store, "test-secret", 0, accounts)
+	handler := NewHandler(v, authService, documentService).Routes()
+	adminCookie := loginForTest(t, handler, "admin", "admin123")
+	userCookie := loginForTest(t, handler, "user1", "user123")
+
+	body := strings.NewReader(`{"knowledge_base_id":"team_docs","analyzer":"english","chunk_size":800,"chunk_overlap":80,"min_chunks":2}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/knowledge-bases", body)
+	req.AddCookie(adminCookie)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create knowledge base status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	kb, err := store.GetKnowledgeBase("team_docs")
+	if err != nil {
+		t.Fatalf("get knowledge base: %v", err)
+	}
+	if kb.Analyzer != "english" || kb.ChunkSize != 800 || kb.ChunkOverlap != 80 || kb.MinChunks != 2 {
+		t.Fatalf("unexpected knowledge base: %+v", kb)
+	}
+
+	body = strings.NewReader(`{"knowledge_base_id":"team_docs","analyzer":"english","chunk_size":800,"chunk_overlap":80,"min_chunks":2}`)
+	req = httptest.NewRequest(http.MethodPost, "/api/knowledge-bases", body)
+	req.AddCookie(adminCookie)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("duplicate create status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	body = strings.NewReader(`{"knowledge_base_id":"other_docs"}`)
+	req = httptest.NewRequest(http.MethodPost, "/api/knowledge-bases", body)
+	req.AddCookie(userCookie)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("unprivileged create status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestAuthRequired(t *testing.T) {
 	t.Parallel()
 
@@ -165,6 +228,7 @@ func TestAuthRequired(t *testing.T) {
 		t.Fatalf("init document service: %v", err)
 	}
 	defer documentService.Close()
+	createKnowledgeBaseForAPITest(t, documentService, "kb-1")
 
 	authService := service.NewAuthService(store, "test-secret", 0, accounts)
 	handler := NewHandler(v, authService, documentService).Routes()
@@ -297,6 +361,7 @@ func TestUserListRequiresPermission(t *testing.T) {
 		t.Fatalf("init document service: %v", err)
 	}
 	defer documentService.Close()
+	createKnowledgeBaseForAPITest(t, documentService, "kb-1")
 
 	authService := service.NewAuthService(store, "test-secret", 0, accounts)
 	handler := NewHandler(v, authService, documentService).Routes()
@@ -337,6 +402,8 @@ func TestDocumentTagsEndpoint(t *testing.T) {
 		t.Fatalf("init document service: %v", err)
 	}
 	defer documentService.Close()
+	createKnowledgeBaseForAPITest(t, documentService, "kb-1")
+	createKnowledgeBaseForAPITest(t, documentService, "kb-2")
 
 	authService := service.NewAuthService(store, "test-secret", 0, accounts)
 	handler := NewHandler(v, authService, documentService).Routes()
@@ -417,6 +484,7 @@ func TestDisableUserBlocksFurtherRequests(t *testing.T) {
 		t.Fatalf("init document service: %v", err)
 	}
 	defer documentService.Close()
+	createKnowledgeBaseForAPITest(t, documentService, "kb-1")
 
 	authService := service.NewAuthService(store, "test-secret", 0, accounts)
 	handler := NewHandler(v, authService, documentService).Routes()
@@ -476,6 +544,7 @@ func TestDeleteDocumentPermissionOverridesOwnership(t *testing.T) {
 		t.Fatalf("init document service: %v", err)
 	}
 	defer documentService.Close()
+	createKnowledgeBaseForAPITest(t, documentService, "kb-1")
 
 	authService := service.NewAuthService(store, "test-secret", 0, accounts)
 	handler := NewHandler(v, authService, documentService).Routes()
@@ -507,6 +576,20 @@ func TestDeleteDocumentPermissionOverridesOwnership(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("admin delete other user's doc status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func createKnowledgeBaseForAPITest(t *testing.T, svc *service.DocumentService, kbID string) {
+	t.Helper()
+	if _, err := svc.CreateKnowledgeBase(
+		kbID,
+		"chinese",
+		service.DefaultChunkSize,
+		service.DefaultChunkOverlap,
+		service.DefaultMinChunks,
+		"test",
+	); err != nil && !errors.Is(err, service.ErrKnowledgeBaseExists) {
+		t.Fatalf("create knowledge base: %v", err)
 	}
 }
 

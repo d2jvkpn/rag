@@ -150,15 +150,15 @@ data/documents/{yyyy}/{mm}/{dd}/{yyyy-mm-dd}_{document_id}/chunks-vN.json
 
 ## Milvus / 向量存储
 
-每个知识库对应一个 Milvus collection，在 `local.yaml` 中预配置。
+每个知识库对应一个 Milvus collection。知识库元数据由后端 Store 持久化，并通过前端 UI 创建；`local.yaml` 中由 `embedder.dim` 配置 embedding 模型输出维度，并作为新建知识库的向量维度。
 
 Collection schema：
 
-- `embedding`：dense float 向量（dim 由 collection 配置决定）
+- `embedding`：dense float 向量（dim 来自创建知识库时的服务端 `embedder.dim`）
 - `sparse`：BM25 稀疏向量，由 Milvus 内置 BM25 function 从 `text` 字段自动生成
 - 其余元数据字段（`chunk_id`、`document_id`、`knowledge_base_id`、`text` 等）
 
-`ensureCollection` 在启动时检查 schema，发现 `sparse` 缺失或 `analyzer` 不匹配时 **drop + recreate**，数据丢失，需重新入库。完整 schema 见 [数据模型](./data-model.md)。
+创建知识库时后端会同步创建或加载对应 collection。`ensureCollection` 检查 schema，发现 `sparse` 缺失或 `analyzer` 不匹配时 **drop + recreate**，数据丢失，需重新入库。完整 schema 见 [数据模型](./data-model.md)。
 
 ## 前端架构
 
@@ -215,16 +215,11 @@ Loader 将 snake_case 字段规范化为 camelCase，兼容旧版 camelCase 配�
 | `embedder.batch_size` | `10` | 每次请求的最大 input 条数 |
 | `milvus.addr` | — | Milvus gRPC 地址 |
 | `milvus.db` | — | Milvus 数据库名 |
-| `milvus.collections[].collection` | — | Collection 名（= knowledge_base_id） |
-| `milvus.collections[].dim` | — | 向量维度 |
-| `milvus.collections[].chunk_size` | `1000` | 切分字符数上限 |
-| `milvus.collections[].chunk_overlap` | `150` | 相邻 chunk 重叠字符数 |
-| `milvus.collections[].min_chunks` | `3` | 最小 chunk 数，低于此值合并为单 chunk |
-| `milvus.collections[].analyzer` | `chinese` | BM25 分词器（`chinese` / `english` / `standard`） |
+| `embedder.dim` | — | 必填。Embedding 模型输出维度，UI 新建知识库时写入 collection schema |
 | `llm.base_url` | — | OpenAI-compatible LLM 端点 |
 | `llm.api_key` | — | LLM API Key |
 | `llm.model` | `gpt-4o-mini` | LLM 模型名 |
 
-未配置 `database.dsn` 时使用 JSONStore；未配置 `redis.dsn` 时使用 GoroutineQueue 和 MemoryBlacklist；未配置 `embedder.*` / `milvus.addr` / `llm.*` 时对应组件回落 Noop 实现。
+未配置 `database.dsn` 时使用 JSONStore；未配置 `redis.dsn` 时使用 GoroutineQueue 和 MemoryBlacklist；`embedder.dim` 必填；未配置 `embedder.base_url` / `embedder.api_key`、`milvus.addr`、`llm.*` 时对应外部组件回落 Noop 实现。
 
 后端运行目录存在 `{app.data_dir}/ui/index.html` 或 `target/ui/index.html` 时自动托管前端 SPA：`/ui` 为前端入口，`/` 和 `/index.html` 重定向到 `/ui/index.html`；`/api`、`/healthz`、`/static` 保持后端路由，其中 `/static` 服务 `{app.data_dir}/static`。

@@ -151,55 +151,12 @@ func buildServiceOpts(v *viper.Viper) []func(*service.DocumentService) {
 
 	if addr := v.GetString("milvus.addr"); addr != "" {
 		db := v.GetString("milvus.db")
-		var rawCols []struct {
-			Collection   string `mapstructure:"collection"`
-			Dim          int    `mapstructure:"dim"`
-			ChunkSize    int    `mapstructure:"chunk_size"`
-			ChunkOverlap int    `mapstructure:"chunk_overlap"`
-			MinChunks    int    `mapstructure:"min_chunks"`
-			Analyzer     string `mapstructure:"analyzer"`
-		}
-		if err := v.UnmarshalKey("milvus.collections", &rawCols); err != nil || len(rawCols) == 0 {
-			infra.L.Fatal("milvus.collections is required and must be a non-empty list")
-		}
-		cols := make([]llm.CollectionConfig, len(rawCols))
-		for i, c := range rawCols {
-			if c.ChunkSize == 0 {
-				c.ChunkSize = service.DefaultChunkSize
-			}
-			if c.ChunkOverlap == 0 {
-				c.ChunkOverlap = service.DefaultChunkOverlap
-			}
-			if c.MinChunks == 0 {
-				c.MinChunks = service.DefaultMinChunks
-			}
-			analyzer := c.Analyzer
-			if analyzer == "" {
-				analyzer = "chinese"
-			}
-			cols[i] = llm.CollectionConfig{
-				Name:         c.Collection,
-				Dim:          c.Dim,
-				ChunkSize:    c.ChunkSize,
-				ChunkOverlap: c.ChunkOverlap,
-				MinChunks:    c.MinChunks,
-				Analyzer:     analyzer,
-			}
-			infra.L.Info("vectorstore: milvus collection",
-				zap.String("collection", c.Collection),
-				zap.Int("dim", c.Dim),
-				zap.Int("chunk_size", c.ChunkSize),
-				zap.Int("chunk_overlap", c.ChunkOverlap),
-				zap.Int("min_chunks", c.MinChunks),
-				zap.String("analyzer", analyzer),
-			)
-		}
-		vs, err := llm.NewMilvus(addr, db, cols)
+		infra.L.Info("vectorstore: milvus", zap.String("addr", addr), zap.String("db", db))
+		vs, err := llm.NewMilvus(addr, db, nil)
 		if err != nil {
 			infra.L.Fatal("init milvus", zap.Error(err))
 		}
 		opts = append(opts, service.WithVectorStore(vs))
-		opts = append(opts, service.WithCollectionConfigs(cols))
 	} else {
 		infra.L.Info("vectorstore: noop")
 	}

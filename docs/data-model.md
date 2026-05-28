@@ -162,6 +162,16 @@
 - 如果后续增加新业务主表，默认也使用 `uuidv7`
 - migration 可直接写成 `UUID PRIMARY KEY DEFAULT uuidv7()`
 
+## knowledge_bases
+
+知识库元数据是真源，用于校验 `knowledge_base_id`、展示 UI 下拉项，并保存 collection 创建参数。字段：
+
+- `knowledge_base_id`：主键，等于 Milvus collection 名
+- `dim`：向量维度，来自创建时的 `embedder.dim`
+- `analyzer`：BM25 分词器（`chinese` / `english` / `standard`）
+- `chunk_size` / `chunk_overlap` / `min_chunks`：该知识库的切分参数
+- `created_by` / `created_at` / `updated_at`
+
 ## Milvus Schema
 
 每个 collection 一个知识库。字段：
@@ -177,11 +187,11 @@
 - `page_end`
 - `chunk_index`
 - `text`：原文
-- `embedding`：稠密向量，dim 由 collection 配置决定
+- `embedding`：稠密向量，dim 由 `knowledge_bases.dim` 决定
 - `sparse`：BM25 稀疏向量，由 Milvus 内置 BM25 function 从 `text` 自动生成（基于 collection 配置的 `analyzer`，默认 `chinese`）
 
 说明：
 
 - 删除按 `knowledge_base_id + document_id` 条件执行
 - Milvus 存向量和检索元数据，chunk 全文也存在 Milvus（用于 BM25 / 检索结果展示）；关系库保留完整原文，是真源
-- 启动时 `ensureCollection` 检测 schema：发现 `sparse` 缺失或 `analyzer` 不匹配会**drop + recreate collection**（数据丢失，需要重新入库）
+- 创建知识库时 `ensureCollection` 检测 schema：发现 `sparse` 缺失或 `analyzer` 不匹配会**drop + recreate collection**（数据丢失，需要重新入库）

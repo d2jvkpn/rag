@@ -30,14 +30,13 @@ import (
 )
 
 type DocumentService struct {
-	cfg            *viper.Viper
-	store          repository.Store
-	embedder       llm.Embedder
-	vectorStore    llm.VectorStore
-	llm            llm.LLM
-	taskQueue      queue.TaskQueue
-	indexWg        sync.WaitGroup
-	collectionCfgs map[string]llm.CollectionConfig
+	cfg         *viper.Viper
+	store       repository.Store
+	embedder    llm.Embedder
+	vectorStore llm.VectorStore
+	llm         llm.LLM
+	taskQueue   queue.TaskQueue
+	indexWg     sync.WaitGroup
 }
 
 func NewDocumentService(
@@ -61,6 +60,20 @@ func NewDocumentService(
 	}
 	for _, opt := range opts {
 		opt(svc)
+	}
+	if svc.DefaultKnowledgeBaseDim() <= 0 {
+		return nil, errors.New("embedder.dim is required and must be positive")
+	}
+	if err := store.EnsureKnowledgeBasesFromDocuments(svc.DefaultKnowledgeBaseDim()); err != nil {
+		return nil, err
+	}
+	for _, kb := range store.ListKnowledgeBases() {
+		if err := svc.vectorStore.CreateKnowledgeBase(
+			context.Background(),
+			collectionConfigFromKnowledgeBase(kb),
+		); err != nil {
+			return nil, err
+		}
 	}
 	if svc.taskQueue == nil {
 		if redisDSN := cfg.GetString("redis.dsn"); redisDSN != "" {
@@ -94,28 +107,37 @@ func WithLLM(l llm.LLM) func(*DocumentService) {
 	return func(s *DocumentService) { s.llm = l }
 }
 
-func WithCollectionConfigs(cols []llm.CollectionConfig) func(*DocumentService) {
-	return func(s *DocumentService) {
-		m := make(map[string]llm.CollectionConfig, len(cols))
-		for _, c := range cols {
-			m[c.Name] = c
-		}
-		s.collectionCfgs = m
-	}
-}
-
 func (s *DocumentService) VectorStore() llm.VectorStore {
 	return s.vectorStore
 }
 
 func (s *DocumentService) collectionCfg(kbID string) llm.CollectionConfig {
-	if c, ok := s.collectionCfgs[kbID]; ok {
-		return c
+	kb, err := s.store.GetKnowledgeBase(kbID)
+	if err != nil {
+		return defaultCollectionConfig(kbID, s.cfg.GetInt("embedder.dim"))
 	}
+	return collectionConfigFromKnowledgeBase(kb)
+}
+
+func defaultCollectionConfig(kbID string, dim int) llm.CollectionConfig {
 	return llm.CollectionConfig{
+		Name:         kbID,
+		Dim:          dim,
+		Analyzer:     "chinese",
 		ChunkSize:    DefaultChunkSize,
 		ChunkOverlap: DefaultChunkOverlap,
 		MinChunks:    DefaultMinChunks,
+	}
+}
+
+func collectionConfigFromKnowledgeBase(kb model.KnowledgeBase) llm.CollectionConfig {
+	return llm.CollectionConfig{
+		Name:         kb.KnowledgeBaseID,
+		Dim:          kb.Dim,
+		Analyzer:     kb.Analyzer,
+		ChunkSize:    kb.ChunkSize,
+		ChunkOverlap: kb.ChunkOverlap,
+		MinChunks:    kb.MinChunks,
 	}
 }
 
@@ -150,7 +172,10 @@ func (s *DocumentService) CreateDocument(
 	if knowledgeBaseID == "" {
 		return model.Document{}, errors.New("knowledge_base_id is required")
 	}
-	if err := s.vectorStore.ValidateKnowledgeBase(knowledgeBaseID); err != nil {
+	if _, err := s.store.GetKnowledgeBase(knowledgeBaseID); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return model.Document{}, fmt.Errorf("knowledge base %q does not exist", knowledgeBaseID)
+		}
 		return model.Document{}, err
 	}
 	if header == nil || header.Filename == "" {
@@ -211,17 +236,97 @@ func (s *DocumentService) CreateDocument(
 	return document, nil
 }
 
-func (s *DocumentService) ListAvailableKnowledgeBases() []llm.CollectionConfig {
-	names := s.vectorStore.ListKnowledgeBases()
-	out := make([]llm.CollectionConfig, 0, len(names))
-	for _, name := range names {
-		if cfg, ok := s.collectionCfgs[name]; ok {
-			out = append(out, cfg)
-		} else {
-			out = append(out, llm.CollectionConfig{Name: name})
-		}
+func (s *DocumentService) CreateKnowledgeBase(
+	kbID, analyzer string,
+	chunkSize, chunkOverlap, minChunks int,
+	createdBy string,
+) (model.KnowledgeBase, error) {
+	kbID = strings.TrimSpace(kbID)
+	analyzer = strings.TrimSpace(analyzer)
+	if analyzer == "" {
+		analyzer = "chinese"
 	}
-	return out
+	if err := validateKnowledgeBaseInput(kbID, analyzer, chunkSize, chunkOverlap, minChunks); err != nil {
+		return model.KnowledgeBase{}, err
+	}
+	if _, err := s.store.GetKnowledgeBase(kbID); err == nil {
+		return model.KnowledgeBase{}, ErrKnowledgeBaseExists
+	} else if !errors.Is(err, repository.ErrNotFound) {
+		return model.KnowledgeBase{}, err
+	}
+
+	now := time.Now().UTC()
+	kb := model.KnowledgeBase{
+		KnowledgeBaseID: kbID,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+		CreatedBy:       createdBy,
+		Dim:             s.cfg.GetInt("embedder.dim"),
+		Analyzer:        analyzer,
+		ChunkSize:       chunkSize,
+		ChunkOverlap:    chunkOverlap,
+		MinChunks:       minChunks,
+	}
+	if kb.Dim <= 0 {
+		return model.KnowledgeBase{}, errors.New("embedder.dim is required and must be positive")
+	}
+	if err := s.vectorStore.CreateKnowledgeBase(context.Background(), collectionConfigFromKnowledgeBase(kb)); err != nil {
+		return model.KnowledgeBase{}, err
+	}
+	if err := s.store.CreateKnowledgeBase(kb); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "duplicate") || strings.Contains(strings.ToLower(err.Error()), "already exists") {
+			return model.KnowledgeBase{}, ErrKnowledgeBaseExists
+		}
+		return model.KnowledgeBase{}, err
+	}
+	return kb, nil
+}
+
+func (s *DocumentService) DefaultKnowledgeBaseDim() int {
+	return s.cfg.GetInt("embedder.dim")
+}
+
+func (s *DocumentService) ListKnowledgeBases() []model.KnowledgeBase {
+	return s.store.ListKnowledgeBases()
+}
+
+func (s *DocumentService) ListAvailableKnowledgeBases() []model.KnowledgeBase {
+	return s.store.ListKnowledgeBases()
+}
+
+var ErrKnowledgeBaseExists = errors.New("knowledge base already exists")
+
+func validateKnowledgeBaseInput(kbID, analyzer string, chunkSize, chunkOverlap, minChunks int) error {
+	if kbID == "" {
+		return errors.New("knowledge_base_id is required")
+	}
+	if len(kbID) > 63 {
+		return errors.New("knowledge_base_id must be at most 63 characters")
+	}
+	for _, r := range kbID {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+			continue
+		}
+		return errors.New("knowledge_base_id may only contain letters, numbers, underscore, and hyphen")
+	}
+	switch analyzer {
+	case "chinese", "english", "standard":
+	default:
+		return errors.New("analyzer must be one of chinese, english, standard")
+	}
+	if chunkSize <= 0 {
+		return errors.New("chunk_size must be positive")
+	}
+	if chunkOverlap < 0 {
+		return errors.New("chunk_overlap must be zero or positive")
+	}
+	if chunkOverlap >= chunkSize {
+		return errors.New("chunk_overlap must be less than chunk_size")
+	}
+	if minChunks <= 0 {
+		return errors.New("min_chunks must be positive")
+	}
+	return nil
 }
 
 func (s *DocumentService) ListDocuments(knowledgeBaseID, tag string) []model.Document {

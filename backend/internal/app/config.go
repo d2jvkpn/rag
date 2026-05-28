@@ -34,11 +34,13 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("embedder.model", "text-embedding-3-small")
 	v.SetDefault("embedder.batch_size", 10)
 	v.SetDefault("milvus.collection", "rag_chunks")
-	v.SetDefault("milvus.dim", 1536)
 	v.SetDefault("llm.model", "gpt-4o-mini")
 }
 
 func validateConfig(v *viper.Viper) {
+	if v.GetInt("embedder.dim") <= 0 {
+		log.Fatal("embedder.dim is required and must be positive")
+	}
 	for _, origin := range v.GetStringSlice("http.allow_origins") {
 		if strings.TrimSpace(origin) != "" {
 			return

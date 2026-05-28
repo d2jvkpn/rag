@@ -8,6 +8,11 @@ type Store interface {
 	UpdateUser(user model.User) error
 	ListUsers() []model.User
 
+	CreateKnowledgeBase(kb model.KnowledgeBase) error
+	GetKnowledgeBase(knowledgeBaseID string) (model.KnowledgeBase, error)
+	ListKnowledgeBases() []model.KnowledgeBase
+	EnsureKnowledgeBasesFromDocuments(dim int) error
+
 	CreateDocument(document model.Document) error
 	UpdateDocument(document model.Document) error
 	GetDocument(documentID string) (model.Document, error)

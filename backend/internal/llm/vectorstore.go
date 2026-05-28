@@ -65,8 +65,8 @@ type SearchRequest struct {
 type VectorStore interface {
 	// ValidateKnowledgeBase returns an error if kbID is not a known collection.
 	ValidateKnowledgeBase(kbID string) error
-	// ListKnowledgeBases returns all configured collection names.
-	ListKnowledgeBases() []string
+	// CreateKnowledgeBase creates or loads a collection at runtime.
+	CreateKnowledgeBase(ctx context.Context, cfg CollectionConfig) error
 	// Upsert inserts or replaces records.
 	Upsert(ctx context.Context, records []VectorRecord) error
 	// DeleteByDocument removes all vectors belonging to a document.
@@ -78,10 +78,10 @@ type VectorStore interface {
 // NoopVectorStore discards all writes and returns empty search results.
 type NoopVectorStore struct{}
 
-func (NoopVectorStore) ValidateKnowledgeBase(_ string) error                  { return nil }
-func (NoopVectorStore) ListKnowledgeBases() []string                          { return nil }
-func (NoopVectorStore) Upsert(_ context.Context, _ []VectorRecord) error      { return nil }
-func (NoopVectorStore) DeleteByDocument(_ context.Context, _, _ string) error { return nil }
+func (NoopVectorStore) ValidateKnowledgeBase(_ string) error                            { return nil }
+func (NoopVectorStore) CreateKnowledgeBase(_ context.Context, _ CollectionConfig) error { return nil }
+func (NoopVectorStore) Upsert(_ context.Context, _ []VectorRecord) error                { return nil }
+func (NoopVectorStore) DeleteByDocument(_ context.Context, _, _ string) error           { return nil }
 func (NoopVectorStore) Search(_ context.Context, _ SearchRequest) ([]SearchResult, error) {
 	return nil, nil
 }

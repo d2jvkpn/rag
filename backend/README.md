@@ -68,7 +68,7 @@ go run ./cmd/server --config examples/local.yaml
 - `embedder.batch_size`
 - `milvus.addr`
 - `milvus.db`
-- `milvus.collections[]`
+- `embedder.dim`
 - `llm.base_url`
 - `llm.api_key`
 - `llm.model`

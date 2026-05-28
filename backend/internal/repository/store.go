@@ -26,9 +26,10 @@ type AccountSeed struct {
 var ErrNotFound = errors.New("not found")
 
 type State struct {
-	Users     map[string]model.User            `json:"users"`
-	Documents map[string]model.Document        `json:"documents"`
-	Chunks    map[string][]model.DocumentChunk `json:"chunks"`
+	Users          map[string]model.User            `json:"users"`
+	KnowledgeBases map[string]model.KnowledgeBase   `json:"knowledge_bases"`
+	Documents      map[string]model.Document        `json:"documents"`
+	Chunks         map[string][]model.DocumentChunk `json:"chunks"`
 }
 
 type JSONStore struct {
@@ -45,9 +46,10 @@ func NewJSONStore(path string, accounts []AccountSeed) (*JSONStore, error) {
 	store := &JSONStore{
 		path: path,
 		data: State{
-			Users:     map[string]model.User{},
-			Documents: map[string]model.Document{},
-			Chunks:    map[string][]model.DocumentChunk{},
+			Users:          map[string]model.User{},
+			KnowledgeBases: map[string]model.KnowledgeBase{},
+			Documents:      map[string]model.Document{},
+			Chunks:         map[string][]model.DocumentChunk{},
 		},
 	}
 
@@ -58,6 +60,18 @@ func NewJSONStore(path string, accounts []AccountSeed) (*JSONStore, error) {
 	if raw, err := os.ReadFile(path); err == nil && len(raw) > 0 {
 		if err := json.Unmarshal(raw, &store.data); err != nil {
 			return nil, err
+		}
+		if store.data.Users == nil {
+			store.data.Users = map[string]model.User{}
+		}
+		if store.data.KnowledgeBases == nil {
+			store.data.KnowledgeBases = map[string]model.KnowledgeBase{}
+		}
+		if store.data.Documents == nil {
+			store.data.Documents = map[string]model.Document{}
+		}
+		if store.data.Chunks == nil {
+			store.data.Chunks = map[string][]model.DocumentChunk{}
 		}
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
@@ -94,6 +108,81 @@ func NewJSONStore(path string, accounts []AccountSeed) (*JSONStore, error) {
 	}
 
 	return store, nil
+}
+
+func (s *JSONStore) EnsureKnowledgeBasesFromDocuments(dim int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	changed := false
+	for _, document := range s.data.Documents {
+		if document.KnowledgeBaseID == "" {
+			continue
+		}
+		if _, ok := s.data.KnowledgeBases[document.KnowledgeBaseID]; ok {
+			continue
+		}
+		createdAt := document.CreatedAt
+		updatedAt := document.UpdatedAt
+		if createdAt.IsZero() {
+			createdAt = time.Now().UTC()
+		}
+		if updatedAt.IsZero() {
+			updatedAt = createdAt
+		}
+		s.data.KnowledgeBases[document.KnowledgeBaseID] = model.KnowledgeBase{
+			KnowledgeBaseID: document.KnowledgeBaseID,
+			CreatedAt:       createdAt,
+			UpdatedAt:       updatedAt,
+			Dim:             dim,
+			Analyzer:        "chinese",
+			ChunkSize:       1000,
+			ChunkOverlap:    150,
+			MinChunks:       3,
+		}
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	return s.persistLocked()
+}
+
+func (s *JSONStore) CreateKnowledgeBase(kb model.KnowledgeBase) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.data.KnowledgeBases[kb.KnowledgeBaseID]; exists {
+		return errors.New("knowledge base already exists")
+	}
+	s.data.KnowledgeBases[kb.KnowledgeBaseID] = kb
+	return s.persistLocked()
+}
+
+func (s *JSONStore) GetKnowledgeBase(knowledgeBaseID string) (model.KnowledgeBase, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	kb, ok := s.data.KnowledgeBases[knowledgeBaseID]
+	if !ok {
+		return model.KnowledgeBase{}, ErrNotFound
+	}
+	return kb, nil
+}
+
+func (s *JSONStore) ListKnowledgeBases() []model.KnowledgeBase {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	items := make([]model.KnowledgeBase, 0, len(s.data.KnowledgeBases))
+	counts := make(map[string]int)
+	for _, document := range s.data.Documents {
+		counts[document.KnowledgeBaseID]++
+	}
+	for _, kb := range s.data.KnowledgeBases {
+		kb.DocumentCount = counts[kb.KnowledgeBaseID]
+		items = append(items, kb)
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].CreatedAt.Before(items[j].CreatedAt)
+	})
+	return items
 }
 
 func (s *JSONStore) FindUserByUsername(username string) (model.User, error) {

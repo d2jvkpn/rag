@@ -322,7 +322,7 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 
 ### `GET /api/knowledge-bases/available`
 
-- 返回已配置的 Milvus collection 列表及其参数
+- 返回可用于上传和检索的知识库列表及其 collection 参数
 
 响应：
 
@@ -338,14 +338,38 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
         "chunk_overlap": 64,
         "min_chunks": 3
       }
-    ]
+    ],
+    "total": 1,
+    "default_dim": 1024
   }
 }
 ```
 
 ### `GET /api/knowledge-bases`
 
-- 返回各知识库的文档数量（从 DB 扫描，不查询 Milvus）
+- 返回全部已创建知识库及文档数量（从 DB 扫描，不查询 Milvus），同时返回 `default_dim` 供创建弹窗展示
+
+### `POST /api/knowledge-bases`
+
+- 创建知识库，并同步创建对应 Milvus collection
+- 需要登录且拥有 `create_knowledge_bases` 权限
+- `knowledge_base_id` 仅允许字母、数字、下划线、连字符，最长 63 位
+- `analyzer` 可选 `chinese` / `english` / `standard`
+- `dim` 不由请求指定，使用服务端 `embedder.dim`
+
+请求：
+
+```json
+{
+  "knowledge_base_id": "public",
+  "analyzer": "chinese",
+  "chunk_size": 1000,
+  "chunk_overlap": 150,
+  "min_chunks": 3
+}
+```
+
+重复创建返回 `409 conflict`。
 
 ## 语义检索接口
 

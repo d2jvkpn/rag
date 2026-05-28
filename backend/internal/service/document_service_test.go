@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"io"
 	"mime/multipart"
 	"os"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/spf13/viper"
 
+	"backend/internal/llm"
+	"backend/internal/model"
 	"backend/internal/repository"
 )
 
@@ -20,6 +23,7 @@ func testConfig(tmpDir string) *viper.Viper {
 	v.Set("app.state_path", filepath.Join(tmpDir, "data", "app-state.json"))
 	v.Set("admin.username", "admin")
 	v.Set("admin.password", "admin123")
+	v.Set("embedder.dim", 1536)
 	return v
 }
 
@@ -42,6 +46,7 @@ func TestCreateDocumentDuplicateDoesNotLeaveFiles(t *testing.T) {
 		t.Fatalf("init document service: %v", err)
 	}
 	defer documentService.Close()
+	createKnowledgeBaseForServiceTest(t, documentService, "kb-1")
 
 	first, err := documentService.CreateDocument(
 		newMultipartFile(t, "same content"),
@@ -107,6 +112,7 @@ func TestCreateDocumentWithoutHumanReviewAutoApprovesAndIndexes(t *testing.T) {
 		t.Fatalf("init document service: %v", err)
 	}
 	defer documentService.Close()
+	createKnowledgeBaseForServiceTest(t, documentService, "kb-1")
 
 	document, err := documentService.CreateDocument(
 		newMultipartFile(t, "# Title\n\nhello rag"),
@@ -149,6 +155,94 @@ func TestCreateDocumentWithoutHumanReviewAutoApprovesAndIndexes(t *testing.T) {
 		if chunk.Status != "approved" {
 			t.Fatalf("expected approved chunk, got %s", chunk.Status)
 		}
+	}
+}
+
+func createKnowledgeBaseForServiceTest(t *testing.T, svc *DocumentService, kbID string) {
+	t.Helper()
+	if _, err := svc.CreateKnowledgeBase(
+		kbID,
+		"chinese",
+		DefaultChunkSize,
+		DefaultChunkOverlap,
+		DefaultMinChunks,
+		"testuser",
+	); err != nil {
+		t.Fatalf("create knowledge base: %v", err)
+	}
+}
+
+func TestCreateKnowledgeBaseUsesEmbedderDim(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	v := testConfig(tmpDir)
+	v.Set("embedder.dim", 768)
+	store, err := repository.NewJSONStore(
+		v.GetString("app.state_path"),
+		[]repository.AccountSeed{{Username: "admin", Password: "admin123"}},
+	)
+	if err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+	documentService, err := NewDocumentService(v, store)
+	if err != nil {
+		t.Fatalf("init document service: %v", err)
+	}
+	defer documentService.Close()
+
+	kb, err := documentService.CreateKnowledgeBase(
+		"kb-dim",
+		"chinese",
+		DefaultChunkSize,
+		DefaultChunkOverlap,
+		DefaultMinChunks,
+		"testuser",
+	)
+	if err != nil {
+		t.Fatalf("create knowledge base: %v", err)
+	}
+	if kb.Dim != 768 {
+		t.Fatalf("expected embedder.dim 768, got %d", kb.Dim)
+	}
+	if got := documentService.DefaultKnowledgeBaseDim(); got != 768 {
+		t.Fatalf("expected default dim 768, got %d", got)
+	}
+}
+
+func TestNewDocumentServiceHydratesKnowledgeBasesIntoVectorStore(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	v := testConfig(tmpDir)
+	store, err := repository.NewJSONStore(
+		v.GetString("app.state_path"),
+		[]repository.AccountSeed{{Username: "admin", Password: "admin123"}},
+	)
+	if err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := store.CreateKnowledgeBase(model.KnowledgeBase{
+		KnowledgeBaseID: "kb-1",
+		CreatedAt:       now,
+		UpdatedAt:       now,
+		Dim:             1536,
+		Analyzer:        "chinese",
+		ChunkSize:       DefaultChunkSize,
+		ChunkOverlap:    DefaultChunkOverlap,
+		MinChunks:       DefaultMinChunks,
+	}); err != nil {
+		t.Fatalf("seed knowledge base: %v", err)
+	}
+	vs := &trackingVectorStore{}
+	documentService, err := NewDocumentService(v, store, WithVectorStore(vs))
+	if err != nil {
+		t.Fatalf("init document service: %v", err)
+	}
+	defer documentService.Close()
+	if len(vs.created) != 1 || vs.created[0].Name != "kb-1" {
+		t.Fatalf("expected kb-1 to be hydrated, got %+v", vs.created)
 	}
 }
 
@@ -196,4 +290,14 @@ func (f *memoryFile) String() string {
 		return string(raw)
 	}
 	return ""
+}
+
+type trackingVectorStore struct {
+	llm.NoopVectorStore
+	created []llm.CollectionConfig
+}
+
+func (s *trackingVectorStore) CreateKnowledgeBase(_ context.Context, cfg llm.CollectionConfig) error {
+	s.created = append(s.created, cfg)
+	return nil
 }
