@@ -2,7 +2,12 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 const outDir = process.env.OUT_DIR || 'target/dist'
-const basePath = process.env.BASE_PATH || '/'
+const basePath = normalizeBasePath(process.env.BASE_PATH || '/')
+
+function normalizeBasePath(path) {
+  if (path === './' || path === '') return path || '/'
+  return path.endsWith('/') ? path : path + '/'
+}
 
 export default defineConfig({
   base: basePath,

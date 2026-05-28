@@ -10,8 +10,10 @@ export class HttpError extends Error {
 }
 
 async function request(method, path, options = {}) {
-  const { apiBase } = getConfig()
-  const init = { method, credentials: 'include', headers: {} }
+  const { apiBase, requestTimeoutMs } = getConfig()
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs)
+  const init = { method, credentials: 'include', headers: {}, signal: controller.signal }
 
   if (options.json !== undefined) {
     init.headers['Content-Type'] = 'application/json'
@@ -20,7 +22,17 @@ async function request(method, path, options = {}) {
     init.body = options.body
   }
 
-  const res = await fetch(apiBase + path, init)
+  let res
+  try {
+    res = await fetch(apiBase + path, init)
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new HttpError(0, 'timeout', 'Request timed out after ' + requestTimeoutMs + 'ms')
+    }
+    throw err
+  } finally {
+    clearTimeout(timeout)
+  }
 
   if (res.status === 204) return null
 

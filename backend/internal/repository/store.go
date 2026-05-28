@@ -256,7 +256,7 @@ func (s *JSONStore) GetDocument(documentID string) (model.Document, error) {
 	return document, nil
 }
 
-func (s *JSONStore) ListDocuments(knowledgeBaseID, tag string) []model.Document {
+func (s *JSONStore) ListDocuments(knowledgeBaseID, tag string) ([]model.Document, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	documents := make([]model.Document, 0, len(s.data.Documents))
@@ -272,7 +272,7 @@ func (s *JSONStore) ListDocuments(knowledgeBaseID, tag string) []model.Document 
 	sort.Slice(documents, func(i, j int) bool {
 		return documents[i].CreatedAt.After(documents[j].CreatedAt)
 	})
-	return documents
+	return documents, nil
 }
 
 func (s *JSONStore) ListDocumentTags(knowledgeBaseID string) []model.DocumentTagCount {

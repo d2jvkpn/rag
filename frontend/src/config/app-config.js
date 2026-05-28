@@ -1,7 +1,7 @@
 let config = null
 
 export async function loadConfig() {
-  const configPath = new URL('app.json', window.location.origin + import.meta.env.BASE_URL).pathname
+  const configPath = resolvePublicPath('app.json')
   const res = await fetch(configPath)
   if (!res.ok) throw new Error(`${configPath} 返回 ${res.status}`)
   config = normalizeConfig(await res.json())
@@ -12,10 +12,16 @@ export function getConfig() {
   return config
 }
 
+function resolvePublicPath(path) {
+  const basePath = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : import.meta.env.BASE_URL + '/'
+  return new URL(path, new URL(basePath, window.location.origin)).toString()
+}
+
 function normalizeConfig(raw) {
   return {
     apiBase: raw.api_base ?? raw.apiBase ?? '',
     staticBase: raw.static_base ?? raw.staticBase ?? '',
+    requestTimeoutMs: raw.request_timeout_ms ?? raw.requestTimeoutMs ?? 15000,
     pollIntervalMs: raw.poll_interval_ms ?? raw.pollIntervalMs ?? 3000,
   }
 }

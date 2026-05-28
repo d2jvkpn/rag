@@ -50,7 +50,7 @@
 - 默认配置路径为 `backend/configs/local.yaml`；仓库示例配置为 `backend/examples/local.yaml`
 - 配置读取使用 `viper`，统一通过 `viper.GetString/GetXX` 获取
 - 启动参数使用命令行 flag，不使用环境变量
-- 存储双实现：`JSONStore`（本地 JSON 文件，`state_path` 指定）和 `PostgresStore`（`gorm` + `lib/pq`），通过 `database.dsn` 配置自动选择
+- 存储双实现：`JSONStore`（本地 JSON 文件，`state_path` 指定）和 `PostgresStore`（`gorm` + `lib/pq`），通过 `database.dsn` 配置自动选择；文档列表的 Postgres 查询使用 `5s` context timeout，超时或查询错误通过 API 返回 `store_error`
 - 异步处理支持进程内 goroutine 队列（channel 容量 32）和 Redis-backed Asynq，通过 `redis.dsn` 自动选择
 - 原始文件和 chunk 快照写入同一个 `backend/data/documents/{yyyy}/{mm}/{dd}/{yyyy-mm-dd}_{document_id}/` 目录
 

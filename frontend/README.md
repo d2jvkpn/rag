@@ -38,12 +38,13 @@ Production build output is written to `frontend/target/dist/`.
 
 ## Runtime Config
 
-The frontend does not use `.env` files for runtime behavior. It loads public runtime config from `frontend/public/app.json` at startup.
+The frontend does not use `.env` files for runtime behavior. It loads public runtime config from `frontend/public/app.json` at startup, resolved under Vite `BASE_PATH`/`BASE_URL` so `BASE_PATH="/ui/"` is the canonical value; `BASE_PATH="/ui"` is normalized to the same value, and both request `/ui/app.json`.
 
 Current fields:
 
 - `api_base`: backend API base URL
 - `static_base`: backend static asset base URL
+- `request_timeout_ms`: shared API request timeout in milliseconds, default `15000`
 - `poll_interval_ms`: polling interval for processing document detail pages
 
 Do not put secrets in `app.json`; it is served as a public static file.

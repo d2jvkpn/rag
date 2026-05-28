@@ -8,3 +8,6 @@ backend_run:
 
 frontend_run:
 	$(MAKE) -C frontend run
+
+build_image:
+	docker build -f deploy/Containerfile --no-cache -t q.local/rag:latest ./

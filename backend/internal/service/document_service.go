@@ -18,7 +18,6 @@ import (
 
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
-
 	"github.com/google/uuid"
 
 	"backend/internal/infra"
@@ -329,7 +328,7 @@ func validateKnowledgeBaseInput(kbID, analyzer string, chunkSize, chunkOverlap, 
 	return nil
 }
 
-func (s *DocumentService) ListDocuments(knowledgeBaseID, tag string) []model.Document {
+func (s *DocumentService) ListDocuments(knowledgeBaseID, tag string) ([]model.Document, error) {
 	return s.store.ListDocuments(knowledgeBaseID, tag)
 }
 

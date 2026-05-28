@@ -1,0 +1,20 @@
+networks:
+  net: { name: local, driver: bridge, external: true }
+
+services:
+  rag:
+    image: q.local/rag:latest
+    restart: always
+    container_name: rag
+    networks: ["net"]
+    ports: [127.0.0.1:3060:3060]
+    user: 1000:1000
+    volumes:
+    - ./configs:/app/configs
+    - ./data/documents:/app/data/documents
+    - ./data/static:/app/data/static
+    - ./logs:/app/logs
+    #- ./configs/app.json:/app/target/ui/app.json
+    environment:
+      TZ: Asia/Shanghai
+    command: ["target/main", "--release", "--config=configs/local.yaml", "--addr=:3060"]

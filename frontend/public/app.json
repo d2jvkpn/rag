@@ -1,5 +1,6 @@
 {
   "api_base": "http://localhost:3061",
   "static_base": "http://localhost:3061/static",
+  "request_timeout_ms": 15000,
   "poll_interval_ms": 3000
 }

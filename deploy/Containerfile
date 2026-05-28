@@ -1,39 +1,58 @@
-# syntax=docker/dockerfile:1.7
+####
+FROM node:24-alpine AS frontend-build
 
-FROM node:24-alpine AS frontend-deps
-WORKDIR /src/frontend
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+WORKDIR /app
 
-FROM frontend-deps AS frontend-build
-COPY frontend/ ./
-RUN make build
+ADD frontend/*.json frontend/*.js frontend/index.html  ./
+COPY frontend/public  ./public
+COPY frontend/src  ./src
 
-FROM golang:1.25-alpine AS backend-deps
-WORKDIR /src/backend
-COPY backend/go.mod backend/go.sum ./
-RUN go mod download
+RUN npm config set registry https://registry.npmmirror.com
 
-FROM backend-deps AS backend-build
-COPY backend/ ./
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server
+ENV BASE_PATH=/ui \
+    OUT_DIR=target/dist
 
-FROM alpine:3.22 AS runtime
+RUN npm install &> /dev/null && \
+    npm run build
+
+####
+FROM golang:1-alpine AS backend-build
+
+WORKDIR /app
+ADD backend/go.mod backend/go.sum ./
+COPY backend/cmd ./cmd
+COPY backend/internal ./internal
+
+RUN go env -w GOPROXY=https://goproxy.cn,direct
+
+RUN go mod download && \
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o target/main ./cmd/server
+
+####
+FROM alpine:3 AS runtime
+
 WORKDIR /app
 
 RUN addgroup -g 1000 appuser \
     && adduser -D -H -u 1000 -G appuser -h /app -s /sbin/nologin appuser \
-    && mkdir -p /app/configs /app/data /app/logs /app/target/ui \
-    && chown -R 1000:1000 /app
+    && mkdir -p /app/configs /app/data /app/logs /app/target
 
-COPY --from=backend-build /out/server /app/server
-COPY --from=frontend-build /src/frontend/target/dist/ /app/target/ui/
+COPY --from=frontend-build /app/target/dist /app/target/ui
+RUN sed -i 's/:3061/:3060/' /app/target/ui/app.json
+
+COPY --from=backend-build /app/target/main /app/target
 COPY backend/examples/local.yaml /app/configs/local.yaml
 
 RUN chown -R 1000:1000 /app
 
 USER 1000:1000
-EXPOSE 3061
+EXPOSE 3060
 
-ENTRYPOINT ["/app/server"]
-CMD ["--release", "--config", "/app/configs/local.yaml", "--addr", ":3061"]
+ENV FRONEND_CONFIG=/app/target/ui/app.json
+
+VOLUME /app/configs
+VOLUME /app/data
+VOLUME /app/logs
+
+ENTRYPOINT []
+CMD ["target/main", "--release", "--config=configs/local.yaml", "--addr=:3060"]

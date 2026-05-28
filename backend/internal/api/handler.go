@@ -393,11 +393,13 @@ func (h *Handler) handleCreateDocument(c *gin.Context) {
 func (h *Handler) handleListDocuments(c *gin.Context) {
 	kb := strings.TrimSpace(c.Query("knowledge_base_id"))
 	tag := strings.TrimSpace(c.Query("tag"))
-	documents := h.documentService.ListDocuments(kb, tag)
-	items := make([]any, 0, len(documents))
-	for _, document := range documents {
-		items = append(items, document)
+
+	items, err := h.documentService.ListDocuments(kb, tag)
+	if err != nil {
+		h.writeStoreError(c, err)
+		return
 	}
+
 	writeData(c, 200, map[string]any{
 		"items":     items,
 		"page":      1,
@@ -419,11 +421,7 @@ func (h *Handler) handleGetDocument(c *gin.Context) {
 func (h *Handler) handleListDocumentTags(c *gin.Context) {
 	kb := strings.TrimSpace(c.Query("knowledge_base_id"))
 	items := h.documentService.ListDocumentTags(kb)
-	out := make([]any, len(items))
-	for i, item := range items {
-		out[i] = item
-	}
-	writeData(c, 200, map[string]any{"items": out, "total": len(out)})
+	writeData(c, 200, map[string]any{"items": items, "total": len(items)})
 }
 
 func (h *Handler) handleDeleteDocument(c *gin.Context) {

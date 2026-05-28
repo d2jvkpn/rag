@@ -1,9 +1,12 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -32,10 +35,14 @@ func (s *PostgresStore) Close() error {
 }
 
 func NewPostgresStore(dsn string, accounts []AccountSeed) (*PostgresStore, error) {
-	sqlDB, err := sql.Open("postgres", dsn)
+	sqlDB, err := sql.Open("postgres", postgresDSNWithConnectTimeout(dsn))
 	if err != nil {
 		return nil, err
 	}
+
+	sqlDB.SetMaxOpenConns(10)
+	sqlDB.SetMaxIdleConns(5)
+	sqlDB.SetConnMaxLifetime(30 * time.Minute)
 
 	if err := runMigrations(sqlDB); err != nil {
 		return nil, err
@@ -53,6 +60,23 @@ func NewPostgresStore(dsn string, accounts []AccountSeed) (*PostgresStore, error
 		return nil, err
 	}
 	return store, nil
+}
+
+func postgresDSNWithConnectTimeout(dsn string) string {
+	if strings.Contains(dsn, "connect_timeout") {
+		return dsn
+	}
+	u, err := url.Parse(dsn)
+	if err == nil && u.Scheme != "" {
+		q := u.Query()
+		q.Set("connect_timeout", "5")
+		u.RawQuery = q.Encode()
+		return u.String()
+	}
+	if strings.TrimSpace(dsn) == "" {
+		return dsn
+	}
+	return strings.TrimSpace(dsn) + " connect_timeout=5"
 }
 
 func runMigrations(sqlDB *sql.DB) error {
@@ -235,8 +259,11 @@ func (s *PostgresStore) GetDocument(documentID string) (model.Document, error) {
 	return documentFromRow(row), nil
 }
 
-func (s *PostgresStore) ListDocuments(knowledgeBaseID, tag string) []model.Document {
-	q := s.db.Order("created_at desc")
+func (s *PostgresStore) ListDocuments(knowledgeBaseID, tag string) ([]model.Document, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	q := s.db.WithContext(ctx).Order("created_at desc")
 	if knowledgeBaseID != "" {
 		q = q.Where("knowledge_base_id = ?", knowledgeBaseID)
 	}
@@ -244,12 +271,14 @@ func (s *PostgresStore) ListDocuments(knowledgeBaseID, tag string) []model.Docum
 		q = q.Where("tags @> ?", pq.Array([]string{tag}))
 	}
 	var rows []documentRow
-	q.Find(&rows)
+	if err := q.Find(&rows).Error; err != nil {
+		return nil, err
+	}
 	docs := make([]model.Document, len(rows))
 	for i, r := range rows {
 		docs[i] = documentFromRow(r)
 	}
-	return docs
+	return docs, nil
 }
 
 func (s *PostgresStore) ListDocumentTags(knowledgeBaseID string) []model.DocumentTagCount {
