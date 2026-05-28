@@ -393,19 +393,19 @@ func (h *Handler) handleCreateDocument(c *gin.Context) {
 func (h *Handler) handleListDocuments(c *gin.Context) {
 	kb := strings.TrimSpace(c.Query("knowledge_base_id"))
 	tag := strings.TrimSpace(c.Query("tag"))
+	status := strings.TrimSpace(c.Query("status"))
+	page, pageSize := parsePageQueryWithDefault(c, 20, 200)
 
-	items, err := h.documentService.ListDocuments(kb, tag)
+	documentPage, err := h.documentService.ListDocumentsPage(kb, tag, status, page, pageSize)
 	if err != nil {
 		h.writeStoreError(c, err)
 		return
 	}
+	if documentPage.Items == nil {
+		documentPage.Items = []model.Document{}
+	}
 
-	writeData(c, 200, map[string]any{
-		"items":     items,
-		"page":      1,
-		"page_size": len(items),
-		"total":     len(items),
-	})
+	writeData(c, 200, documentPage)
 }
 
 func (h *Handler) handleGetDocument(c *gin.Context) {
@@ -448,10 +448,10 @@ func (h *Handler) handleGetChunks(c *gin.Context) {
 }
 
 func parsePageQuery(c *gin.Context) (int, int) {
-	const (
-		defaultPageSize = 50
-		maxPageSize     = 200
-	)
+	return parsePageQueryWithDefault(c, 50, 200)
+}
+
+func parsePageQueryWithDefault(c *gin.Context, defaultPageSize, maxPageSize int) (int, int) {
 	page := 1
 	pageSize := defaultPageSize
 	if raw := strings.TrimSpace(c.Query("page")); raw != "" {

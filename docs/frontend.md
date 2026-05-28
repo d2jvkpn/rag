@@ -188,6 +188,8 @@
 
 文档列表页补充约定：
 
+- 列表调用 `GET /api/documents?page=&page_size=` 获取当前页，不在浏览器端对全量文档切片
+- 状态筛选通过 `status` 查询参数交给后端执行，避免只过滤当前页数据
 - 标签筛选使用可清空下拉框，不使用自由输入
 - 下拉选项来自 `GET /api/document-tags`
 - 当已选择 `knowledge_base_id` 时，标签下拉按当前知识库范围加载

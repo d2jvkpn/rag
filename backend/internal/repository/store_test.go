@@ -51,6 +51,66 @@ func TestJSONStoreBackfillsKnowledgeBasesFromDocuments(t *testing.T) {
 	}
 }
 
+func TestJSONStoreListDocumentsPage(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "state.json")
+	store, err := NewJSONStore(path, nil)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+
+	base := time.Now().UTC()
+	for i := 0; i < 5; i++ {
+		status := "indexed"
+		if i%2 == 0 {
+			status = "failed"
+		}
+		document := model.Document{
+			DocumentID:      "doc-" + string(rune('a'+i)),
+			KnowledgeBaseID: "kb-1",
+			CreatedAt:       base.Add(time.Duration(i) * time.Minute),
+			UpdatedAt:       base.Add(time.Duration(i) * time.Minute),
+			Status:          status,
+			SHA256:          "sha-" + string(rune('a'+i)),
+			Tags:            []string{"release"},
+		}
+		if err := store.CreateDocument(document); err != nil {
+			t.Fatalf("create document: %v", err)
+		}
+	}
+	if err := store.CreateDocument(model.Document{
+		DocumentID:      "doc-other",
+		KnowledgeBaseID: "kb-2",
+		CreatedAt:       base.Add(10 * time.Minute),
+		UpdatedAt:       base.Add(10 * time.Minute),
+		Status:          "failed",
+		SHA256:          "sha-other",
+		Tags:            []string{"release"},
+	}); err != nil {
+		t.Fatalf("create other document: %v", err)
+	}
+
+	page, err := store.ListDocumentsPage("kb-1", "release", "failed", 1, 2)
+	if err != nil {
+		t.Fatalf("list documents page: %v", err)
+	}
+	if page.Page != 1 || page.PageSize != 2 || page.Total != 3 || page.TotalPages != 2 || !page.HasNext || page.HasPrev {
+		t.Fatalf("unexpected page metadata: %+v", page)
+	}
+	if len(page.Items) != 2 || page.Items[0].DocumentID != "doc-e" || page.Items[1].DocumentID != "doc-c" {
+		t.Fatalf("unexpected page items: %+v", page.Items)
+	}
+
+	last, err := store.ListDocumentsPage("kb-1", "release", "failed", 9, 2)
+	if err != nil {
+		t.Fatalf("list last documents page: %v", err)
+	}
+	if last.Page != 2 || len(last.Items) != 1 || last.Items[0].DocumentID != "doc-a" || last.HasNext || !last.HasPrev {
+		t.Fatalf("unexpected last page: %+v", last)
+	}
+}
+
 func TestJSONStoreListChunksPage(t *testing.T) {
 	t.Parallel()
 

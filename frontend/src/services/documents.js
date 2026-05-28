@@ -1,12 +1,14 @@
 import { http } from './http.js'
 
 export const documentsService = {
-  list(knowledgeBaseId, tag) {
+  list({ knowledgeBaseId, tag, status, page = 1, pageSize = 20 } = {}) {
     const params = new URLSearchParams()
     if (knowledgeBaseId) params.set('knowledge_base_id', knowledgeBaseId)
     if (tag) params.set('tag', tag)
-    const qs = params.toString() ? `?${params.toString()}` : ''
-    return http.get('/api/documents' + qs)
+    if (status) params.set('status', status)
+    params.set('page', String(page))
+    params.set('page_size', String(pageSize))
+    return http.get(`/api/documents?${params.toString()}`)
   },
   listTags(knowledgeBaseId) {
     const qs = knowledgeBaseId ? `?knowledge_base_id=${encodeURIComponent(knowledgeBaseId)}` : ''

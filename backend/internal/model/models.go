@@ -54,6 +54,16 @@ type Document struct {
 	UploaderName      string     `json:"uploader_name,omitempty"`
 }
 
+type DocumentPage struct {
+	Items      []Document `json:"items"`
+	Page       int        `json:"page"`
+	PageSize   int        `json:"page_size"`
+	Total      int        `json:"total"`
+	TotalPages int        `json:"total_pages"`
+	HasNext    bool       `json:"has_next"`
+	HasPrev    bool       `json:"has_prev"`
+}
+
 type ResourceRef struct {
 	RefID       string `json:"ref_id"`
 	RefType     string `json:"ref_type"`

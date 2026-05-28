@@ -263,13 +263,7 @@ func (s *PostgresStore) ListDocuments(knowledgeBaseID, tag string) ([]model.Docu
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	q := s.db.WithContext(ctx).Order("created_at desc")
-	if knowledgeBaseID != "" {
-		q = q.Where("knowledge_base_id = ?", knowledgeBaseID)
-	}
-	if tag != "" {
-		q = q.Where("tags @> ?", pq.Array([]string{tag}))
-	}
+	q := s.documentsQuery(s.db.WithContext(ctx), knowledgeBaseID, tag, "").Order("created_at desc")
 	var rows []documentRow
 	if err := q.Find(&rows).Error; err != nil {
 		return nil, err
@@ -279,6 +273,59 @@ func (s *PostgresStore) ListDocuments(knowledgeBaseID, tag string) ([]model.Docu
 		docs[i] = documentFromRow(r)
 	}
 	return docs, nil
+}
+
+func (s *PostgresStore) ListDocumentsPage(
+	knowledgeBaseID, tag, status string,
+	page, pageSize int,
+) (model.DocumentPage, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	q := s.documentsQuery(s.db.WithContext(ctx).Model(&documentRow{}), knowledgeBaseID, tag, status)
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return model.DocumentPage{}, err
+	}
+	totalPages := 0
+	if total > 0 {
+		totalPages = (int(total) + pageSize - 1) / pageSize
+	}
+	if totalPages > 0 && page > totalPages {
+		page = totalPages
+	}
+
+	var rows []documentRow
+	offset := (page - 1) * pageSize
+	if err := q.Order("created_at desc").Limit(pageSize).Offset(offset).Find(&rows).Error; err != nil {
+		return model.DocumentPage{}, err
+	}
+	docs := make([]model.Document, len(rows))
+	for i, r := range rows {
+		docs[i] = documentFromRow(r)
+	}
+	return model.DocumentPage{
+		Items:      docs,
+		Page:       page,
+		PageSize:   pageSize,
+		Total:      int(total),
+		TotalPages: totalPages,
+		HasNext:    totalPages > 0 && page < totalPages,
+		HasPrev:    totalPages > 0 && page > 1,
+	}, nil
+}
+
+func (s *PostgresStore) documentsQuery(q *gorm.DB, knowledgeBaseID, tag, status string) *gorm.DB {
+	if knowledgeBaseID != "" {
+		q = q.Where("knowledge_base_id = ?", knowledgeBaseID)
+	}
+	if tag != "" {
+		q = q.Where("tags @> ?", pq.Array([]string{tag}))
+	}
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	return q
 }
 
 func (s *PostgresStore) ListDocumentTags(knowledgeBaseID string) []model.DocumentTagCount {

@@ -10,7 +10,7 @@
           :placeholder="t('documents.kbFilter')"
           clearable
           style="width:200px"
-          @update:value="loadDocuments"
+          @update:value="loadFirstPage"
         />
         <n-select
           v-model:value="filters.statusFilter"
@@ -18,7 +18,7 @@
           clearable
           :options="statusOptions"
           style="width:160px"
-          @update:value="loadDocuments"
+          @update:value="loadFirstPage"
         />
         <n-select
           v-model:value="filters.tagFilter"
@@ -27,7 +27,7 @@
           clearable
           filterable
           style="width:220px"
-          @update:value="loadDocuments"
+          @update:value="loadFirstPage"
         />
         <n-button :loading="loading" @click="loadDocuments">{{ t('documents.refresh') }}</n-button>
         <n-text v-if="lastRefreshed" depth="3" style="font-size:12px">{{ lastRefreshed }}</n-text>
@@ -41,7 +41,7 @@
       <!-- Table -->
       <n-data-table
         :columns="columns"
-        :data="pagedDocuments"
+        :data="documents"
         :loading="loading"
         :pagination="false"
         :row-key="(row) => row.document_id"
@@ -50,10 +50,10 @@
       />
       <div style="display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-top:12px">
         <n-text depth="3" style="font-size:12px">
-          {{ t('documents.pageSummary', { page: displayPage, pages: totalPages, start: pageStart, end: pageEnd, total: filteredDocuments.length }) }}
+          {{ t('documents.pageSummary', { page: displayPage, pages: totalPages, start: pageStart, end: pageEnd, total }) }}
         </n-text>
-        <n-button size="small" :disabled="displayPage <= 1" @click="currentPage = displayPage - 1">Prev</n-button>
-        <n-button size="small" :disabled="displayPage >= totalPages" @click="currentPage = displayPage + 1">Next</n-button>
+        <n-button size="small" :disabled="displayPage <= 1" @click="goToPage(displayPage - 1)">Prev</n-button>
+        <n-button size="small" :disabled="displayPage >= totalPages" @click="goToPage(displayPage + 1)">Next</n-button>
       </div>
     </div>
 
@@ -142,6 +142,8 @@ const pageSize = 20
 
 const documents = ref([])
 const currentPage = ref(1)
+const total = ref(0)
+const totalPagesValue = ref(1)
 const loading = ref(false)
 const error = ref('')
 const lastRefreshed = ref('')
@@ -162,16 +164,10 @@ const statusOptions = computed(() =>
   Object.keys(STATUS_TYPE).map(v => ({ value: v, label: t(`status.${v}`) }))
 )
 
-const filteredDocuments = computed(() => {
-  if (!filters.statusFilter) return documents.value
-  return documents.value.filter(d => d.status === filters.statusFilter)
-})
-
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredDocuments.value.length / pageSize)))
+const totalPages = computed(() => Math.max(1, totalPagesValue.value))
 const displayPage = computed(() => Math.min(currentPage.value, totalPages.value))
-const pageStart = computed(() => filteredDocuments.value.length === 0 ? 0 : (displayPage.value - 1) * pageSize + 1)
-const pageEnd = computed(() => filteredDocuments.value.length === 0 ? 0 : Math.min(displayPage.value * pageSize, filteredDocuments.value.length))
-const pagedDocuments = computed(() => filteredDocuments.value.slice(pageStart.value - 1, pageEnd.value))
+const pageStart = computed(() => total.value === 0 ? 0 : (displayPage.value - 1) * pageSize + 1)
+const pageEnd = computed(() => total.value === 0 ? 0 : pageStart.value + documents.value.length - 1)
 
 const currentUploadKbConfig = computed(() => kbConfigs.value[uploadForm.value.knowledgeBaseId] || null)
 
@@ -207,9 +203,17 @@ async function loadDocuments() {
   loading.value = true
   error.value = ''
   try {
-    const data = await documentsService.list(filters.knowledgeBaseId, filters.tagFilter)
+    const data = await documentsService.list({
+      knowledgeBaseId: filters.knowledgeBaseId,
+      tag: filters.tagFilter,
+      status: filters.statusFilter,
+      page: currentPage.value,
+      pageSize,
+    })
     documents.value = data.items || []
-    currentPage.value = 1
+    currentPage.value = data.page || currentPage.value
+    total.value = data.total || 0
+    totalPagesValue.value = data.total_pages || 1
     lastRefreshed.value = t('documents.updatedAt', { time: new Date().toLocaleTimeString() })
   } catch (e) {
     error.value = e.message
@@ -218,9 +222,16 @@ async function loadDocuments() {
   }
 }
 
-watch(totalPages, (pages) => {
-  if (currentPage.value > pages) currentPage.value = pages
-})
+async function loadFirstPage() {
+  currentPage.value = 1
+  await loadDocuments()
+}
+
+async function goToPage(page) {
+  currentPage.value = page
+  await loadDocuments()
+}
+
 
 watch(() => filters.knowledgeBaseId, async () => {
   await loadTagOptions()

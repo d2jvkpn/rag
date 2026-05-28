@@ -52,7 +52,10 @@
     "items": [],
     "page": 1,
     "page_size": 20,
-    "total": 100
+    "total": 100,
+    "total_pages": 5,
+    "has_next": true,
+    "has_prev": false
   }
 }
 ```
@@ -230,9 +233,12 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 
 ### `GET /api/documents`
 
-- 文档列表查询
+- 文档列表分页查询
 - 支持 `knowledge_base_id` 过滤
 - 支持 `tag` 精确过滤，匹配 `documents.tags` 中的单个标签
+- 支持 `status` 精确过滤
+- 支持 `page` / `page_size`，默认 `page=1&page_size=20`，`page_size` 最大 `200`
+- `items` 固定按 `created_at desc` 排序；响应 `data` 包含 `items`、`page`、`page_size`、`total`、`total_pages`、`has_next`、`has_prev`
 
 ### `GET /api/document-tags`
 

@@ -259,6 +259,23 @@ func (s *JSONStore) GetDocument(documentID string) (model.Document, error) {
 func (s *JSONStore) ListDocuments(knowledgeBaseID, tag string) ([]model.Document, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	documents := s.filterDocumentsLocked(knowledgeBaseID, tag, "")
+	sortDocumentsByCreatedDesc(documents)
+	return documents, nil
+}
+
+func (s *JSONStore) ListDocumentsPage(
+	knowledgeBaseID, tag, status string,
+	page, pageSize int,
+) (model.DocumentPage, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	documents := s.filterDocumentsLocked(knowledgeBaseID, tag, status)
+	sortDocumentsByCreatedDesc(documents)
+	return paginateDocuments(documents, page, pageSize), nil
+}
+
+func (s *JSONStore) filterDocumentsLocked(knowledgeBaseID, tag, status string) []model.Document {
 	documents := make([]model.Document, 0, len(s.data.Documents))
 	for _, document := range s.data.Documents {
 		if knowledgeBaseID != "" && document.KnowledgeBaseID != knowledgeBaseID {
@@ -267,12 +284,18 @@ func (s *JSONStore) ListDocuments(knowledgeBaseID, tag string) ([]model.Document
 		if tag != "" && !containsTag(document.Tags, tag) {
 			continue
 		}
+		if status != "" && document.Status != status {
+			continue
+		}
 		documents = append(documents, document)
 	}
+	return documents
+}
+
+func sortDocumentsByCreatedDesc(documents []model.Document) {
 	sort.Slice(documents, func(i, j int) bool {
 		return documents[i].CreatedAt.After(documents[j].CreatedAt)
 	})
-	return documents, nil
 }
 
 func (s *JSONStore) ListDocumentTags(knowledgeBaseID string) []model.DocumentTagCount {
@@ -418,7 +441,50 @@ func (s *JSONStore) ListChunksPage(documentID string, page, pageSize int) (model
 }
 
 func paginateChunks(chunks []model.DocumentChunk, page, pageSize int) model.DocumentChunkPage {
-	total := len(chunks)
+	window := paginate(len(chunks), page, pageSize)
+	items := []model.DocumentChunk{}
+	if window.start < window.end {
+		items = append(items, chunks[window.start:window.end]...)
+	}
+	return model.DocumentChunkPage{
+		Items:      items,
+		Page:       window.page,
+		PageSize:   pageSize,
+		Total:      window.total,
+		TotalPages: window.totalPages,
+		HasNext:    window.hasNext,
+		HasPrev:    window.hasPrev,
+	}
+}
+
+func paginateDocuments(documents []model.Document, page, pageSize int) model.DocumentPage {
+	window := paginate(len(documents), page, pageSize)
+	items := []model.Document{}
+	if window.start < window.end {
+		items = append(items, documents[window.start:window.end]...)
+	}
+	return model.DocumentPage{
+		Items:      items,
+		Page:       window.page,
+		PageSize:   pageSize,
+		Total:      window.total,
+		TotalPages: window.totalPages,
+		HasNext:    window.hasNext,
+		HasPrev:    window.hasPrev,
+	}
+}
+
+type pageWindow struct {
+	total      int
+	totalPages int
+	page       int
+	start      int
+	end        int
+	hasNext    bool
+	hasPrev    bool
+}
+
+func paginate(total, page, pageSize int) pageWindow {
 	totalPages := 0
 	if total > 0 {
 		totalPages = (total + pageSize - 1) / pageSize
@@ -434,18 +500,14 @@ func paginateChunks(chunks []model.DocumentChunk, page, pageSize int) model.Docu
 	if end > total {
 		end = total
 	}
-	items := []model.DocumentChunk{}
-	if start < end {
-		items = append(items, chunks[start:end]...)
-	}
-	return model.DocumentChunkPage{
-		Items:      items,
-		Page:       page,
-		PageSize:   pageSize,
-		Total:      total,
-		TotalPages: totalPages,
-		HasNext:    totalPages > 0 && page < totalPages,
-		HasPrev:    totalPages > 0 && page > 1,
+	return pageWindow{
+		total:      total,
+		totalPages: totalPages,
+		page:       page,
+		start:      start,
+		end:        end,
+		hasNext:    totalPages > 0 && page < totalPages,
+		hasPrev:    totalPages > 0 && page > 1,
 	}
 }
 

@@ -16,9 +16,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
-	"github.com/google/uuid"
 
 	"backend/internal/infra"
 	"backend/internal/llm"
@@ -330,6 +330,13 @@ func validateKnowledgeBaseInput(kbID, analyzer string, chunkSize, chunkOverlap, 
 
 func (s *DocumentService) ListDocuments(knowledgeBaseID, tag string) ([]model.Document, error) {
 	return s.store.ListDocuments(knowledgeBaseID, tag)
+}
+
+func (s *DocumentService) ListDocumentsPage(
+	knowledgeBaseID, tag, status string,
+	page, pageSize int,
+) (model.DocumentPage, error) {
+	return s.store.ListDocumentsPage(knowledgeBaseID, tag, status, page, pageSize)
 }
 
 func (s *DocumentService) ListDocumentTags(knowledgeBaseID string) []model.DocumentTagCount {
