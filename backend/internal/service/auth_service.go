@@ -27,7 +27,7 @@ type claims struct {
 }
 
 type AuthService struct {
-	store       repository.Store
+	store       repository.UserStore
 	jwtSecret   []byte
 	tokenTTL    time.Duration
 	blacklist   TokenBlacklist
@@ -35,7 +35,7 @@ type AuthService struct {
 }
 
 func NewAuthService(
-	store repository.Store,
+	store repository.UserStore,
 	jwtSecret string,
 	tokenTTL time.Duration,
 	accounts []repository.AccountSeed,

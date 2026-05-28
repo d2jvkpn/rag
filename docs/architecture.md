@@ -23,12 +23,22 @@ gin router
 
 ## 持久化层
 
-`Store` 接口（`internal/repository/interface.go`）抽象所有关系数据库访问，两个实现共享同一接口：
+`internal/repository/interface.go` 将持久化访问拆分为四个小接口，再组合为 `Store`：
+
+| 接口 | 方法数 | 消费方 |
+|---|---|---|
+| `UserStore` | 4 | `AuthService` |
+| `KnowledgeBaseStore` | 4 | `DocumentService` |
+| `DocumentStore` | 7 | `DocumentService` |
+| `ChunkStore` | 6 | `DocumentService` |
+| `Store`（组合以上四个） | — | `app/`，两个实现 |
+
+`AuthService.store` 类型为 `UserStore`；`DocumentService.store` 为 service 包内的 unexported `docStore`（嵌入后三个接口），不依赖 `UserStore`。两个实现均满足组合接口 `Store`，传入时自动满足所有子接口。
 
 - **JSONStore**：本地 JSON 文件，`database.dsn` 未配置时使用
 - **PostgresStore**：gorm + lib/pq，`database.dsn` 配置后使用
 
-`main.go` 通过 `initStore(cfg)` 根据配置自动选择。新增持久化方法必须同时写入接口定义和两个实现。
+`main.go` 通过 `initStore(cfg)` 根据配置自动选择。新增持久化方法必须同时写入对应子接口定义和两个实现。
 
 ## 文档生命周期
 

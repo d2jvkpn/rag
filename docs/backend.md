@@ -396,7 +396,7 @@ backend/
     parser/                  # Markdown/DOCX/PPTX/PDF parser
     model/                   # 领域模型
     queue/                   # TaskQueue（GoroutineQueue / AsynqQueue）
-    repository/              # Store 接口、JSONStore、PostgresStore
+    repository/              # UserStore/KnowledgeBaseStore/DocumentStore/ChunkStore 接口、Store 组合接口、JSONStore、PostgresStore
     service/                 # AuthService、DocumentService、blacklist、chunker
 ```
 
@@ -425,7 +425,7 @@ backend/
 - `examples/local.yaml` 示例配置 + `viper` 配置加载（默认仍支持 `configs/local.yaml`）
 - `--release`、`--addr`、`--config` 启动参数
 - `users`、`documents`、`document_chunks` 表落地，含 `human_review`、`uploader_id/name`、`totp_secret/enabled` 等字段
-- `repository.Store` 接口；`JSONStore` 和 `PostgresStore` 双实现
+- `repository` 接口拆分为 `UserStore`、`KnowledgeBaseStore`、`DocumentStore`、`ChunkStore` 四个小接口，再组合为 `Store`；`AuthService.store` 类型为 `UserStore`，`DocumentService.store` 为 service 包内 unexported `docStore`（嵌入后三个）；`JSONStore` 和 `PostgresStore` 双实现均满足组合 `Store`
 - `PostgresStore`：`gorm` + `lib/pq` driver，支持 `TEXT[]` tags 和 `JSONB` resource_refs
 - 启动时根据 `database.dsn` 配置自动选择 store
 - 登录、退出、当前用户接口；密码使用 bcrypt 哈希

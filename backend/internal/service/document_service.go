@@ -28,9 +28,16 @@ import (
 	"backend/internal/repository"
 )
 
+// docStore is the subset of repository.Store used by DocumentService.
+type docStore interface {
+	repository.KnowledgeBaseStore
+	repository.DocumentStore
+	repository.ChunkStore
+}
+
 type DocumentService struct {
 	cfg         *viper.Viper
-	store       repository.Store
+	store       docStore
 	embedder    llm.Embedder
 	vectorStore llm.VectorStore
 	llm         llm.LLM
@@ -40,7 +47,7 @@ type DocumentService struct {
 
 func NewDocumentService(
 	cfg *viper.Viper,
-	store repository.Store,
+	store docStore,
 	opts ...func(*DocumentService),
 ) (*DocumentService, error) {
 	dataDir := cfg.GetString("app.data_dir")
