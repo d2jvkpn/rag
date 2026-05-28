@@ -1,7 +1,13 @@
 import { http } from './http.js'
 
 export const chunksService = {
-  list: (documentId) => http.get(`/api/documents/${documentId}/chunks`),
+  list: (documentId, params = {}) => {
+    const search = new URLSearchParams()
+    if (params.page) search.set('page', String(params.page))
+    if (params.pageSize) search.set('page_size', String(params.pageSize))
+    const query = search.toString()
+    return http.get(`/api/documents/${documentId}/chunks${query ? `?${query}` : ''}`)
+  },
   rechunk: (documentId) => http.post(`/api/documents/${documentId}/chunks/rechunk`),
   approve: (documentId) => http.post(`/api/documents/${documentId}/chunks/approve`),
   reject: (documentId, chunkId) => http.post(`/api/documents/${documentId}/chunks/${chunkId}/reject`),

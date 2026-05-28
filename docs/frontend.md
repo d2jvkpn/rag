@@ -222,7 +222,7 @@
 
 ## Chunk 审核页交互约定
 
-`/documents/:documentId/chunks` 右侧详情区优先展示 chunk 正文和清洗后文本。chunk metadata 与 `resource_refs` 不直接铺在正文区，通过详情头部的 `Details ({n})` / `详情 ({n})` 按钮打开合并弹窗查看，按钮中的 `n` 为当前 chunk 的 `resource_refs` 数量；左侧 chunk 列表对有引用的 chunk 显示引用数量标签。`resource_refs` 区域在无引用时显示空态，有引用时展示类型、标签、页码、caption、锚文本、URL、资源路径和外部资源标识。
+`/documents/:documentId/chunks` 左侧 chunk 列表按 `page/page_size` 分页渐进加载，默认每页 50 条；首屏加载第一页，滚动到底加载下一页，点击“跳到最后”直接加载最后一页，随后滚动到顶部可加载上一页。列表头展示当前已加载的 chunk index 范围和总数。右侧详情区优先展示 chunk 正文和清洗后文本。chunk metadata 与 `resource_refs` 不直接铺在正文区，通过详情头部的 `Details ({n})` / `详情 ({n})` 按钮打开合并弹窗查看，按钮中的 `n` 为当前 chunk 的 `resource_refs` 数量；左侧 chunk 列表对有引用的 chunk 显示引用数量标签。`resource_refs` 区域在无引用时显示空态，有引用时展示类型、标签、页码、caption、锚文本、URL、资源路径和外部资源标识。
 
 ## 前端上传约定
 

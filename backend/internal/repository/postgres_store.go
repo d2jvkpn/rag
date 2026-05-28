@@ -371,6 +371,43 @@ func (s *PostgresStore) GetChunks(documentID string) ([]model.DocumentChunk, err
 	return chunks, nil
 }
 
+func (s *PostgresStore) ListChunksPage(documentID string, page, pageSize int) (model.DocumentChunkPage, error) {
+	var total int64
+	if err := s.db.Model(&chunkRow{}).Where("document_id = ?", documentID).Count(&total).Error; err != nil {
+		return model.DocumentChunkPage{}, err
+	}
+	totalPages := 0
+	if total > 0 {
+		totalPages = (int(total) + pageSize - 1) / pageSize
+	}
+	if totalPages > 0 && page > totalPages {
+		page = totalPages
+	}
+
+	var rows []chunkRow
+	offset := (page - 1) * pageSize
+	if err := s.db.Where("document_id = ?", documentID).
+		Order("chunk_index asc").
+		Limit(pageSize).
+		Offset(offset).
+		Find(&rows).Error; err != nil {
+		return model.DocumentChunkPage{}, err
+	}
+	chunks := make([]model.DocumentChunk, len(rows))
+	for i, r := range rows {
+		chunks[i] = chunkFromRow(r)
+	}
+	return model.DocumentChunkPage{
+		Items:      chunks,
+		Page:       page,
+		PageSize:   pageSize,
+		Total:      int(total),
+		TotalPages: totalPages,
+		HasNext:    totalPages > 0 && page < totalPages,
+		HasPrev:    totalPages > 0 && page > 1,
+	}, nil
+}
+
 // ---- row types ----
 
 type userRow struct {

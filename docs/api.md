@@ -445,7 +445,14 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 
 ## Chunk 返回字段建议
 
-`GET /api/documents/:document_id/chunks` 的单条 chunk 建议至少包含：
+`GET /api/documents/:document_id/chunks` 使用分页返回，支持查询参数：
+
+- `page`：页码，默认 `1`
+- `page_size`：每页数量，默认 `50`，最大 `200`
+
+响应 `data` 包含 `items`、`page`、`page_size`、`total`、`total_pages`、`has_next`、`has_prev`。`items` 固定按 `chunk_index asc` 排序。
+
+单条 chunk 建议至少包含：
 
 - `chunk_id`
 - `chunk_index`

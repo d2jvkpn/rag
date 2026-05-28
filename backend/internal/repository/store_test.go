@@ -50,3 +50,45 @@ func TestJSONStoreBackfillsKnowledgeBasesFromDocuments(t *testing.T) {
 		t.Fatalf("unexpected backfilled config: %+v", items[0])
 	}
 }
+
+func TestJSONStoreListChunksPage(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "state.json")
+	store, err := NewJSONStore(path, nil)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+
+	chunks := make([]model.DocumentChunk, 0, 5)
+	for i := 0; i < 5; i++ {
+		chunks = append(chunks, model.DocumentChunk{
+			ChunkID:    "chunk-" + string(rune('a'+i)),
+			DocumentID: "doc-1",
+			ChunkIndex: i,
+			Text:       "text",
+		})
+	}
+	if err := store.ReplaceChunks("doc-1", chunks); err != nil {
+		t.Fatalf("replace chunks: %v", err)
+	}
+
+	page, err := store.ListChunksPage("doc-1", 2, 2)
+	if err != nil {
+		t.Fatalf("list chunks page: %v", err)
+	}
+	if page.Page != 2 || page.PageSize != 2 || page.Total != 5 || page.TotalPages != 3 || !page.HasNext || !page.HasPrev {
+		t.Fatalf("unexpected page metadata: %+v", page)
+	}
+	if len(page.Items) != 2 || page.Items[0].ChunkIndex != 2 || page.Items[1].ChunkIndex != 3 {
+		t.Fatalf("unexpected page items: %+v", page.Items)
+	}
+
+	last, err := store.ListChunksPage("doc-1", 99, 2)
+	if err != nil {
+		t.Fatalf("list last chunks page: %v", err)
+	}
+	if last.Page != 3 || len(last.Items) != 1 || last.Items[0].ChunkIndex != 4 || last.HasNext || !last.HasPrev {
+		t.Fatalf("unexpected last page: %+v", last)
+	}
+}

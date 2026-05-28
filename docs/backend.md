@@ -436,7 +436,7 @@ backend/
 - `pdf` 通过 Python `pdfplumber` 解析，并将页内表格转成 Markdown 表格文本
 - chunk 切分和 chunk JSON 快照写入
 - `rechunk` 接口和 chunk 版本递增
-- chunk 列表查询接口
+- chunk 列表查询接口按 `page/page_size` 分页返回，默认每页 50 条并返回 `total_pages` / `has_next` / `has_prev`
 - chunk 审核接口：approve / reject / merge / edit / index
 - 结构化日志（zap + lumberjack，同时输出控制台和 backend/logs/app.log）
 - `Embedder` 接口 + Noop 实现 + OpenAI-compatible 实现

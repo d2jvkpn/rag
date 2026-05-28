@@ -345,6 +345,10 @@ func (s *DocumentService) GetChunks(documentID string) ([]model.DocumentChunk, e
 	return s.store.GetChunks(documentID)
 }
 
+func (s *DocumentService) ListChunksPage(documentID string, page, pageSize int) (model.DocumentChunkPage, error) {
+	return s.store.ListChunksPage(documentID, page, pageSize)
+}
+
 func (s *DocumentService) DeleteDocument(documentID string) error {
 	document, _, err := s.store.DeleteDocument(documentID)
 	if err != nil {

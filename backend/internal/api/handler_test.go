@@ -92,7 +92,13 @@ func TestDocumentLifecycle(t *testing.T) {
 
 	var chunksResponse struct {
 		Data struct {
-			Items []map[string]any `json:"items"`
+			Items      []map[string]any `json:"items"`
+			Page       int              `json:"page"`
+			PageSize   int              `json:"page_size"`
+			Total      int              `json:"total"`
+			TotalPages int              `json:"total_pages"`
+			HasNext    bool             `json:"has_next"`
+			HasPrev    bool             `json:"has_prev"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &chunksResponse); err != nil {
@@ -100,6 +106,9 @@ func TestDocumentLifecycle(t *testing.T) {
 	}
 	if len(chunksResponse.Data.Items) != 1 {
 		t.Fatalf("expected 1 chunk, got %d", len(chunksResponse.Data.Items))
+	}
+	if chunksResponse.Data.Page != 1 || chunksResponse.Data.PageSize != 50 || chunksResponse.Data.Total != 1 || chunksResponse.Data.TotalPages != 1 || chunksResponse.Data.HasNext || chunksResponse.Data.HasPrev {
+		t.Fatalf("unexpected chunks pagination: %+v", chunksResponse.Data)
 	}
 
 	rechunkReq := httptest.NewRequest(

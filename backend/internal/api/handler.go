@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -436,20 +437,39 @@ func (h *Handler) handleDeleteDocument(c *gin.Context) {
 
 func (h *Handler) handleGetChunks(c *gin.Context) {
 	documentID := c.Param("document_id")
-	chunks, err := h.documentService.GetChunks(documentID)
+	page, pageSize := parsePageQuery(c)
+	chunkPage, err := h.documentService.ListChunksPage(documentID, page, pageSize)
 	if err != nil {
 		h.writeStoreError(c, err)
 		return
 	}
-	if chunks == nil {
-		chunks = []model.DocumentChunk{}
+	if chunkPage.Items == nil {
+		chunkPage.Items = []model.DocumentChunk{}
 	}
-	writeData(c, 200, map[string]any{
-		"items":     chunks,
-		"page":      1,
-		"page_size": len(chunks),
-		"total":     len(chunks),
-	})
+	writeData(c, 200, chunkPage)
+}
+
+func parsePageQuery(c *gin.Context) (int, int) {
+	const (
+		defaultPageSize = 50
+		maxPageSize     = 200
+	)
+	page := 1
+	pageSize := defaultPageSize
+	if raw := strings.TrimSpace(c.Query("page")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			page = n
+		}
+	}
+	if raw := strings.TrimSpace(c.Query("page_size")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			pageSize = n
+		}
+	}
+	if pageSize > maxPageSize {
+		pageSize = maxPageSize
+	}
+	return page, pageSize
 }
 
 func (h *Handler) handleRechunk(c *gin.Context) {

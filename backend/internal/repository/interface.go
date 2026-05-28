@@ -22,6 +22,7 @@ type Store interface {
 
 	ReplaceChunks(documentID string, chunks []model.DocumentChunk) error
 	GetChunks(documentID string) ([]model.DocumentChunk, error)
+	ListChunksPage(documentID string, page, pageSize int) (model.DocumentChunkPage, error)
 	GetChunk(chunkID string) (model.DocumentChunk, error)
 	UpdateChunk(chunk model.DocumentChunk) error
 	BulkUpdateChunks(chunks []model.DocumentChunk) error

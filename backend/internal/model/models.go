@@ -88,6 +88,16 @@ type DocumentChunk struct {
 	ResourceRefs   []ResourceRef `json:"resource_refs"`
 }
 
+type DocumentChunkPage struct {
+	Items      []DocumentChunk `json:"items"`
+	Page       int             `json:"page"`
+	PageSize   int             `json:"page_size"`
+	Total      int             `json:"total"`
+	TotalPages int             `json:"total_pages"`
+	HasNext    bool            `json:"has_next"`
+	HasPrev    bool            `json:"has_prev"`
+}
+
 type ChunkSnapshot struct {
 	DocumentID      string          `json:"document_id"`
 	KnowledgeBaseID string          `json:"knowledge_base_id"`

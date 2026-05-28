@@ -409,6 +409,46 @@ func (s *JSONStore) GetChunks(documentID string) ([]model.DocumentChunk, error) 
 	return out, nil
 }
 
+func (s *JSONStore) ListChunksPage(documentID string, page, pageSize int) (model.DocumentChunkPage, error) {
+	chunks, err := s.GetChunks(documentID)
+	if err != nil {
+		return model.DocumentChunkPage{}, err
+	}
+	return paginateChunks(chunks, page, pageSize), nil
+}
+
+func paginateChunks(chunks []model.DocumentChunk, page, pageSize int) model.DocumentChunkPage {
+	total := len(chunks)
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + pageSize - 1) / pageSize
+	}
+	if totalPages > 0 && page > totalPages {
+		page = totalPages
+	}
+	start := (page - 1) * pageSize
+	if start > total {
+		start = total
+	}
+	end := start + pageSize
+	if end > total {
+		end = total
+	}
+	items := []model.DocumentChunk{}
+	if start < end {
+		items = append(items, chunks[start:end]...)
+	}
+	return model.DocumentChunkPage{
+		Items:      items,
+		Page:       page,
+		PageSize:   pageSize,
+		Total:      total,
+		TotalPages: totalPages,
+		HasNext:    totalPages > 0 && page < totalPages,
+		HasPrev:    totalPages > 0 && page > 1,
+	}
+}
+
 func hashPassword(password string) string {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
