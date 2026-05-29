@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
-const outDir = process.env.OUT_DIR || 'target/dist'
+// const outDir = process.env.OUT_DIR || 'target/dist'
 const basePath = normalizeBasePath(process.env.BASE_PATH || '/')
 
 function normalizeBasePath(path) {
@@ -13,7 +13,7 @@ export default defineConfig({
   base: basePath,
   plugins: [vue()],
   build: {
-    outDir: outDir,
+    outDir: "target/dist",
     emptyOutDir: true,
     rollupOptions: {
       output: {

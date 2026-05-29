@@ -34,7 +34,7 @@ redis:
 embedder:
   base_url: "https://api.openai.com/v1"
   api_key: "sk-xxxxxxxx"
-  model: "text-embedding-3-small"
+  model: "text-embedding-v4"
   batch_size: 10
   # Vector dimension of the embedding model. Used for newly created knowledge bases.
   dim: 1024
@@ -43,11 +43,8 @@ embedder:
 milvus:
   addr: "127.0.0.1:19530"
   db: "rag"
-
-# OpenAI-compatible chat completion endpoint. Leave base_url/api_key empty for Noop.
-llm:
-  # Example: "https://api.openai.com/v1"
-  # Example: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-  base_url: ""
-  api_key: ""
-  model: "gpt-4o-mini"
+  #collections:
+  #- collection: public
+  #  chunk_size: 800    # optional, default 800
+  #  chunk_overlap: 100  # optional, default 100
+  #  min_chunks: 2       # optional, default 2 (docs shorter than min_chunks×chunk_size become one chunk)
