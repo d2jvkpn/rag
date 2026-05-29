@@ -20,6 +20,7 @@ type KnowledgeBase struct {
 	UpdatedAt       time.Time `json:"updated_at"`
 	CreatedBy       string    `json:"created_by,omitempty"`
 	Dim             int       `json:"dim"`
+	Model           string    `json:"model"`
 	Analyzer        string    `json:"analyzer"`
 	ChunkSize       int       `json:"chunk_size"`
 	ChunkOverlap    int       `json:"chunk_overlap"`

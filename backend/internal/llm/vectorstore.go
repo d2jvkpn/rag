@@ -67,6 +67,8 @@ type VectorStore interface {
 	ValidateKnowledgeBase(kbID string) error
 	// CreateKnowledgeBase creates or loads a collection at runtime.
 	CreateKnowledgeBase(ctx context.Context, cfg CollectionConfig) error
+	// DeleteKnowledgeBase drops the collection permanently.
+	DeleteKnowledgeBase(ctx context.Context, kbID string) error
 	// Upsert inserts or replaces records.
 	Upsert(ctx context.Context, records []VectorRecord) error
 	// DeleteByDocument removes all vectors belonging to a document.
@@ -80,6 +82,7 @@ type NoopVectorStore struct{}
 
 func (NoopVectorStore) ValidateKnowledgeBase(_ string) error                            { return nil }
 func (NoopVectorStore) CreateKnowledgeBase(_ context.Context, _ CollectionConfig) error { return nil }
+func (NoopVectorStore) DeleteKnowledgeBase(_ context.Context, _ string) error           { return nil }
 func (NoopVectorStore) Upsert(_ context.Context, _ []VectorRecord) error                { return nil }
 func (NoopVectorStore) DeleteByDocument(_ context.Context, _, _ string) error           { return nil }
 func (NoopVectorStore) Search(_ context.Context, _ SearchRequest) ([]SearchResult, error) {

@@ -110,7 +110,7 @@ func NewJSONStore(path string, accounts []AccountSeed) (*JSONStore, error) {
 	return store, nil
 }
 
-func (s *JSONStore) EnsureKnowledgeBasesFromDocuments(dim int) error {
+func (s *JSONStore) EnsureKnowledgeBasesFromDocuments(dim int, embedderModel string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	changed := false
@@ -134,10 +134,11 @@ func (s *JSONStore) EnsureKnowledgeBasesFromDocuments(dim int) error {
 			CreatedAt:       createdAt,
 			UpdatedAt:       updatedAt,
 			Dim:             dim,
+			Model:           embedderModel,
 			Analyzer:        "chinese",
 			ChunkSize:       1000,
 			ChunkOverlap:    150,
-			MinChunks:       3,
+			MinChunks:       2,
 		}
 		changed = true
 	}

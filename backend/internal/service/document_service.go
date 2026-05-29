@@ -40,7 +40,6 @@ type DocumentService struct {
 	store       docStore
 	embedder    llm.Embedder
 	vectorStore llm.VectorStore
-	llm         llm.LLM
 	taskQueue   queue.TaskQueue
 	indexWg     sync.WaitGroup
 }
@@ -62,7 +61,6 @@ func NewDocumentService(
 		store:       store,
 		embedder:    llm.NoopEmbedder{},
 		vectorStore: llm.NoopVectorStore{},
-		llm:         llm.NoopLLM{},
 	}
 	for _, opt := range opts {
 		opt(svc)
@@ -70,7 +68,10 @@ func NewDocumentService(
 	if svc.DefaultKnowledgeBaseDim() <= 0 {
 		return nil, errors.New("embedder.dim is required and must be positive")
 	}
-	if err := store.EnsureKnowledgeBasesFromDocuments(svc.DefaultKnowledgeBaseDim()); err != nil {
+	err := store.EnsureKnowledgeBasesFromDocuments(
+		svc.DefaultKnowledgeBaseDim(), svc.DefaultKnowledgeBaseModel(),
+	)
+	if err != nil {
 		return nil, err
 	}
 	for _, kb := range store.ListKnowledgeBases() {
@@ -107,10 +108,6 @@ func WithVectorStore(vs llm.VectorStore) func(*DocumentService) {
 
 func WithTaskQueue(tq queue.TaskQueue) func(*DocumentService) {
 	return func(s *DocumentService) { s.taskQueue = tq }
-}
-
-func WithLLM(l llm.LLM) func(*DocumentService) {
-	return func(s *DocumentService) { s.llm = l }
 }
 
 func (s *DocumentService) VectorStore() llm.VectorStore {
@@ -247,12 +244,15 @@ func (s *DocumentService) CreateKnowledgeBase(
 	chunkSize, chunkOverlap, minChunks int,
 	createdBy string,
 ) (model.KnowledgeBase, error) {
+	var err error
+
 	kbID = strings.TrimSpace(kbID)
 	analyzer = strings.TrimSpace(analyzer)
 	if analyzer == "" {
 		analyzer = "chinese"
 	}
-	if err := validateKnowledgeBaseInput(kbID, analyzer, chunkSize, chunkOverlap, minChunks); err != nil {
+	err = validateKnowledgeBaseInput(kbID, analyzer, chunkSize, chunkOverlap, minChunks)
+	if err != nil {
 		return model.KnowledgeBase{}, err
 	}
 	if _, err := s.store.GetKnowledgeBase(kbID); err == nil {
@@ -268,6 +268,7 @@ func (s *DocumentService) CreateKnowledgeBase(
 		UpdatedAt:       now,
 		CreatedBy:       createdBy,
 		Dim:             s.cfg.GetInt("embedder.dim"),
+		Model:           s.DefaultKnowledgeBaseModel(),
 		Analyzer:        analyzer,
 		ChunkSize:       chunkSize,
 		ChunkOverlap:    chunkOverlap,
@@ -276,11 +277,16 @@ func (s *DocumentService) CreateKnowledgeBase(
 	if kb.Dim <= 0 {
 		return model.KnowledgeBase{}, errors.New("embedder.dim is required and must be positive")
 	}
-	if err := s.vectorStore.CreateKnowledgeBase(context.Background(), collectionConfigFromKnowledgeBase(kb)); err != nil {
+	err = s.vectorStore.CreateKnowledgeBase(
+		context.Background(), collectionConfigFromKnowledgeBase(kb),
+	)
+	if err != nil {
 		return model.KnowledgeBase{}, err
 	}
 	if err := s.store.CreateKnowledgeBase(kb); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "duplicate") || strings.Contains(strings.ToLower(err.Error()), "already exists") {
+		_ = s.vectorStore.DeleteKnowledgeBase(context.Background(), kb.KnowledgeBaseID)
+		if strings.Contains(strings.ToLower(err.Error()), "duplicate") ||
+			strings.Contains(strings.ToLower(err.Error()), "already exists") {
 			return model.KnowledgeBase{}, ErrKnowledgeBaseExists
 		}
 		return model.KnowledgeBase{}, err
@@ -290,6 +296,10 @@ func (s *DocumentService) CreateKnowledgeBase(
 
 func (s *DocumentService) DefaultKnowledgeBaseDim() int {
 	return s.cfg.GetInt("embedder.dim")
+}
+
+func (s *DocumentService) DefaultKnowledgeBaseModel() string {
+	return s.cfg.GetString("embedder.model")
 }
 
 func (s *DocumentService) ListKnowledgeBases() []model.KnowledgeBase {
@@ -358,7 +368,8 @@ func (s *DocumentService) GetChunks(documentID string) ([]model.DocumentChunk, e
 	return s.store.GetChunks(documentID)
 }
 
-func (s *DocumentService) ListChunksPage(documentID string, page, pageSize int) (model.DocumentChunkPage, error) {
+func (s *DocumentService) ListChunksPage(documentID string, page, pageSize int) (
+	model.DocumentChunkPage, error) {
 	return s.store.ListChunksPage(documentID, page, pageSize)
 }
 
@@ -657,7 +668,11 @@ func (s *DocumentService) runIndex(document model.Document) {
 	document.Stage = "index"
 	document.UpdatedAt = now
 	if err := s.store.UpdateDocument(document); err != nil {
-		infra.L.Warn("failed to persist index stage", zap.String("document_id", document.DocumentID), zap.Error(err))
+		infra.L.Warn(
+			"failed to persist index stage",
+			zap.String("document_id", document.DocumentID),
+			zap.Error(err),
+		)
 	}
 
 	records := llm.BuildRecords(document, approved, embeddings)
@@ -672,7 +687,11 @@ func (s *DocumentService) runIndex(document model.Document) {
 	document.FinishedAt = &done
 	document.UpdatedAt = done
 	if err := s.store.UpdateDocument(document); err != nil {
-		infra.L.Warn("failed to persist indexed status", zap.String("document_id", document.DocumentID), zap.Error(err))
+		infra.L.Warn(
+			"failed to persist indexed status",
+			zap.String("document_id", document.DocumentID),
+			zap.Error(err),
+		)
 	}
 
 	infra.L.Info("document indexed",
@@ -722,7 +741,11 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 	document.UpdatedAt = now
 	document.ErrorMessage = ""
 	if err := s.store.UpdateDocument(document); err != nil {
-		infra.L.Warn("failed to persist processing status", zap.String("document_id", document.DocumentID), zap.Error(err))
+		infra.L.Warn(
+			"failed to persist processing status",
+			zap.String("document_id", document.DocumentID),
+			zap.Error(err),
+		)
 	}
 
 	infra.L.Info("processing document",
@@ -773,7 +796,11 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 	document.Stage = "chunk"
 	document.UpdatedAt = time.Now().UTC()
 	if err := s.store.UpdateDocument(document); err != nil {
-		infra.L.Warn("failed to persist chunk stage", zap.String("document_id", document.DocumentID), zap.Error(err))
+		infra.L.Warn(
+			"failed to persist chunk stage",
+			zap.String("document_id", document.DocumentID),
+			zap.Error(err),
+		)
 	}
 
 	chunkVersion := 1
@@ -823,7 +850,11 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 	document.FinishedAt = &done
 	document.UpdatedAt = done
 	if err := s.store.UpdateDocument(document); err != nil {
-		infra.L.Warn("failed to persist processed status", zap.String("document_id", document.DocumentID), zap.Error(err))
+		infra.L.Warn(
+			"failed to persist processed status",
+			zap.String("document_id", document.DocumentID),
+			zap.Error(err),
+		)
 	}
 
 	if !document.HumanReview {
@@ -891,10 +922,9 @@ func datedDocumentPathParts(documentID string, createdAt time.Time) []string {
 	}
 }
 
-// QueryResult bundles semantic search hits with an optional LLM-generated answer.
+// QueryResult bundles semantic search hits.
 type QueryResult struct {
-	Items  []llm.SearchResult
-	Answer string
+	Items []llm.SearchResult
 }
 
 // QueryOptions controls search behaviour for a Query call.
@@ -953,38 +983,7 @@ func (s *DocumentService) Query(
 		return QueryResult{}, fmt.Errorf("vector search: %w", err)
 	}
 
-	answer, err := s.generateAnswer(queryText, hits)
-	if err != nil {
-		infra.L.Warn("llm answer generation failed", zap.Error(err))
-	}
-
-	return QueryResult{Items: hits, Answer: answer}, nil
-}
-
-const ragSystemPrompt = `You are a helpful assistant. Answer the user's question based only on the provided context.
-If the context does not contain enough information to answer the question, say so clearly.
-Be concise and accurate.`
-
-func (s *DocumentService) generateAnswer(query string, hits []llm.SearchResult) (string, error) {
-	if len(hits) == 0 {
-		return "", nil
-	}
-
-	var sb strings.Builder
-	sb.WriteString("Context:\n")
-	for i, h := range hits {
-		sb.WriteString(fmt.Sprintf("---\n[%d] %s", i+1, h.Text))
-		if h.SectionTitle != "" {
-			sb.WriteString(fmt.Sprintf(" (Section: %s)", h.SectionTitle))
-		}
-		if h.PageStart > 0 {
-			sb.WriteString(fmt.Sprintf(" (Page %d)", h.PageStart))
-		}
-		sb.WriteString("\n")
-	}
-	sb.WriteString(fmt.Sprintf("---\n\nQuestion: %s", query))
-
-	return s.llm.Complete(context.Background(), ragSystemPrompt, sb.String())
+	return QueryResult{Items: hits}, nil
 }
 
 func (s *DocumentService) failDocument(document model.Document, stage string, reason error) {
@@ -1004,7 +1003,11 @@ func (s *DocumentService) failDocument(document model.Document, stage string, re
 	document.FinishedAt = &now
 	document.UpdatedAt = now
 	if err := s.store.UpdateDocument(document); err != nil {
-		infra.L.Warn("failed to persist failed status", zap.String("document_id", document.DocumentID), zap.Error(err))
+		infra.L.Warn(
+			"failed to persist failed status",
+			zap.String("document_id", document.DocumentID),
+			zap.Error(err),
+		)
 	}
 }
 

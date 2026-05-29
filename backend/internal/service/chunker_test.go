@@ -82,7 +82,7 @@ func TestBuildChunksSectionMetadata(t *testing.T) {
 }
 
 func TestBuildChunksMinChunksMerge(t *testing.T) {
-	// two blocks that together produce only 2 chunks — should merge to 1
+	// two blocks produce 2 chunks; minChunks=3 forces them to merge into 1
 	blocks := []parser.ParseBlock{
 		{Text: "短文本一。"},
 		{Text: "短文本二。"},
@@ -94,7 +94,7 @@ func TestBuildChunksMinChunksMerge(t *testing.T) {
 		1,
 		DefaultChunkSize,
 		DefaultChunkOverlap,
-		DefaultMinChunks,
+		3,
 		false,
 	)
 	if len(chunks) != 1 {

@@ -172,12 +172,13 @@ func createKnowledgeBaseForServiceTest(t *testing.T, svc *DocumentService, kbID 
 	}
 }
 
-func TestCreateKnowledgeBaseUsesEmbedderDim(t *testing.T) {
+func TestCreateKnowledgeBaseUsesEmbedderConfig(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
 	v := testConfig(tmpDir)
 	v.Set("embedder.dim", 768)
+	v.Set("embedder.model", "text-embedding-v4")
 	store, err := repository.NewJSONStore(
 		v.GetString("app.state_path"),
 		[]repository.AccountSeed{{Username: "admin", Password: "admin123"}},
@@ -205,8 +206,14 @@ func TestCreateKnowledgeBaseUsesEmbedderDim(t *testing.T) {
 	if kb.Dim != 768 {
 		t.Fatalf("expected embedder.dim 768, got %d", kb.Dim)
 	}
+	if kb.Model != "text-embedding-v4" {
+		t.Fatalf("expected embedder.model text-embedding-v4, got %s", kb.Model)
+	}
 	if got := documentService.DefaultKnowledgeBaseDim(); got != 768 {
 		t.Fatalf("expected default dim 768, got %d", got)
+	}
+	if got := documentService.DefaultKnowledgeBaseModel(); got != "text-embedding-v4" {
+		t.Fatalf("expected default model text-embedding-v4, got %s", got)
 	}
 }
 

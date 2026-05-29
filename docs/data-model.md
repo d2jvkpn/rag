@@ -168,6 +168,7 @@
 
 - `knowledge_base_id`：主键，等于 Milvus collection 名
 - `dim`：向量维度，来自创建时的 `embedder.dim`
+- `model`：embedding 模型名，来自创建时的 `embedder.model`
 - `analyzer`：BM25 分词器（`chinese` / `english` / `standard`）
 - `chunk_size` / `chunk_overlap` / `min_chunks`：该知识库的切分参数
 - `created_by` / `created_at` / `updated_at`

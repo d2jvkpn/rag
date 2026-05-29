@@ -58,7 +58,7 @@ func (h *Handler) Routes() http.Handler {
 	}
 
 	router.NoRoute(func(c *gin.Context) {
-		if webDir != "" && h.serveUIAsset(c, basePath, webDir) {
+		if webDir != "" && h.serveUIAsset(c, filepath.Join(basePath, "/ui"), webDir) {
 			return
 		}
 		writeError(c, 404, "route_not_found", "route not found", nil)
@@ -130,13 +130,12 @@ func (h *Handler) Routes() http.Handler {
 	return router
 }
 
-func (h *Handler) serveUIAsset(c *gin.Context, basePath, webDir string) bool {
+func (h *Handler) serveUIAsset(c *gin.Context, uiPath, webDir string) bool {
 	if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
 		return false
 	}
 
 	requestPath := c.Request.URL.Path
-	uiPath := basePath + "/ui"
 	if requestPath == uiPath {
 		c.Redirect(http.StatusMovedPermanently, uiPath+"/")
 		return true
@@ -525,9 +524,10 @@ func (h *Handler) handleIndexDocument(c *gin.Context) {
 func (h *Handler) handleListKnowledgeBases(c *gin.Context) {
 	items := h.documentService.ListKnowledgeBases()
 	writeData(c, 200, map[string]any{
-		"items":       items,
-		"total":       len(items),
-		"default_dim": h.documentService.DefaultKnowledgeBaseDim(),
+		"items":         items,
+		"total":         len(items),
+		"default_dim":   h.documentService.DefaultKnowledgeBaseDim(),
+		"default_model": h.documentService.DefaultKnowledgeBaseModel(),
 	})
 }
 
@@ -575,9 +575,10 @@ func (h *Handler) handleCreateKnowledgeBase(c *gin.Context) {
 func (h *Handler) handleListAvailableKnowledgeBases(c *gin.Context) {
 	items := h.documentService.ListAvailableKnowledgeBases()
 	writeData(c, 200, map[string]any{
-		"items":       items,
-		"total":       len(items),
-		"default_dim": h.documentService.DefaultKnowledgeBaseDim(),
+		"items":         items,
+		"total":         len(items),
+		"default_dim":   h.documentService.DefaultKnowledgeBaseDim(),
+		"default_model": h.documentService.DefaultKnowledgeBaseModel(),
 	})
 }
 
@@ -640,7 +641,6 @@ func (h *Handler) handleQuery(c *gin.Context) {
 	}
 	writeData(c, 200, map[string]any{
 		"items":             items,
-		"answer":            qr.Answer,
 		"query":             body.Query,
 		"knowledge_base_id": body.KnowledgeBaseID,
 	})

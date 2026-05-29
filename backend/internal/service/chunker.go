@@ -17,7 +17,7 @@ import (
 const (
 	DefaultChunkSize    = 1000
 	DefaultChunkOverlap = 150
-	DefaultMinChunks    = 3
+	DefaultMinChunks    = 2
 )
 
 func chunkConfigHash(chunkSize, overlap, minChunks int) string {

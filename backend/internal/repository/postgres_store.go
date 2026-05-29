@@ -184,6 +184,7 @@ func (s *PostgresStore) ListKnowledgeBases() []model.KnowledgeBase {
 		UpdatedAt       time.Time `gorm:"column:updated_at"`
 		CreatedBy       string    `gorm:"column:created_by"`
 		Dim             int       `gorm:"column:dim"`
+		Model           string    `gorm:"column:model"`
 		Analyzer        string    `gorm:"column:analyzer"`
 		ChunkSize       int       `gorm:"column:chunk_size"`
 		ChunkOverlap    int       `gorm:"column:chunk_overlap"`
@@ -207,6 +208,7 @@ func (s *PostgresStore) ListKnowledgeBases() []model.KnowledgeBase {
 			UpdatedAt:       r.UpdatedAt,
 			CreatedBy:       r.CreatedBy,
 			Dim:             r.Dim,
+			Model:           r.Model,
 			Analyzer:        r.Analyzer,
 			ChunkSize:       r.ChunkSize,
 			ChunkOverlap:    r.ChunkOverlap,
@@ -217,21 +219,21 @@ func (s *PostgresStore) ListKnowledgeBases() []model.KnowledgeBase {
 	return items
 }
 
-func (s *PostgresStore) EnsureKnowledgeBasesFromDocuments(dim int) error {
+func (s *PostgresStore) EnsureKnowledgeBasesFromDocuments(dim int, embedderModel string) error {
 	sql := `
 		INSERT INTO knowledge_bases (
 			knowledge_base_id, created_at, updated_at, created_by,
-			dim, analyzer, chunk_size, chunk_overlap, min_chunks
+			dim, model, analyzer, chunk_size, chunk_overlap, min_chunks
 		)
 		SELECT
 			knowledge_base_id, min(created_at), max(updated_at), '',
-			?, 'chinese', 1000, 150, 3
+			?, ?, 'chinese', 1000, 150, 2
 		FROM documents
 		WHERE knowledge_base_id <> ''
 		GROUP BY knowledge_base_id
 		ON CONFLICT (knowledge_base_id) DO NOTHING
 	`
-	return s.db.Exec(sql, dim).Error
+	return s.db.Exec(sql, dim, embedderModel).Error
 }
 
 func (s *PostgresStore) CreateDocument(document model.Document) error {
@@ -507,6 +509,7 @@ type knowledgeBaseRow struct {
 	UpdatedAt       time.Time `gorm:"column:updated_at;autoUpdateTime:false"`
 	CreatedBy       string    `gorm:"column:created_by"`
 	Dim             int       `gorm:"column:dim"`
+	Model           string    `gorm:"column:model"`
 	Analyzer        string    `gorm:"column:analyzer"`
 	ChunkSize       int       `gorm:"column:chunk_size"`
 	ChunkOverlap    int       `gorm:"column:chunk_overlap"`
@@ -670,6 +673,7 @@ func knowledgeBaseFromRow(r knowledgeBaseRow) model.KnowledgeBase {
 		UpdatedAt:       r.UpdatedAt,
 		CreatedBy:       r.CreatedBy,
 		Dim:             r.Dim,
+		Model:           r.Model,
 		Analyzer:        r.Analyzer,
 		ChunkSize:       r.ChunkSize,
 		ChunkOverlap:    r.ChunkOverlap,
@@ -684,6 +688,7 @@ func knowledgeBaseToRow(kb model.KnowledgeBase) knowledgeBaseRow {
 		UpdatedAt:       kb.UpdatedAt,
 		CreatedBy:       kb.CreatedBy,
 		Dim:             kb.Dim,
+		Model:           kb.Model,
 		Analyzer:        kb.Analyzer,
 		ChunkSize:       kb.ChunkSize,
 		ChunkOverlap:    kb.ChunkOverlap,

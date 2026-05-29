@@ -166,6 +166,7 @@ func TestCreateKnowledgeBaseEndpoint(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	v := testConfig(tmpDir)
+	v.Set("embedder.model", "text-embedding-v4")
 	accounts := []repository.AccountSeed{
 		{Username: "admin", Password: "admin123", Permissions: []string{"create_knowledge_bases"}},
 		{Username: "user1", Password: "user123"},
@@ -198,7 +199,7 @@ func TestCreateKnowledgeBaseEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get knowledge base: %v", err)
 	}
-	if kb.Analyzer != "english" || kb.ChunkSize != 800 || kb.ChunkOverlap != 80 || kb.MinChunks != 2 {
+	if kb.Model != "text-embedding-v4" || kb.Analyzer != "english" || kb.ChunkSize != 800 || kb.ChunkOverlap != 80 || kb.MinChunks != 2 {
 		t.Fatalf("unexpected knowledge base: %+v", kb)
 	}
 

@@ -339,21 +339,23 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
       {
         "knowledge_base_id": "public",
         "dim": 1024,
+        "model": "text-embedding-v3",
         "analyzer": "chinese",
         "chunk_size": 512,
         "chunk_overlap": 64,
-        "min_chunks": 3
+        "min_chunks": 2
       }
     ],
     "total": 1,
-    "default_dim": 1024
+    "default_dim": 1024,
+    "default_model": "text-embedding-v3"
   }
 }
 ```
 
 ### `GET /api/knowledge-bases`
 
-- 返回全部已创建知识库及文档数量（从 DB 扫描，不查询 Milvus），同时返回 `default_dim` 供创建弹窗展示
+- 返回全部已创建知识库及文档数量（从 DB 扫描，不查询 Milvus），同时返回 `default_dim` 和 `default_model` 供创建弹窗展示
 
 ### `POST /api/knowledge-bases`
 
@@ -361,7 +363,7 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 - 需要登录且拥有 `create_knowledge_bases` 权限
 - `knowledge_base_id` 仅允许字母、数字、下划线、连字符，最长 63 位
 - `analyzer` 可选 `chinese` / `english` / `standard`
-- `dim` 不由请求指定，使用服务端 `embedder.dim`
+- `dim` 和 `model` 不由请求指定，分别使用服务端 `embedder.dim` 与 `embedder.model`
 
 请求：
 

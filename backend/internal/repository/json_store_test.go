@@ -39,14 +39,14 @@ func TestJSONStoreBackfillsKnowledgeBasesFromDocuments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
-	if err := store.EnsureKnowledgeBasesFromDocuments(768); err != nil {
+	if err := store.EnsureKnowledgeBasesFromDocuments(768, "text-embedding-v4"); err != nil {
 		t.Fatalf("backfill knowledge bases: %v", err)
 	}
 	items := store.ListKnowledgeBases()
 	if len(items) != 1 || items[0].KnowledgeBaseID != "legacy-kb" {
 		t.Fatalf("expected legacy-kb backfill, got %+v", items)
 	}
-	if items[0].Dim != 768 || items[0].ChunkSize != 1000 || items[0].ChunkOverlap != 150 || items[0].MinChunks != 3 {
+	if items[0].Dim != 768 || items[0].Model != "text-embedding-v4" || items[0].ChunkSize != 1000 || items[0].ChunkOverlap != 150 || items[0].MinChunks != 2 {
 		t.Fatalf("unexpected backfilled config: %+v", items[0])
 	}
 }

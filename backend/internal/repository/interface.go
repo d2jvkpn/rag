@@ -13,7 +13,7 @@ type KnowledgeBaseStore interface {
 	CreateKnowledgeBase(kb model.KnowledgeBase) error
 	GetKnowledgeBase(knowledgeBaseID string) (model.KnowledgeBase, error)
 	ListKnowledgeBases() []model.KnowledgeBase
-	EnsureKnowledgeBasesFromDocuments(dim int) error
+	EnsureKnowledgeBasesFromDocuments(dim int, embedderModel string) error
 }
 
 type DocumentStore interface {

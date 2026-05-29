@@ -79,6 +79,14 @@ func (m *Milvus) CreateKnowledgeBase(ctx context.Context, cfg CollectionConfig) 
 	return m.ensureCollection(ctx, cfg)
 }
 
+func (m *Milvus) DeleteKnowledgeBase(ctx context.Context, kbID string) error {
+	err := m.client.DropCollection(ctx, milvusclient.NewDropCollectionOption(kbID))
+	if err != nil && !strings.Contains(strings.ToLower(err.Error()), "not exist") {
+		return fmt.Errorf("milvus drop_collection %q: %w", kbID, err)
+	}
+	return nil
+}
+
 func (m *Milvus) Upsert(ctx context.Context, records []VectorRecord) error {
 	if len(records) == 0 {
 		return nil
