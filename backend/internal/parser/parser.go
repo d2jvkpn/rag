@@ -14,6 +14,7 @@ type ParseBlock struct {
 	Text         string
 	SectionTitle string
 	PageStart    int
+	PageEnd      int
 	Refs         []model.ResourceRef
 }
 

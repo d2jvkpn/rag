@@ -222,7 +222,7 @@ chunk 快照约定：
 - 第一版默认不强制人工审核，审核能力作为可选流程
 - `documents` 初始状态为 `uploaded`
 - 第一版不引入独立的 `document_resources` 表，图片、表格、链接引用先写入 `document_chunks.resource_refs`
-- 解析器会在正文中保留图片占位符：无标签时为 `[Image]`，有标签时为 `[Image: label]`；PPTX 备注以 `Notes: ...` 附加到幻灯片文本
+- 解析器会在正文中保留图片占位符：格式为 `[Image:ref_id]` 或 `[Image:ref_id label]`，`ref_id` 与对应 `resource_refs` 条目精确绑定；若 PPTX `p:cNvPr descr` 属性值为外部 URL，该 URL 存入 `ref.url`/`ref.is_external`，不作为 label；PPTX 备注以 `Notes: ...` 附加到幻灯片文本
 - `docx` / `pptx` 遇到原生表格时，会转成 Markdown 表格文本并写入 `document_chunks.text`；正文段落、标题、列表等其他元素仅提取纯文本，不转 Markdown 格式
 - `docx` 中检测到 `w:pStyle` heading 样式（`Heading1`–N、`1`–`6`、`标题N`）时按标题边界拆分为结构化 blocks，每个 block 带 `SectionTitle`；无标题文档退回单 block
 - `docx` 中相邻且列数一致的连续表会按续表处理并合并；若后一张表首行与前一张表表头一致，会自动去掉重复表头
@@ -235,20 +235,22 @@ chunk 快照约定：
 
 ## Chunk 策略
 
-采用”结构优先 + 长度兜底”的混合切分策略，按 rune 数计算，不依赖 token 计数器。
+采用”结构优先 + 长度兜底”的混合切分策略，使用 `github.com/pkoukk/tiktoken-go` 进行 token 计数，默认编码 `cl100k_base`（可通过 `service.SetTokenEncoding(name)` 在启动时切换）。
 
-**默认参数**（可按 collection 覆盖）：`chunk_size = 1000`、`chunk_overlap = 150`、`min_chunks = 3`
+**默认参数**（可按 collection 覆盖）：`chunk_size = 800 tokens`、`chunk_overlap = 100 tokens`、`min_chunks = 2`
 
 **处理流程**
 
-1. **Parser 输出结构化 blocks**：`Parse()` 返回 `[]ParseBlock{Text, SectionTitle, PageStart}`
+1. **Parser 输出结构化 blocks**：`Parse()` 返回 `[]ParseBlock{Text, SectionTitle, PageStart, PageEnd}`
    - Markdown：按 `#/##/…` 标题边界拆分，每节一个 block
-   - DOCX：检测 `w:pStyle` heading 样式拆分；无标题文档退回单 block
-   - PPTX：每张幻灯片一个 block，`PageStart` = 幻灯片编号
-   - PDF：每页一个 block，`PageStart` = 页码
+   - DOCX：检测 `w:pStyle` heading 样式拆分；无标题文档退回单 block；`PageStart`/`PageEnd` 均为 0
+   - PPTX：每张幻灯片一个 block，`PageStart` = `PageEnd` = 幻灯片编号
+   - PDF：每页一个 block，`PageStart` = `PageEnd` = 页码
 2. **CleanText**：对每个 block 的文本做清洗（折叠多余空行、去除控制字符）
-3. **BuildChunks**：逐 block 调用 `splitByLength`，每个 chunk 继承所在 block 的 `SectionTitle` / `PageStart`
-4. **min_chunks 合并**：全部 block 切分完成后，若总 chunk 数 ≤ `min_chunks`，将整篇合并为单一 chunk
+3. **mergeSmallBlocks**：将相邻小 block 累积合并，直到合并后超过 `chunk_size` 才另起一组；合并后 `PageEnd` 取最后一个 block 的 `PageEnd`；DOCX/Markdown（`PageStart=0`）和 PPTX/PDF 均参与合并
+4. **BuildChunks**：逐 block 调用 `splitByLength`，每个 chunk 继承所在 block 的 `SectionTitle` / `PageStart` / `PageEnd`
+5. **末尾碎片合并**：所有 chunk 生成后，若最后一个 chunk 的文本长度 < `chunk_size / 2`，将其追加到倒数第二个 chunk；`PageEnd` 取两者较大值，`ResourceRefs` 合并
+6. **min_chunks 合并**：全部 block 切分完成后，若总 chunk 数 ≤ `min_chunks`，将整篇合并为单一 chunk；此路径同样保留首 block 的 `PageStart` 和末 block 的 `PageEnd`
 
 **splitByLength 细节**
 
@@ -256,8 +258,8 @@ chunk 快照约定：
 - Markdown 代码块（`` ``` ``/`~~~`）内部的空行受保护，不触发段落切分
 - 单段落超出 `chunk_size` 时：
   - 若为 Markdown 表格：按数据行拆分，每部分保留完整表头
-  - 否则：`splitRunes` 按字符滑动窗口切分，cut 点向前搜索最近句末符（`。.!?！？；;`）对齐
-- `overlapTail` 从 overlap 窗口起始位置向后找第一个句末符，overlap 从该符号之后开始，避免从句子中段携带上文
+  - 否则：`splitByTokens` 按 token 滑动窗口切分
+- `overlapTail` 取末尾 `overlap` 个 token，再向后找第一个句末符（`。.!?！？；;`），overlap 从该符号之后开始，避免从句子中段携带上文
 
 **chunk 内容格式**
 

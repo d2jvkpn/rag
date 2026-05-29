@@ -84,7 +84,7 @@
 
 - 以“单页幻灯片”为天然结构边界
 - 保留页序号，便于 chunk 审核和重排
-- 图片本体先不解析，只保留图注或相邻说明文本；正文占位符使用 `[Image]` 或 `[Image: label]`
+- 图片本体先不解析，只保留图注或相邻说明文本；正文占位符使用 `[Image:ref_id]` 或 `[Image:ref_id label]`，ref_id 与 `resource_refs` 精确绑定；若 `descr` 属性为外部 URL，存入 `ref.url` 而非 label
 
 ### Markdown
 
@@ -100,7 +100,7 @@
 
 - 保留 Markdown 标题结构
 - 代码块作为独立片段处理，避免与正文混切
-- 图片语法先保留 `alt` 文本和链接占位，正文占位符使用 `[Image: alt]`
+- 图片语法先保留 `alt` 文本和链接占位，正文占位符使用 `[Image:ref_id alt]`
 
 第一版解析边界建议：
 
@@ -145,20 +145,18 @@
 - chunk 大小：`400 ~ 800 tokens`
 - chunk overlap：`50 ~ 120 tokens`
 
-如果现在没有稳定 token 计数器，最小实现可以先按字符数近似：
+当前实现使用 `github.com/pkoukk/tiktoken-go`，默认编码 `cl100k_base`。可通过 `service.SetTokenEncoding(name)` 在启动时切换，切换后 `chunkConfigHash` 同步更新，旧快照不再复用。
 
-- `800 ~ 1200` 中文字符
-- overlap `100 ~ 200` 字符
+第一版默认参数：
 
-第一版默认参数建议固定为：
+- `chunk_size = 800` tokens
+- `chunk_overlap = 100` tokens
 
-- `chunk_size = 1000` 字符
-- `chunk_overlap = 150` 字符
+短文档与小 block 合并规则：
 
-短文档规则建议：
-
-- 如果清洗后的正文总长度不超过约 `3000` 中文字符，可默认不拆分，整篇作为一个 chunk
-- 如果总长度不大，但存在明显结构边界，例如独立章节、超长代码块、超大表格，仍可按结构拆分
+- 相邻小 block（合并后仍 ≤ `chunk_size`）由 `mergeSmallBlocks` 自动合并，避免产生大量细碎 chunk；合并后 `PageEnd` 取最后一个 block 的页码
+- 切分完成后，若最后一个 chunk 的文本长度 < `chunk_size / 2`，将其追加到倒数第二个 chunk，消除末尾碎片；合并后 `PageEnd` 取两者较大值，`resource_refs` 合并
+- 全部 chunk 数 ≤ `min_chunks` 时，整篇合并为单一 chunk；合并保留 `PageStart`（首 block）和 `PageEnd`（末 block）
 - 即使不拆分，也保留 `resource_refs`
 
 chunk 落盘和快照复用的具体实现约定，见 [后端架构与技术方案](./backend.md)。

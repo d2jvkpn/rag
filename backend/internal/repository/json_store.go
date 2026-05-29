@@ -136,8 +136,8 @@ func (s *JSONStore) EnsureKnowledgeBasesFromDocuments(dim int, embedderModel str
 			Dim:             dim,
 			Model:           embedderModel,
 			Analyzer:        "chinese",
-			ChunkSize:       1000,
-			ChunkOverlap:    150,
+			ChunkSize:       800,
+			ChunkOverlap:    100,
 			MinChunks:       2,
 		}
 		changed = true

@@ -127,9 +127,17 @@ func TestSplitMarkdownTable(t *testing.T) {
 	}
 	table := header + "\n" + sep + "\n" + strings.Join(rows, "\n")
 
-	parts := splitMarkdownTable(table, 200)
+	// Use a chunkSize that fits prefix+1 row but not the whole table.
+	prefix := header + "\n" + sep
+	rowToks := countTokens(rows[0])
+	if rowToks == 0 {
+		rowToks = 1
+	}
+	chunkSize := countTokens(prefix+"\n"+rows[0]) + rowToks
+
+	parts := splitMarkdownTable(table, chunkSize)
 	if len(parts) < 2 {
-		t.Fatalf("expected table to be split, got %d part(s)", len(parts))
+		t.Fatalf("expected table to be split (chunkSize=%d), got %d part(s)", chunkSize, len(parts))
 	}
 	for i, p := range parts {
 		lines := strings.Split(p, "\n")
@@ -148,6 +156,49 @@ func TestCodeFenceProtection(t *testing.T) {
 	}
 	if !strings.Contains(segs[0], "def foo():\n\n    pass") {
 		t.Errorf("code block was split; got:\n%s", segs[0])
+	}
+}
+
+func TestBuildChunksMergesShortTail(t *testing.T) {
+	// Build two blocks and derive chunkSize from their actual token counts so the
+	// test is encoding-agnostic.
+	//
+	// Preconditions for tail merge to fire:
+	//   b1 <= chunkSize < combined   (block1 fits; mergeSmallBlocks won't combine them)
+	//   b2 < chunkSize/2             (tail is short → triggers merge)
+	//
+	// Use midpoint of b1 and combined as chunkSize to guarantee all three conditions.
+	block1 := strings.Repeat("The quick brown fox jumps over the lazy dog. ", 20)
+	block2 := "Short tail."
+
+	b1 := countTokens(block1)
+	b2 := countTokens(block2)
+	combined := countTokens(block1 + "\n\n" + block2)
+
+	if combined <= b1+1 {
+		t.Skipf("gap too small: b1=%d combined=%d", b1, combined)
+	}
+	chunkSize := (b1 + combined) / 2 // b1 <= chunkSize < combined ✓
+	if b2 >= chunkSize/2 {
+		t.Skipf("block2 (%d tokens) not small enough for tail merge (need < %d)", b2, chunkSize/2)
+	}
+
+	blocks := []parser.ParseBlock{
+		{Text: block1, PageStart: 1, PageEnd: 1},
+		{Text: block2, PageStart: 2, PageEnd: 2},
+	}
+	chunks := BuildChunks("doc-1", "sample.md", blocks, 1, chunkSize, chunkSize/10, 1, false)
+	if len(chunks) != 1 {
+		t.Fatalf("expected tail merged into 1 chunk, got %d", len(chunks))
+	}
+	if !strings.Contains(chunks[0].Text, strings.TrimSpace(block1)) {
+		t.Error("merged chunk missing first block text")
+	}
+	if !strings.Contains(chunks[0].Text, strings.TrimSpace(block2)) {
+		t.Error("merged chunk missing tail block text")
+	}
+	if chunks[0].PageEnd != 2 {
+		t.Errorf("expected PageEnd=2, got %d", chunks[0].PageEnd)
 	}
 }
 

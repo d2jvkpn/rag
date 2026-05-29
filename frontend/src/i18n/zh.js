@@ -159,6 +159,7 @@ export default {
       id: '知识库 ID',
       documents: '文档数',
       dim: '向量维度',
+      model: 'Embedding 模型',
       analyzer: '分词器',
       chunkSize: 'Chunk 大小',
       chunkOverlap: '重叠长度',

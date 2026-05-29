@@ -386,15 +386,16 @@ func TestExtractMarkdownRefs(t *testing.T) {
 	input := "See [Go docs](https://go.dev) and ![logo](img/logo.png) for details."
 	text, refs := extractMarkdownRefs(input)
 
-	if text != "See Go docs and [Image: logo] for details." {
-		t.Fatalf("unexpected text: %q", text)
-	}
 	if len(refs) != 2 {
 		t.Fatalf("expected 2 refs, got %d", len(refs))
 	}
 	// image is extracted first
 	if refs[0].RefType != "image" || refs[0].Label != "logo" || refs[0].URL != "img/logo.png" {
 		t.Errorf("unexpected image ref: %+v", refs[0])
+	}
+	want := "See Go docs and [Image:" + refs[0].RefID + " logo] for details."
+	if text != want {
+		t.Fatalf("unexpected text: %q, want: %q", text, want)
 	}
 	if refs[1].RefType != "link" || refs[1].AnchorText != "Go docs" ||
 		refs[1].URL != "https://go.dev" ||
@@ -501,8 +502,9 @@ func TestParseDocxExtractsImageRef(t *testing.T) {
 		t.Errorf("unexpected ref: %+v", allRefs[0])
 	}
 	// placeholder text should appear in the document text
-	if !strings.Contains(got.Text, "[Image: Figure caption]") {
-		t.Errorf("expected image placeholder in text, got: %q", got.Text)
+	wantPlaceholder := "[Image:" + allRefs[0].RefID + " Figure caption]"
+	if !strings.Contains(got.Text, wantPlaceholder) {
+		t.Errorf("expected image placeholder %q in text, got: %q", wantPlaceholder, got.Text)
 	}
 }
 
@@ -538,8 +540,9 @@ func TestParsePptxExtractsImageRef(t *testing.T) {
 	if ref.RefType != "image" || ref.Label != "Chart overview" {
 		t.Errorf("unexpected ref: %+v", ref)
 	}
-	if !strings.Contains(got.Blocks[0].Text, "[Image: Chart overview]") {
-		t.Errorf("expected image placeholder in block text: %q", got.Blocks[0].Text)
+	wantPlaceholder := "[Image:" + ref.RefID + " Chart overview]"
+	if !strings.Contains(got.Blocks[0].Text, wantPlaceholder) {
+		t.Errorf("expected image placeholder %q in block text: %q", wantPlaceholder, got.Blocks[0].Text)
 	}
 }
 

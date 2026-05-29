@@ -118,7 +118,7 @@ func parsePDF(path, mediaDir string) (ParseResult, error) {
 		if refs == nil {
 			refs = []model.ResourceRef{}
 		}
-		blocks = append(blocks, ParseBlock{Text: t, PageStart: p.Page, Refs: refs})
+		blocks = append(blocks, ParseBlock{Text: t, PageStart: p.Page, PageEnd: p.Page, Refs: refs})
 	}
 	return ParseResult{Text: payload.Text, PageCount: payload.PageCount, Blocks: blocks}, nil
 }

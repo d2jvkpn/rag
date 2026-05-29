@@ -30,7 +30,6 @@ const lastRefreshed = ref('')
 const showUpload = ref(false)
 const uploading = ref(false)
 const kbOptions = ref([])
-const kbConfigs = ref({})
 const tagOptions = ref([])
 const uploadFormRef = ref(null)
 const selectedFile = ref(null)
@@ -49,16 +48,11 @@ const displayPage = computed(() => Math.min(currentPage.value, totalPages.value)
 const pageStart = computed(() => total.value === 0 ? 0 : (displayPage.value - 1) * pageSize + 1)
 const pageEnd = computed(() => total.value === 0 ? 0 : pageStart.value + documents.value.length - 1)
 
-const currentUploadKbConfig = computed(() => kbConfigs.value[uploadForm.value.knowledgeBaseId] || null)
-
 async function loadKbOptions() {
   try {
     const data = await searchService.listAvailableKnowledgeBases()
     const items = data?.items || []
     kbOptions.value = items.map(kb => ({ label: kb.knowledge_base_id, value: kb.knowledge_base_id }))
-    const map = {}
-    for (const kb of items) map[kb.knowledge_base_id] = kb
-    kbConfigs.value = map
   } catch { /* non-critical */ }
 }
 
@@ -119,10 +113,6 @@ watch(() => filters.knowledgeBaseId, async () => {
 
 function onFileChange({ fileList }) {
   selectedFile.value = fileList[0]?.file || null
-}
-
-function handleUploadKbChange() {
-  uploadFormRef.value?.restoreValidation()
 }
 
 async function handleUpload() {
@@ -360,30 +350,12 @@ onMounted(async () => {
           </n-upload>
         </n-form-item>
         <n-form-item :label="t('documents.uploadModal.knowledgeBase')" path="knowledgeBaseId">
-          <div class="upload-modal__kb">
-            <n-select
-              v-model:value="uploadForm.knowledgeBaseId"
-              :options="kbOptions"
-              :placeholder="t('documents.uploadModal.selectKb')"
-              style="width:100%"
-              @update:value="handleUploadKbChange"
-            />
-            <div v-if="currentUploadKbConfig" class="upload-modal__kb-meta">
-              <n-text depth="3" class="upload-modal__kb-meta-item">
-                dim <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.dim }}</n-tag>
-              </n-text>
-              <n-text depth="3" class="upload-modal__kb-meta-item">
-                analyzer <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.analyzer || 'chinese' }}</n-tag>
-              </n-text>
-              <n-text depth="3" class="upload-modal__kb-meta-item">
-                chunk <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.chunk_size }}</n-tag>
-                overlap <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.chunk_overlap }}</n-tag>
-              </n-text>
-              <n-text depth="3" class="upload-modal__kb-meta-item">
-                min chunks <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.min_chunks }}</n-tag>
-              </n-text>
-            </div>
-          </div>
+          <n-select
+            v-model:value="uploadForm.knowledgeBaseId"
+            :options="kbOptions"
+            :placeholder="t('documents.uploadModal.selectKb')"
+            style="width:100%"
+          />
         </n-form-item>
         <n-form-item :label="t('documents.uploadModal.titleLabel')">
           <n-input v-model:value="uploadForm.title" :placeholder="t('documents.uploadModal.titlePlaceholder')" />
@@ -436,27 +408,6 @@ onMounted(async () => {
   font-size: 12px;
 }
 
-.upload-modal__kb {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.upload-modal__kb-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  align-items: center;
-}
-
-.upload-modal__kb-meta-item {
-  font-size: 12px;
-}
-
-.upload-modal__kb-meta-item :deep(.n-tag) {
-  margin-left: 4px;
-}
 
 .upload-modal__review {
   display: flex;

@@ -159,6 +159,7 @@ export default {
       id: 'Knowledge Base ID',
       documents: 'Documents',
       dim: 'Vector Dim',
+      model: 'Embedding Model',
       analyzer: 'Analyzer',
       chunkSize: 'Chunk Size',
       chunkOverlap: 'Overlap',

@@ -227,7 +227,7 @@ func (s *PostgresStore) EnsureKnowledgeBasesFromDocuments(dim int, embedderModel
 		)
 		SELECT
 			knowledge_base_id, min(created_at), max(updated_at), '',
-			?, ?, 'chinese', 1000, 150, 2
+			?, ?, 'chinese', 800, 100, 2
 		FROM documents
 		WHERE knowledge_base_id <> ''
 		GROUP BY knowledge_base_id

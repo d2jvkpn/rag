@@ -35,7 +35,6 @@ type Milvus struct {
 func NewMilvus(addr, db string) (*Milvus, error) {
 	cfg := &milvusclient.ClientConfig{
 		Address: addr,
-		DBName:  db,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -51,6 +50,10 @@ func NewMilvus(addr, db string) (*Milvus, error) {
 		if err := m.ensureDatabase(ctx, db); err != nil {
 			_ = c.Close(ctx)
 			return nil, err
+		}
+		if err := c.UseDatabase(ctx, milvusclient.NewUseDatabaseOption(db)); err != nil {
+			_ = c.Close(ctx)
+			return nil, fmt.Errorf("milvus use database %q: %w", db, err)
 		}
 	}
 	return m, nil

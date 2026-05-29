@@ -20,6 +20,7 @@ const showCreate = ref(false)
 const knowledgeBases = ref([])
 const formRef = ref(null)
 const defaultDim = ref(1536)
+const defaultModel = ref('')
 
 const form = ref(defaultForm())
 const canCreate = computed(() => auth.user?.permissions?.includes('create_knowledge_bases'))
@@ -72,6 +73,12 @@ const columns = computed(() => [
     render: (row) => h(NTag, { size: 'small', bordered: false }, { default: () => row.dim }),
   },
   {
+    title: t('knowledgeBases.fields.model'),
+    key: 'model',
+    width: 180,
+    render: (row) => h(NEllipsis, { style: 'max-width:170px' }, { default: () => row.model || '-' }),
+  },
+  {
     title: t('knowledgeBases.fields.analyzer'),
     key: 'analyzer',
     width: 120,
@@ -103,9 +110,9 @@ function defaultForm() {
   return {
     knowledgeBaseId: '',
     analyzer: 'chinese',
-    chunkSize: 1000,
-    chunkOverlap: 150,
-    minChunks: 3,
+    chunkSize: 800,
+    chunkOverlap: 100,
+    minChunks: 2,
   }
 }
 
@@ -122,6 +129,7 @@ async function loadKnowledgeBases() {
     const data = await knowledgeBasesService.list()
     knowledgeBases.value = data?.items || []
     defaultDim.value = data?.default_dim || knowledgeBases.value.find(kb => kb.dim)?.dim || defaultDim.value
+    defaultModel.value = data?.default_model || knowledgeBases.value.find(kb => kb.model)?.model || defaultModel.value
     lastRefreshed.value = t('knowledgeBases.updatedAt', { time: new Date().toLocaleTimeString() })
   } catch (e) {
     error.value = e.message
@@ -175,7 +183,7 @@ onMounted(loadKnowledgeBases)
         :loading="loading"
         :pagination="false"
         :row-key="(row) => row.knowledge_base_id"
-        :scroll-x="900"
+        :scroll-x="1100"
         size="small"
       />
     </div>
@@ -190,6 +198,9 @@ onMounted(loadKnowledgeBases)
         </n-form-item>
         <n-form-item :label="t('knowledgeBases.fields.dim')">
           <n-input-number :value="defaultDim" disabled style="width:100%" />
+        </n-form-item>
+        <n-form-item :label="t('knowledgeBases.fields.model')">
+          <n-input :value="defaultModel" disabled style="width:100%" />
         </n-form-item>
         <n-form-item :label="t('knowledgeBases.fields.chunkSize')" path="chunkSize">
           <n-input-number v-model:value="form.chunkSize" :min="1" :step="100" style="width:100%" />

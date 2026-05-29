@@ -91,17 +91,18 @@ func extractMarkdownRefs(text string) (string, []model.ResourceRef) {
 	text = mdImageRefRe.ReplaceAllStringFunc(text, func(match string) string {
 		m := mdImageRefRe.FindStringSubmatch(match)
 		alt, url := strings.TrimSpace(m[1]), strings.TrimSpace(m[2])
+		refID := uuid.Must(uuid.NewV7()).String()
 		refs = append(refs, model.ResourceRef{
-			RefID:      uuid.Must(uuid.NewV7()).String(),
+			RefID:      refID,
 			RefType:    "image",
 			Label:      alt,
 			URL:        url,
 			IsExternal: isExternalURL(url),
 		})
 		if alt != "" {
-			return "[Image: " + alt + "]"
+			return "[Image:" + refID + " " + alt + "]"
 		}
-		return "[Image]"
+		return "[Image:" + refID + "]"
 	})
 
 	// links: keep anchor text, strip URL
@@ -168,16 +169,17 @@ func extractDocxParaRefs(
 				storePath = imageRels[bm[1]]
 			}
 		}
+		refID := uuid.Must(uuid.NewV7()).String()
 		refs = append(refs, model.ResourceRef{
-			RefID:       uuid.Must(uuid.NewV7()).String(),
+			RefID:       refID,
 			RefType:     "image",
 			Label:       label,
 			StoragePath: storePath,
 		})
 		if label != "" {
-			placeholders = append(placeholders, "[Image: "+label+"]")
+			placeholders = append(placeholders, "[Image:"+refID+" "+label+"]")
 		} else {
-			placeholders = append(placeholders, "[Image]")
+			placeholders = append(placeholders, "[Image:"+refID+"]")
 		}
 	}
 	imgPlaceholder = strings.Join(placeholders, "\n")
@@ -222,9 +224,14 @@ func extractPptxSlideRefs(
 	}
 
 	for _, picXML := range pptxPicRe.FindAllString(slideXML, -1) {
-		label := ""
+		label, externalURL := "", ""
 		if m := pptxCNvPrDescrRe.FindStringSubmatch(picXML); m != nil {
-			label = htmlUnescape(m[1])
+			v := htmlUnescape(m[1])
+			if isExternalURL(v) {
+				externalURL = v
+			} else {
+				label = v
+			}
 		} else if m := pptxCNvPrNameRe.FindStringSubmatch(picXML); m != nil {
 			label = htmlUnescape(m[1])
 		}
@@ -238,6 +245,8 @@ func extractPptxSlideRefs(
 			RefID:       uuid.Must(uuid.NewV7()).String(),
 			RefType:     "image",
 			Label:       label,
+			URL:         externalURL,
+			IsExternal:  externalURL != "",
 			StoragePath: storePath,
 		})
 	}

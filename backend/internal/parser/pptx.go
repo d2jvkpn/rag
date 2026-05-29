@@ -98,9 +98,9 @@ func parsePptx(path, mediaDir string) (ParseResult, error) {
 		// append image placeholders so the text reflects image presence
 		for _, ref := range refs {
 			if ref.RefType == "image" {
-				placeholder := "[Image]"
+				placeholder := "[Image:" + ref.RefID + "]"
 				if ref.Label != "" {
-					placeholder = "[Image: " + ref.Label + "]"
+					placeholder = "[Image:" + ref.RefID + " " + ref.Label + "]"
 				}
 				section = strings.TrimSpace(section + "\n" + placeholder)
 			}
@@ -121,6 +121,7 @@ func parsePptx(path, mediaDir string) (ParseResult, error) {
 				Text:         label + "\n" + section,
 				SectionTitle: label,
 				PageStart:    slideNum,
+				PageEnd:      slideNum,
 				Refs:         refs,
 			})
 		}
