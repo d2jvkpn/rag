@@ -1,113 +1,3 @@
-<template>
-  <n-layout has-sider style="height:100vh">
-    <n-layout-sider
-      bordered
-      collapse-mode="width"
-      :collapsed-width="56"
-      :width="siderWidth"
-      :collapsed="collapsed"
-      show-trigger
-      @collapse="collapsed = true"
-      @expand="collapsed = false"
-    >
-      <div class="sider-header" :class="{ 'sider-header--collapsed': collapsed }">
-        <span v-if="!collapsed" class="sider-title">{{ appTitle }}</span>
-      </div>
-
-      <n-menu
-        :collapsed="collapsed"
-        :collapsed-width="56"
-        :collapsed-icon-size="20"
-        :options="menuOptions"
-        :value="activeKey"
-        @update:value="(key) => router.push('/' + key)"
-      />
-
-      <n-dropdown :options="userMenuOptions" placement="top-start" trigger="click" @select="handleUserMenuSelect">
-        <div class="sider-footer" :class="{ 'sider-footer--collapsed': collapsed }">
-          <n-icon size="16" style="flex-shrink:0"><person-icon /></n-icon>
-          <span v-if="!collapsed" class="user-name">{{ auth.user?.username }}</span>
-        </div>
-      </n-dropdown>
-
-      <div v-if="!collapsed" class="sider-resize-handle" @mousedown="startResize" />
-    </n-layout-sider>
-
-    <n-modal v-model:show="showPasswordModal" preset="card" :title="t('password.title')" style="width:360px" :mask-closable="false">
-      <n-form ref="pwFormRef" :model="pwForm" :rules="pwRules" label-placement="left" label-width="auto">
-        <n-form-item :label="t('password.oldPassword')" path="oldPassword">
-          <n-input v-model:value="pwForm.oldPassword" type="password" show-password-on="click" :placeholder="t('password.oldPlaceholder')" />
-        </n-form-item>
-        <n-form-item :label="t('password.newPassword')" path="newPassword">
-          <n-input v-model:value="pwForm.newPassword" type="password" show-password-on="click" :placeholder="t('password.newPlaceholder')" />
-        </n-form-item>
-        <n-form-item :label="t('password.confirmPassword')" path="confirmPassword">
-          <n-input v-model:value="pwForm.confirmPassword" type="password" show-password-on="click" :placeholder="t('password.confirmPlaceholder')" />
-        </n-form-item>
-      </n-form>
-      <template #footer>
-        <div style="display:flex;justify-content:flex-end;gap:8px">
-          <n-button @click="cancelPasswordModal">{{ t('password.cancel') }}</n-button>
-          <n-button type="primary" :loading="pwLoading" @click="submitPasswordChange">{{ t('password.submit') }}</n-button>
-        </div>
-      </template>
-    </n-modal>
-
-    <n-modal v-model:show="showTOTPModal" preset="card" :title="t('totp.title')" style="width:400px" :mask-closable="false">
-      <div v-if="totpStep === 'setup'">
-        <div style="text-align:center;margin-bottom:12px">
-          <img v-if="totpQRDataUrl" :src="totpQRDataUrl" alt="QR Code" style="width:200px;height:200px" />
-        </div>
-        <n-text depth="3" style="font-size:12px;display:block;margin-bottom:4px">{{ t('totp.setupHint') }}</n-text>
-        <n-text code style="font-size:13px;word-break:break-all;display:block;margin-bottom:16px">{{ totpSecret }}</n-text>
-        <n-input
-          v-model:value="totpCode"
-          placeholder="000000"
-          maxlength="6"
-          :allow-input="(v) => /^\d*$/.test(v)"
-          style="margin-bottom:8px"
-        />
-        <n-text v-if="totpError" type="error" style="font-size:12px;display:block;margin-bottom:8px">{{ totpError }}</n-text>
-      </div>
-
-      <div v-else-if="totpStep === 'disable'">
-        <n-text depth="3" style="display:block;margin-bottom:16px">{{ t('totp.disableHint') }}</n-text>
-        <n-input
-          v-model:value="totpCode"
-          placeholder="000000"
-          maxlength="6"
-          :allow-input="(v) => /^\d*$/.test(v)"
-          style="margin-bottom:8px"
-        />
-        <n-text v-if="totpError" type="error" style="font-size:12px;display:block;margin-bottom:8px">{{ totpError }}</n-text>
-      </div>
-
-      <template #footer>
-        <div style="display:flex;justify-content:flex-end;gap:8px">
-          <n-button @click="showTOTPModal = false">{{ t('totp.cancel') }}</n-button>
-          <n-button
-            v-if="totpStep === 'setup'"
-            type="primary"
-            :loading="totpLoading"
-            @click="confirmTOTPEnable"
-          >{{ t('totp.confirmEnable') }}</n-button>
-          <n-button
-            v-else-if="totpStep === 'disable'"
-            type="error"
-            :loading="totpLoading"
-            @click="confirmTOTPDisable"
-          >{{ t('totp.confirmDisable') }}</n-button>
-        </div>
-      </template>
-    </n-modal>
-
-    <n-layout>
-      <n-layout-content class="main-content">
-        <router-view />
-      </n-layout-content>
-    </n-layout>
-  </n-layout>
-</template>
 
 <script setup>
 import { computed, h, ref, reactive } from 'vue'
@@ -334,6 +224,118 @@ async function confirmTOTPDisable() {
   }
 }
 </script>
+
+<template>
+  <n-layout has-sider style="height:100vh">
+    <n-layout-sider
+      bordered
+      collapse-mode="width"
+      :collapsed-width="56"
+      :width="siderWidth"
+      :collapsed="collapsed"
+      show-trigger
+      @collapse="collapsed = true"
+      @expand="collapsed = false"
+    >
+      <div class="sider-header" :class="{ 'sider-header--collapsed': collapsed }">
+        <span v-if="!collapsed" class="sider-title">{{ appTitle }}</span>
+      </div>
+
+      <n-menu
+        :collapsed="collapsed"
+        :collapsed-width="56"
+        :collapsed-icon-size="20"
+        :options="menuOptions"
+        :value="activeKey"
+        @update:value="(key) => router.push('/' + key)"
+      />
+
+      <n-dropdown :options="userMenuOptions" placement="top-start" trigger="click" @select="handleUserMenuSelect">
+        <div class="sider-footer" :class="{ 'sider-footer--collapsed': collapsed }">
+          <n-icon size="16" style="flex-shrink:0"><person-icon /></n-icon>
+          <span v-if="!collapsed" class="user-name">{{ auth.user?.username }}</span>
+        </div>
+      </n-dropdown>
+
+      <div v-if="!collapsed" class="sider-resize-handle" @mousedown="startResize" />
+    </n-layout-sider>
+
+    <n-modal v-model:show="showPasswordModal" preset="card" :title="t('password.title')" style="width:360px" :mask-closable="false">
+      <n-form ref="pwFormRef" :model="pwForm" :rules="pwRules" label-placement="left" label-width="auto">
+        <n-form-item :label="t('password.oldPassword')" path="oldPassword">
+          <n-input v-model:value="pwForm.oldPassword" type="password" show-password-on="click" :placeholder="t('password.oldPlaceholder')" />
+        </n-form-item>
+        <n-form-item :label="t('password.newPassword')" path="newPassword">
+          <n-input v-model:value="pwForm.newPassword" type="password" show-password-on="click" :placeholder="t('password.newPlaceholder')" />
+        </n-form-item>
+        <n-form-item :label="t('password.confirmPassword')" path="confirmPassword">
+          <n-input v-model:value="pwForm.confirmPassword" type="password" show-password-on="click" :placeholder="t('password.confirmPlaceholder')" />
+        </n-form-item>
+      </n-form>
+      <template #footer>
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <n-button @click="cancelPasswordModal">{{ t('password.cancel') }}</n-button>
+          <n-button type="primary" :loading="pwLoading" @click="submitPasswordChange">{{ t('password.submit') }}</n-button>
+        </div>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="showTOTPModal" preset="card" :title="t('totp.title')" style="width:400px" :mask-closable="false">
+      <div v-if="totpStep === 'setup'">
+        <div style="text-align:center;margin-bottom:12px">
+          <img v-if="totpQRDataUrl" :src="totpQRDataUrl" alt="QR Code" style="width:200px;height:200px" />
+        </div>
+        <n-text depth="3" style="font-size:12px;display:block;margin-bottom:4px">{{ t('totp.setupHint') }}</n-text>
+        <n-text code style="font-size:13px;word-break:break-all;display:block;margin-bottom:16px">{{ totpSecret }}</n-text>
+        <n-input
+          v-model:value="totpCode"
+          placeholder="000000"
+          maxlength="6"
+          :allow-input="(v) => /^\d*$/.test(v)"
+          style="margin-bottom:8px"
+        />
+        <n-text v-if="totpError" type="error" style="font-size:12px;display:block;margin-bottom:8px">{{ totpError }}</n-text>
+      </div>
+
+      <div v-else-if="totpStep === 'disable'">
+        <n-text depth="3" style="display:block;margin-bottom:16px">{{ t('totp.disableHint') }}</n-text>
+        <n-input
+          v-model:value="totpCode"
+          placeholder="000000"
+          maxlength="6"
+          :allow-input="(v) => /^\d*$/.test(v)"
+          style="margin-bottom:8px"
+        />
+        <n-text v-if="totpError" type="error" style="font-size:12px;display:block;margin-bottom:8px">{{ totpError }}</n-text>
+      </div>
+
+      <template #footer>
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <n-button @click="showTOTPModal = false">{{ t('totp.cancel') }}</n-button>
+          <n-button
+            v-if="totpStep === 'setup'"
+            type="primary"
+            :loading="totpLoading"
+            @click="confirmTOTPEnable"
+          >{{ t('totp.confirmEnable') }}</n-button>
+          <n-button
+            v-else-if="totpStep === 'disable'"
+            type="error"
+            :loading="totpLoading"
+            @click="confirmTOTPDisable"
+          >{{ t('totp.confirmDisable') }}</n-button>
+        </div>
+      </template>
+    </n-modal>
+
+    <n-layout>
+      <n-layout-content class="main-content">
+        <router-view />
+      </n-layout-content>
+    </n-layout>
+  </n-layout>
+</template>
+
 
 <style scoped>
 .sider-header {

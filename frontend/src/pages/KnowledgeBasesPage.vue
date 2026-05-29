@@ -1,57 +1,3 @@
-<template>
-  <div class="page-layout">
-    <div class="page-body">
-      <div class="toolbar">
-        <n-button v-if="canCreate" type="primary" @click="openCreateModal">{{ t('knowledgeBases.create') }}</n-button>
-        <n-button :loading="loading" @click="loadKnowledgeBases">{{ t('knowledgeBases.refresh') }}</n-button>
-        <n-text v-if="lastRefreshed" depth="3" style="font-size:12px">{{ lastRefreshed }}</n-text>
-      </div>
-
-      <n-alert v-if="error" type="error" style="margin-bottom:16px" closable @close="error = ''">
-        {{ error }}
-      </n-alert>
-
-      <n-data-table
-        :columns="columns"
-        :data="knowledgeBases"
-        :loading="loading"
-        :pagination="false"
-        :row-key="(row) => row.knowledge_base_id"
-        :scroll-x="900"
-        size="small"
-      />
-    </div>
-
-    <n-modal v-model:show="showCreate" preset="card" :title="t('knowledgeBases.modal.title')" class="kb-modal" style="width:520px">
-      <n-form ref="formRef" :model="form" :rules="rules" label-placement="left" label-width="128px">
-        <n-form-item :label="t('knowledgeBases.fields.id')" path="knowledgeBaseId">
-          <n-input v-model:value="form.knowledgeBaseId" :placeholder="t('knowledgeBases.modal.idPlaceholder')" />
-        </n-form-item>
-        <n-form-item :label="t('knowledgeBases.fields.analyzer')" path="analyzer">
-          <n-select v-model:value="form.analyzer" :options="analyzerOptions" />
-        </n-form-item>
-        <n-form-item :label="t('knowledgeBases.fields.dim')">
-          <n-input-number :value="defaultDim" disabled style="width:100%" />
-        </n-form-item>
-        <n-form-item :label="t('knowledgeBases.fields.chunkSize')" path="chunkSize">
-          <n-input-number v-model:value="form.chunkSize" :min="1" :step="100" style="width:100%" />
-        </n-form-item>
-        <n-form-item :label="t('knowledgeBases.fields.chunkOverlap')" path="chunkOverlap">
-          <n-input-number v-model:value="form.chunkOverlap" :min="0" :step="25" style="width:100%" />
-        </n-form-item>
-        <n-form-item :label="t('knowledgeBases.fields.minChunks')" path="minChunks">
-          <n-input-number v-model:value="form.minChunks" :min="1" :step="1" style="width:100%" />
-        </n-form-item>
-      </n-form>
-      <template #footer>
-        <div class="kb-modal__footer">
-          <n-button @click="showCreate = false">{{ t('knowledgeBases.modal.cancel') }}</n-button>
-          <n-button type="primary" :loading="creating" @click="handleCreate">{{ t('knowledgeBases.create') }}</n-button>
-        </div>
-      </template>
-    </n-modal>
-  </div>
-</template>
 
 <script setup>
 import { computed, h, onMounted, ref } from 'vue'
@@ -208,6 +154,63 @@ async function handleCreate() {
 
 onMounted(loadKnowledgeBases)
 </script>
+
+
+<template>
+  <div class="page-layout">
+    <div class="page-body">
+      <div class="toolbar">
+        <n-button v-if="canCreate" type="primary" @click="openCreateModal">{{ t('knowledgeBases.create') }}</n-button>
+        <n-button :loading="loading" @click="loadKnowledgeBases">{{ t('knowledgeBases.refresh') }}</n-button>
+        <n-text v-if="lastRefreshed" depth="3" style="font-size:12px">{{ lastRefreshed }}</n-text>
+      </div>
+
+      <n-alert v-if="error" type="error" style="margin-bottom:16px" closable @close="error = ''">
+        {{ error }}
+      </n-alert>
+
+      <n-data-table
+        :columns="columns"
+        :data="knowledgeBases"
+        :loading="loading"
+        :pagination="false"
+        :row-key="(row) => row.knowledge_base_id"
+        :scroll-x="900"
+        size="small"
+      />
+    </div>
+
+    <n-modal v-model:show="showCreate" preset="card" :title="t('knowledgeBases.modal.title')" class="kb-modal" style="width:520px">
+      <n-form ref="formRef" :model="form" :rules="rules" label-placement="left" label-width="128px">
+        <n-form-item :label="t('knowledgeBases.fields.id')" path="knowledgeBaseId">
+          <n-input v-model:value="form.knowledgeBaseId" :placeholder="t('knowledgeBases.modal.idPlaceholder')" />
+        </n-form-item>
+        <n-form-item :label="t('knowledgeBases.fields.analyzer')" path="analyzer">
+          <n-select v-model:value="form.analyzer" :options="analyzerOptions" />
+        </n-form-item>
+        <n-form-item :label="t('knowledgeBases.fields.dim')">
+          <n-input-number :value="defaultDim" disabled style="width:100%" />
+        </n-form-item>
+        <n-form-item :label="t('knowledgeBases.fields.chunkSize')" path="chunkSize">
+          <n-input-number v-model:value="form.chunkSize" :min="1" :step="100" style="width:100%" />
+        </n-form-item>
+        <n-form-item :label="t('knowledgeBases.fields.chunkOverlap')" path="chunkOverlap">
+          <n-input-number v-model:value="form.chunkOverlap" :min="0" :step="25" style="width:100%" />
+        </n-form-item>
+        <n-form-item :label="t('knowledgeBases.fields.minChunks')" path="minChunks">
+          <n-input-number v-model:value="form.minChunks" :min="1" :step="1" style="width:100%" />
+        </n-form-item>
+      </n-form>
+      <template #footer>
+        <div class="kb-modal__footer">
+          <n-button @click="showCreate = false">{{ t('knowledgeBases.modal.cancel') }}</n-button>
+          <n-button type="primary" :loading="creating" @click="handleCreate">{{ t('knowledgeBases.create') }}</n-button>
+        </div>
+      </template>
+    </n-modal>
+  </div>
+</template>
+
 
 <style scoped>
 .kb-modal__footer {

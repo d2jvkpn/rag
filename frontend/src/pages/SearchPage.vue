@@ -1,3 +1,195 @@
+
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { searchService } from '../services/search.js'
+import { documentsService } from '../services/documents.js'
+import { useI18n } from '../i18n/index.js'
+
+const router = useRouter()
+const { t } = useI18n()
+
+const knowledgeBaseId = ref(null)
+const queryText = ref('')
+const topK = ref(5)
+const searchMode = ref('')
+const selectedDocIds = ref([])
+const showAdvanced = ref(false)
+const ef = ref(0)
+const dropRatio = ref(0)
+const rrfK = ref(0)
+
+const loading = ref(false)
+const docsLoading = ref(false)
+const error = ref('')
+const results = ref([])
+const answer = ref('')
+const searched = ref(false)
+const kbOptions = ref([])
+const kbConfigs = ref({})
+const docOptions = ref([])
+
+const currentKbConfig = computed(() => kbConfigs.value[knowledgeBaseId.value] || null)
+
+// Drawer state
+const drawerVisible = ref(false)
+const docSearchText = ref('')
+const tempSelectedDocIds = ref([])
+
+const filteredDocs = computed(() => {
+  const q = docSearchText.value.toLowerCase()
+  if (!q) return docOptions.value
+  return docOptions.value.filter(d => d.label.toLowerCase().includes(q))
+})
+
+const allSelected = computed(() =>
+  filteredDocs.value.length > 0 &&
+  filteredDocs.value.every(d => tempSelectedDocIds.value.includes(d.value))
+)
+
+const someSelected = computed(() =>
+  filteredDocs.value.some(d => tempSelectedDocIds.value.includes(d.value)) && !allSelected.value
+)
+
+const docButtonLabel = computed(() => {
+  if (selectedDocIds.value.length === 0) return t('search.allDocs')
+  return t('search.selectedDocs', { n: selectedDocIds.value.length })
+})
+
+function openDocDrawer() {
+  tempSelectedDocIds.value = [...selectedDocIds.value]
+  docSearchText.value = ''
+  drawerVisible.value = true
+}
+
+function confirmDocSelection() {
+  selectedDocIds.value = [...tempSelectedDocIds.value]
+  drawerVisible.value = false
+}
+
+function resetDocSelection() {
+  tempSelectedDocIds.value = []
+}
+
+function toggleSelectAll() {
+  if (allSelected.value) {
+    const filteredIds = new Set(filteredDocs.value.map(d => d.value))
+    tempSelectedDocIds.value = tempSelectedDocIds.value.filter(id => !filteredIds.has(id))
+  } else {
+    const filteredIds = filteredDocs.value.map(d => d.value)
+    const existing = new Set(tempSelectedDocIds.value)
+    tempSelectedDocIds.value = [
+      ...tempSelectedDocIds.value,
+      ...filteredIds.filter(id => !existing.has(id)),
+    ]
+  }
+}
+
+const topKOptions = [
+  { label: 'Top 5', value: 5 },
+  { label: 'Top 10', value: 10 },
+  { label: 'Top 20', value: 20 },
+]
+
+const efOptions = computed(() => [
+  { label: t('search.efDefault'), value: 0 },
+  { label: '64', value: 64 },
+  { label: '128', value: 128 },
+  { label: '256', value: 256 },
+  { label: '512', value: 512 },
+])
+
+const dropRatioOptions = computed(() => [
+  { label: t('search.dropRatioDefault'), value: 0 },
+  { label: '0.1', value: 0.1 },
+  { label: '0.2', value: 0.2 },
+  { label: '0.3', value: 0.3 },
+  { label: '0.5', value: 0.5 },
+])
+
+const rrfKOptions = computed(() => [
+  { label: t('search.rrfKDefault'), value: 0 },
+  { label: '20', value: 20 },
+  { label: '60', value: 60 },
+  { label: '100', value: 100 },
+])
+
+function formatScore(score) {
+  if (!searchMode.value) return (score * 100).toFixed(1) + '%'
+  return score.toFixed(4)
+}
+
+async function loadKnowledgeBases() {
+  try {
+    const resp = await searchService.listAvailableKnowledgeBases()
+    const items = resp?.items || []
+    kbOptions.value = items.map(kb => ({
+      label: kb.knowledge_base_id,
+      value: kb.knowledge_base_id,
+    }))
+    const map = {}
+    for (const kb of items) map[kb.knowledge_base_id] = kb
+    kbConfigs.value = map
+  } catch { /* non-critical */ }
+}
+
+async function loadDocuments(kbId) {
+  docOptions.value = []
+  selectedDocIds.value = []
+  if (!kbId) return
+  docsLoading.value = true
+  try {
+    const resp = await documentsService.list(kbId)
+    docOptions.value = (resp?.items || [])
+      .filter(d => d.status === 'indexed')
+      .map(d => ({
+        label: d.filename,
+        value: d.document_id,
+        sourceType: d.source_type,
+        uploaderName: d.uploader_name,
+      }))
+  } catch { /* non-critical */ } finally {
+    docsLoading.value = false
+  }
+}
+
+function onKbChange(val) {
+  loadDocuments(val)
+}
+
+async function handleSearch() {
+  if (!queryText.value.trim()) return
+  loading.value = true
+  error.value = ''
+  answer.value = ''
+  searched.value = false
+  try {
+    const resp = await searchService.query(
+      knowledgeBaseId.value || '',
+      queryText.value.trim(),
+      topK.value,
+      {
+        searchMode: searchMode.value,
+        documentIds: selectedDocIds.value,
+        ef: ef.value,
+        dropRatio: dropRatio.value,
+        rrfK: rrfK.value,
+      },
+    )
+    results.value = resp?.items || []
+    answer.value = resp?.answer || ''
+    searched.value = true
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadKnowledgeBases)
+</script>
+
+
 <template>
   <div class="page-layout">
     <div class="page-body" style="padding:16px;max-width:960px">
@@ -241,193 +433,3 @@
     </n-drawer-content>
   </n-drawer>
 </template>
-
-<script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { searchService } from '../services/search.js'
-import { documentsService } from '../services/documents.js'
-import { useI18n } from '../i18n/index.js'
-
-const router = useRouter()
-const { t } = useI18n()
-
-const knowledgeBaseId = ref(null)
-const queryText = ref('')
-const topK = ref(5)
-const searchMode = ref('')
-const selectedDocIds = ref([])
-const showAdvanced = ref(false)
-const ef = ref(0)
-const dropRatio = ref(0)
-const rrfK = ref(0)
-
-const loading = ref(false)
-const docsLoading = ref(false)
-const error = ref('')
-const results = ref([])
-const answer = ref('')
-const searched = ref(false)
-const kbOptions = ref([])
-const kbConfigs = ref({})
-const docOptions = ref([])
-
-const currentKbConfig = computed(() => kbConfigs.value[knowledgeBaseId.value] || null)
-
-// Drawer state
-const drawerVisible = ref(false)
-const docSearchText = ref('')
-const tempSelectedDocIds = ref([])
-
-const filteredDocs = computed(() => {
-  const q = docSearchText.value.toLowerCase()
-  if (!q) return docOptions.value
-  return docOptions.value.filter(d => d.label.toLowerCase().includes(q))
-})
-
-const allSelected = computed(() =>
-  filteredDocs.value.length > 0 &&
-  filteredDocs.value.every(d => tempSelectedDocIds.value.includes(d.value))
-)
-
-const someSelected = computed(() =>
-  filteredDocs.value.some(d => tempSelectedDocIds.value.includes(d.value)) && !allSelected.value
-)
-
-const docButtonLabel = computed(() => {
-  if (selectedDocIds.value.length === 0) return t('search.allDocs')
-  return t('search.selectedDocs', { n: selectedDocIds.value.length })
-})
-
-function openDocDrawer() {
-  tempSelectedDocIds.value = [...selectedDocIds.value]
-  docSearchText.value = ''
-  drawerVisible.value = true
-}
-
-function confirmDocSelection() {
-  selectedDocIds.value = [...tempSelectedDocIds.value]
-  drawerVisible.value = false
-}
-
-function resetDocSelection() {
-  tempSelectedDocIds.value = []
-}
-
-function toggleSelectAll() {
-  if (allSelected.value) {
-    const filteredIds = new Set(filteredDocs.value.map(d => d.value))
-    tempSelectedDocIds.value = tempSelectedDocIds.value.filter(id => !filteredIds.has(id))
-  } else {
-    const filteredIds = filteredDocs.value.map(d => d.value)
-    const existing = new Set(tempSelectedDocIds.value)
-    tempSelectedDocIds.value = [
-      ...tempSelectedDocIds.value,
-      ...filteredIds.filter(id => !existing.has(id)),
-    ]
-  }
-}
-
-const topKOptions = [
-  { label: 'Top 5', value: 5 },
-  { label: 'Top 10', value: 10 },
-  { label: 'Top 20', value: 20 },
-]
-
-const efOptions = computed(() => [
-  { label: t('search.efDefault'), value: 0 },
-  { label: '64', value: 64 },
-  { label: '128', value: 128 },
-  { label: '256', value: 256 },
-  { label: '512', value: 512 },
-])
-
-const dropRatioOptions = computed(() => [
-  { label: t('search.dropRatioDefault'), value: 0 },
-  { label: '0.1', value: 0.1 },
-  { label: '0.2', value: 0.2 },
-  { label: '0.3', value: 0.3 },
-  { label: '0.5', value: 0.5 },
-])
-
-const rrfKOptions = computed(() => [
-  { label: t('search.rrfKDefault'), value: 0 },
-  { label: '20', value: 20 },
-  { label: '60', value: 60 },
-  { label: '100', value: 100 },
-])
-
-function formatScore(score) {
-  if (!searchMode.value) return (score * 100).toFixed(1) + '%'
-  return score.toFixed(4)
-}
-
-async function loadKnowledgeBases() {
-  try {
-    const resp = await searchService.listAvailableKnowledgeBases()
-    const items = resp?.items || []
-    kbOptions.value = items.map(kb => ({
-      label: kb.knowledge_base_id,
-      value: kb.knowledge_base_id,
-    }))
-    const map = {}
-    for (const kb of items) map[kb.knowledge_base_id] = kb
-    kbConfigs.value = map
-  } catch { /* non-critical */ }
-}
-
-async function loadDocuments(kbId) {
-  docOptions.value = []
-  selectedDocIds.value = []
-  if (!kbId) return
-  docsLoading.value = true
-  try {
-    const resp = await documentsService.list(kbId)
-    docOptions.value = (resp?.items || [])
-      .filter(d => d.status === 'indexed')
-      .map(d => ({
-        label: d.filename,
-        value: d.document_id,
-        sourceType: d.source_type,
-        uploaderName: d.uploader_name,
-      }))
-  } catch { /* non-critical */ } finally {
-    docsLoading.value = false
-  }
-}
-
-function onKbChange(val) {
-  loadDocuments(val)
-}
-
-async function handleSearch() {
-  if (!queryText.value.trim()) return
-  loading.value = true
-  error.value = ''
-  answer.value = ''
-  searched.value = false
-  try {
-    const resp = await searchService.query(
-      knowledgeBaseId.value || '',
-      queryText.value.trim(),
-      topK.value,
-      {
-        searchMode: searchMode.value,
-        documentIds: selectedDocIds.value,
-        ef: ef.value,
-        dropRatio: dropRatio.value,
-        rrfK: rrfK.value,
-      },
-    )
-    results.value = resp?.items || []
-    answer.value = resp?.answer || ''
-    searched.value = true
-  } catch (e) {
-    error.value = e.message
-  } finally {
-    loading.value = false
-  }
-}
-
-onMounted(loadKnowledgeBases)
-</script>

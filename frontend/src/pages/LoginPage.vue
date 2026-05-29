@@ -1,49 +1,3 @@
-<template>
-  <div class="login-wrapper">
-    <div class="lang-switcher">
-      <n-dropdown :options="langOptions" trigger="click" @select="setLocale">
-        <n-button text size="small">{{ currentLangLabel }}</n-button>
-      </n-dropdown>
-    </div>
-    <n-card class="login-card" :title="appTitle">
-      <n-form ref="formRef" :model="form" :rules="activeRules" @keydown.enter="submit">
-        <template v-if="!totpStep">
-          <n-form-item :label="t('login.username')" path="username">
-            <n-input v-model:value="form.username" :placeholder="t('login.username')" />
-          </n-form-item>
-          <n-form-item :label="t('login.password')" path="password">
-            <n-input
-              v-model:value="form.password"
-              type="password"
-              :placeholder="t('login.password')"
-              show-password-on="click"
-            />
-          </n-form-item>
-        </template>
-        <template v-else>
-          <n-form-item :label="t('login.totpCode')" path="totpCode">
-            <n-input
-              v-model:value="form.totpCode"
-              :placeholder="t('login.totpPlaceholder')"
-              maxlength="6"
-              :allow-input="(v) => /^\d*$/.test(v)"
-            />
-          </n-form-item>
-          <n-text depth="3" style="font-size:12px;display:block;margin-bottom:12px">
-            {{ t('login.totpHint') }}
-          </n-text>
-        </template>
-        <n-alert v-if="errorMsg" type="error" style="margin-bottom:12px">{{ errorMsg }}</n-alert>
-        <div style="display:flex;gap:8px">
-          <n-button v-if="totpStep" style="flex:1" @click="backToPassword">{{ t('login.back') }}</n-button>
-          <n-button type="primary" :style="totpStep ? 'flex:2' : 'width:100%'" :loading="loading" @click="submit">
-            {{ totpStep ? t('login.verify') : t('login.login') }}
-          </n-button>
-        </div>
-      </n-form>
-    </n-card>
-  </div>
-</template>
 
 <script setup>
 import { ref, computed } from 'vue'
@@ -111,6 +65,55 @@ async function submit() {
   }
 }
 </script>
+
+
+<template>
+  <div class="login-wrapper">
+    <div class="lang-switcher">
+      <n-dropdown :options="langOptions" trigger="click" @select="setLocale">
+        <n-button text size="small">{{ currentLangLabel }}</n-button>
+      </n-dropdown>
+    </div>
+    <n-card class="login-card" :title="appTitle">
+      <n-form ref="formRef" :model="form" :rules="activeRules" @keydown.enter="submit">
+        <template v-if="!totpStep">
+          <n-form-item :label="t('login.username')" path="username">
+            <n-input v-model:value="form.username" :placeholder="t('login.username')" />
+          </n-form-item>
+          <n-form-item :label="t('login.password')" path="password">
+            <n-input
+              v-model:value="form.password"
+              type="password"
+              :placeholder="t('login.password')"
+              show-password-on="click"
+            />
+          </n-form-item>
+        </template>
+        <template v-else>
+          <n-form-item :label="t('login.totpCode')" path="totpCode">
+            <n-input
+              v-model:value="form.totpCode"
+              :placeholder="t('login.totpPlaceholder')"
+              maxlength="6"
+              :allow-input="(v) => /^\d*$/.test(v)"
+            />
+          </n-form-item>
+          <n-text depth="3" style="font-size:12px;display:block;margin-bottom:12px">
+            {{ t('login.totpHint') }}
+          </n-text>
+        </template>
+        <n-alert v-if="errorMsg" type="error" style="margin-bottom:12px">{{ errorMsg }}</n-alert>
+        <div style="display:flex;gap:8px">
+          <n-button v-if="totpStep" style="flex:1" @click="backToPassword">{{ t('login.back') }}</n-button>
+          <n-button type="primary" :style="totpStep ? 'flex:2' : 'width:100%'" :loading="loading" @click="submit">
+            {{ totpStep ? t('login.verify') : t('login.login') }}
+          </n-button>
+        </div>
+      </n-form>
+    </n-card>
+  </div>
+</template>
+
 
 <style scoped>
 .login-wrapper {

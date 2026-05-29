@@ -1,123 +1,3 @@
-<template>
-  <div class="page-layout">
-    <div class="page-body">
-      <!-- Toolbar -->
-      <div class="toolbar">
-        <n-button type="primary" @click="showUpload = true">{{ t('documents.upload') }}</n-button>
-        <n-select
-          v-model:value="filters.knowledgeBaseId"
-          :options="kbOptions"
-          :placeholder="t('documents.kbFilter')"
-          clearable
-          style="width:200px"
-          @update:value="loadFirstPage"
-        />
-        <n-select
-          v-model:value="filters.statusFilter"
-          :placeholder="t('documents.statusFilter')"
-          clearable
-          :options="statusOptions"
-          style="width:160px"
-          @update:value="loadFirstPage"
-        />
-        <n-select
-          v-model:value="filters.tagFilter"
-          :options="tagOptions"
-          :placeholder="t('documents.tagFilter')"
-          clearable
-          filterable
-          style="width:220px"
-          @update:value="loadFirstPage"
-        />
-        <n-button :loading="loading" @click="loadDocuments">{{ t('documents.refresh') }}</n-button>
-        <n-text v-if="lastRefreshed" depth="3" style="font-size:12px">{{ lastRefreshed }}</n-text>
-      </div>
-
-      <!-- Error -->
-      <n-alert v-if="error" type="error" style="margin-bottom:16px" closable @close="error = ''">
-        {{ error }}
-      </n-alert>
-
-      <!-- Table -->
-      <n-data-table
-        :columns="columns"
-        :data="documents"
-        :loading="loading"
-        :pagination="false"
-        :row-key="(row) => row.document_id"
-        :scroll-x="1310"
-        size="small"
-      />
-      <div style="display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-top:12px">
-        <n-text depth="3" style="font-size:12px">
-          {{ t('documents.pageSummary', { page: displayPage, pages: totalPages, start: pageStart, end: pageEnd, total }) }}
-        </n-text>
-        <n-button size="small" :disabled="displayPage <= 1" @click="goToPage(displayPage - 1)">Prev</n-button>
-        <n-button size="small" :disabled="displayPage >= totalPages" @click="goToPage(displayPage + 1)">Next</n-button>
-      </div>
-    </div>
-
-    <!-- Upload Modal -->
-    <n-modal v-model:show="showUpload" preset="card" :title="t('documents.uploadModal.title')" class="upload-modal" style="width:560px" @after-enter="loadKbOptions">
-      <n-form ref="uploadFormRef" :model="uploadForm" :rules="uploadRules">
-        <n-form-item :label="t('documents.uploadModal.file')" path="file">
-          <n-upload
-            :max="1"
-            accept=".pdf,.docx,.pptx,.md,.markdown"
-            :default-upload="false"
-            @change="onFileChange"
-          >
-            <n-upload-dragger class="upload-modal__dragger">
-              <n-icon size="32"><upload-icon /></n-icon>
-              <div class="upload-modal__dragger-copy">
-                <n-text class="upload-modal__dragger-title">{{ t('documents.uploadModal.dragHint') }}</n-text>
-                <n-text depth="3" class="upload-modal__dragger-subtitle">{{ t('documents.uploadModal.supportedFormats') }}</n-text>
-              </div>
-            </n-upload-dragger>
-          </n-upload>
-        </n-form-item>
-        <n-form-item :label="t('documents.uploadModal.knowledgeBase')" path="knowledgeBaseId">
-          <div class="upload-modal__kb">
-            <n-select
-              v-model:value="uploadForm.knowledgeBaseId"
-              :options="kbOptions"
-              :placeholder="t('documents.uploadModal.selectKb')"
-              style="width:100%"
-              @update:value="handleUploadKbChange"
-            />
-            <div v-if="currentUploadKbConfig" class="upload-modal__kb-meta">
-              <n-text depth="3" class="upload-modal__kb-meta-item">
-                dim <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.dim }}</n-tag>
-              </n-text>
-              <n-text depth="3" class="upload-modal__kb-meta-item">
-                analyzer <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.analyzer || 'chinese' }}</n-tag>
-              </n-text>
-              <n-text depth="3" class="upload-modal__kb-meta-item">
-                chunk <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.chunk_size }}</n-tag>
-                overlap <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.chunk_overlap }}</n-tag>
-              </n-text>
-              <n-text depth="3" class="upload-modal__kb-meta-item">
-                min chunks <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.min_chunks }}</n-tag>
-              </n-text>
-            </div>
-          </div>
-        </n-form-item>
-        <n-form-item :label="t('documents.uploadModal.titleLabel')">
-          <n-input v-model:value="uploadForm.title" :placeholder="t('documents.uploadModal.titlePlaceholder')" />
-        </n-form-item>
-        <n-form-item :label="t('documents.uploadModal.tags')">
-          <n-dynamic-tags v-model:value="uploadForm.tags" />
-        </n-form-item>
-      </n-form>
-      <template #footer>
-        <div class="upload-modal__footer">
-          <n-button @click="showUpload = false">{{ t('documents.uploadModal.cancel') }}</n-button>
-          <n-button type="primary" :loading="uploading" @click="handleUpload">{{ t('documents.upload') }}</n-button>
-        </div>
-      </template>
-    </n-modal>
-  </div>
-</template>
 
 <script setup>
 import { ref, computed, h, onMounted, watch } from 'vue'
@@ -400,6 +280,127 @@ onMounted(async () => {
   await loadTagOptions()
 })
 </script>
+
+<template>
+  <div class="page-layout">
+    <div class="page-body">
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <n-button type="primary" @click="showUpload = true">{{ t('documents.upload') }}</n-button>
+        <n-select
+          v-model:value="filters.knowledgeBaseId"
+          :options="kbOptions"
+          :placeholder="t('documents.kbFilter')"
+          clearable
+          style="width:200px"
+          @update:value="loadFirstPage"
+        />
+        <n-select
+          v-model:value="filters.statusFilter"
+          :placeholder="t('documents.statusFilter')"
+          clearable
+          :options="statusOptions"
+          style="width:160px"
+          @update:value="loadFirstPage"
+        />
+        <n-select
+          v-model:value="filters.tagFilter"
+          :options="tagOptions"
+          :placeholder="t('documents.tagFilter')"
+          clearable
+          filterable
+          style="width:220px"
+          @update:value="loadFirstPage"
+        />
+        <n-button :loading="loading" @click="loadDocuments">{{ t('documents.refresh') }}</n-button>
+        <n-text v-if="lastRefreshed" depth="3" style="font-size:12px">{{ lastRefreshed }}</n-text>
+      </div>
+
+      <!-- Error -->
+      <n-alert v-if="error" type="error" style="margin-bottom:16px" closable @close="error = ''">
+        {{ error }}
+      </n-alert>
+
+      <!-- Table -->
+      <n-data-table
+        :columns="columns"
+        :data="documents"
+        :loading="loading"
+        :pagination="false"
+        :row-key="(row) => row.document_id"
+        :scroll-x="1310"
+        size="small"
+      />
+      <div style="display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-top:12px">
+        <n-text depth="3" style="font-size:12px">
+          {{ t('documents.pageSummary', { page: displayPage, pages: totalPages, start: pageStart, end: pageEnd, total }) }}
+        </n-text>
+        <n-button size="small" :disabled="displayPage <= 1" @click="goToPage(displayPage - 1)">Prev</n-button>
+        <n-button size="small" :disabled="displayPage >= totalPages" @click="goToPage(displayPage + 1)">Next</n-button>
+      </div>
+    </div>
+
+    <!-- Upload Modal -->
+    <n-modal v-model:show="showUpload" preset="card" :title="t('documents.uploadModal.title')" class="upload-modal" style="width:560px" @after-enter="loadKbOptions">
+      <n-form ref="uploadFormRef" :model="uploadForm" :rules="uploadRules">
+        <n-form-item :label="t('documents.uploadModal.file')" path="file">
+          <n-upload
+            :max="1"
+            accept=".pdf,.docx,.pptx,.md,.markdown"
+            :default-upload="false"
+            @change="onFileChange"
+          >
+            <n-upload-dragger class="upload-modal__dragger">
+              <n-icon size="32"><upload-icon /></n-icon>
+              <div class="upload-modal__dragger-copy">
+                <n-text class="upload-modal__dragger-title">{{ t('documents.uploadModal.dragHint') }}</n-text>
+                <n-text depth="3" class="upload-modal__dragger-subtitle">{{ t('documents.uploadModal.supportedFormats') }}</n-text>
+              </div>
+            </n-upload-dragger>
+          </n-upload>
+        </n-form-item>
+        <n-form-item :label="t('documents.uploadModal.knowledgeBase')" path="knowledgeBaseId">
+          <div class="upload-modal__kb">
+            <n-select
+              v-model:value="uploadForm.knowledgeBaseId"
+              :options="kbOptions"
+              :placeholder="t('documents.uploadModal.selectKb')"
+              style="width:100%"
+              @update:value="handleUploadKbChange"
+            />
+            <div v-if="currentUploadKbConfig" class="upload-modal__kb-meta">
+              <n-text depth="3" class="upload-modal__kb-meta-item">
+                dim <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.dim }}</n-tag>
+              </n-text>
+              <n-text depth="3" class="upload-modal__kb-meta-item">
+                analyzer <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.analyzer || 'chinese' }}</n-tag>
+              </n-text>
+              <n-text depth="3" class="upload-modal__kb-meta-item">
+                chunk <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.chunk_size }}</n-tag>
+                overlap <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.chunk_overlap }}</n-tag>
+              </n-text>
+              <n-text depth="3" class="upload-modal__kb-meta-item">
+                min chunks <n-tag size="tiny" :bordered="false" round>{{ currentUploadKbConfig.min_chunks }}</n-tag>
+              </n-text>
+            </div>
+          </div>
+        </n-form-item>
+        <n-form-item :label="t('documents.uploadModal.titleLabel')">
+          <n-input v-model:value="uploadForm.title" :placeholder="t('documents.uploadModal.titlePlaceholder')" />
+        </n-form-item>
+        <n-form-item :label="t('documents.uploadModal.tags')">
+          <n-dynamic-tags v-model:value="uploadForm.tags" />
+        </n-form-item>
+      </n-form>
+      <template #footer>
+        <div class="upload-modal__footer">
+          <n-button @click="showUpload = false">{{ t('documents.uploadModal.cancel') }}</n-button>
+          <n-button type="primary" :loading="uploading" @click="handleUpload">{{ t('documents.upload') }}</n-button>
+        </div>
+      </template>
+    </n-modal>
+  </div>
+</template>
 
 <style scoped>
 .upload-modal :deep(.n-card-header) {

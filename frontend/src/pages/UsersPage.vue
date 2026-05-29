@@ -1,33 +1,3 @@
-<template>
-  <div class="page-layout">
-    <div class="page-body">
-      <div class="toolbar">
-        <n-button :loading="loading" @click="loadUsers">{{ t('users.refresh') }}</n-button>
-        <n-text v-if="lastRefreshed" depth="3" style="font-size:12px">{{ lastRefreshed }}</n-text>
-      </div>
-
-      <n-alert v-if="error" type="error" style="margin-bottom:16px" closable @close="error = ''">
-        {{ error }}
-      </n-alert>
-
-      <n-data-table
-        :columns="columns"
-        :data="pagedUsers"
-        :loading="loading"
-        :pagination="false"
-        :row-key="(row) => row.user_id"
-        size="small"
-      />
-      <div style="display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-top:12px">
-        <n-text depth="3" style="font-size:12px">
-          {{ t('users.pageSummary', { page: displayPage, pages: totalPages, start: pageStart, end: pageEnd, total: users.length }) }}
-        </n-text>
-        <n-button size="small" :disabled="displayPage <= 1" @click="currentPage = displayPage - 1">Prev</n-button>
-        <n-button size="small" :disabled="displayPage >= totalPages" @click="currentPage = displayPage + 1">Next</n-button>
-      </div>
-    </div>
-  </div>
-</template>
 
 <script setup>
 import { computed, h, onMounted, ref, watch } from 'vue'
@@ -165,3 +135,34 @@ function handleToggleStatus(user, nextStatus) {
 
 onMounted(loadUsers)
 </script>
+
+<template>
+  <div class="page-layout">
+    <div class="page-body">
+      <div class="toolbar">
+        <n-button :loading="loading" @click="loadUsers">{{ t('users.refresh') }}</n-button>
+        <n-text v-if="lastRefreshed" depth="3" style="font-size:12px">{{ lastRefreshed }}</n-text>
+      </div>
+
+      <n-alert v-if="error" type="error" style="margin-bottom:16px" closable @close="error = ''">
+        {{ error }}
+      </n-alert>
+
+      <n-data-table
+        :columns="columns"
+        :data="pagedUsers"
+        :loading="loading"
+        :pagination="false"
+        :row-key="(row) => row.user_id"
+        size="small"
+      />
+      <div style="display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-top:12px">
+        <n-text depth="3" style="font-size:12px">
+          {{ t('users.pageSummary', { page: displayPage, pages: totalPages, start: pageStart, end: pageEnd, total: users.length }) }}
+        </n-text>
+        <n-button size="small" :disabled="displayPage <= 1" @click="currentPage = displayPage - 1">Prev</n-button>
+        <n-button size="small" :disabled="displayPage >= totalPages" @click="currentPage = displayPage + 1">Next</n-button>
+      </div>
+    </div>
+  </div>
+</template>
