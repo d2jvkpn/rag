@@ -2,37 +2,42 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/milvus-io/milvus/client/v2/column"
 	"github.com/milvus-io/milvus/client/v2/entity"
-	milvidx "github.com/milvus-io/milvus/client/v2/index"
+	milvusindex "github.com/milvus-io/milvus/client/v2/index"
 	"github.com/milvus-io/milvus/client/v2/milvusclient"
 )
 
 var searchOutputFields = []string{
-	"document_id", "chunk_id", "knowledge_base_id",
-	"filename", "source_type", "section_title",
-	"page_start", "page_end", "chunk_index", "text",
+	"document_id",
+	"chunk_id",
+	"knowledge_base_id",
+	"filename",
+	"source_type",
+	"section_title",
+	"page_start",
+	"page_end",
+	"chunk_index",
+	"text",
 }
 
 // Milvus implements VectorStore using the official Milvus gRPC client v2.
 // Requires Milvus 2.5+ for BM25 full-text search support.
 type Milvus struct {
-	client      *milvusclient.Client
-	mu          sync.RWMutex
-	collections map[string]CollectionConfig
+	client *milvusclient.Client
 }
 
-func NewMilvus(addr, db string, cols []CollectionConfig) (*Milvus, error) {
+func NewMilvus(addr, db string) (*Milvus, error) {
 	cfg := &milvusclient.ClientConfig{
 		Address: addr,
 		DBName:  db,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	c, err := milvusclient.New(ctx, cfg)
@@ -40,22 +45,10 @@ func NewMilvus(addr, db string, cols []CollectionConfig) (*Milvus, error) {
 		return nil, fmt.Errorf("milvus connect: %w", err)
 	}
 
-	m := &Milvus{
-		client:      c,
-		collections: make(map[string]CollectionConfig, len(cols)),
-	}
-	for _, col := range cols {
-		m.collections[col.Name] = col
-	}
+	m := &Milvus{client: c}
 
 	if db != "" {
 		if err := m.ensureDatabase(ctx, db); err != nil {
-			_ = c.Close(ctx)
-			return nil, err
-		}
-	}
-	for _, col := range cols {
-		if err := m.ensureCollection(ctx, col); err != nil {
 			_ = c.Close(ctx)
 			return nil, err
 		}
@@ -68,25 +61,22 @@ func (m *Milvus) Close(ctx context.Context) error {
 }
 
 func (m *Milvus) ValidateKnowledgeBase(kbID string) error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if _, ok := m.collections[kbID]; !ok {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	has, err := m.client.HasCollection(ctx, milvusclient.NewHasCollectionOption(kbID))
+	if err != nil {
+		return fmt.Errorf("milvus has_collection %q: %w", kbID, err)
+	}
+	if !has {
 		return fmt.Errorf("knowledge base %q is not configured", kbID)
 	}
+
 	return nil
 }
 
 func (m *Milvus) CreateKnowledgeBase(ctx context.Context, cfg CollectionConfig) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if existing, ok := m.collections[cfg.Name]; ok {
-		cfg = existing
-	}
-	if err := m.ensureCollection(ctx, cfg); err != nil {
-		return err
-	}
-	m.collections[cfg.Name] = cfg
-	return nil
+	return m.ensureCollection(ctx, cfg)
 }
 
 func (m *Milvus) Upsert(ctx context.Context, records []VectorRecord) error {
@@ -97,9 +87,7 @@ func (m *Milvus) Upsert(ctx context.Context, records []VectorRecord) error {
 	if err := m.ValidateKnowledgeBase(collection); err != nil {
 		return err
 	}
-	m.mu.RLock()
-	dim := m.collections[collection].Dim
-	m.mu.RUnlock()
+	dim := len(records[0].Embedding)
 
 	ids := make([]string, len(records))
 	kbIDs := make([]string, len(records))
@@ -193,8 +181,9 @@ func (m *Milvus) Search(ctx context.Context, req SearchRequest) ([]SearchResult,
 		return nil, err
 	}
 	if len(resultSets) == 0 {
-		return nil, nil
+		return []SearchResult{}, nil
 	}
+
 	return parseResults(resultSets[0]), nil
 }
 
@@ -312,8 +301,7 @@ func (m *Milvus) ensureCollection(ctx context.Context, cfg CollectionConfig) err
 				}
 			}
 		}
-		wantAnalyzer := fmt.Sprintf(`{"type":"%s"}`, analyzer)
-		schemaOK := hasSparse && (existingAnalyzer == "" || existingAnalyzer == wantAnalyzer)
+		schemaOK := hasSparse && (existingAnalyzer == "" || analyzerType(existingAnalyzer) == analyzer)
 		if schemaOK {
 			task, err := m.client.LoadCollection(ctx, milvusclient.NewLoadCollectionOption(name))
 			if err != nil {
@@ -378,8 +366,9 @@ func (m *Milvus) ensureCollection(ctx context.Context, cfg CollectionConfig) err
 		return fmt.Errorf("milvus create_collection %q: %w", name, err)
 	}
 
-	denseTask, err := m.client.CreateIndex(ctx, milvusclient.NewCreateIndexOption(name, "embedding",
-		milvidx.NewHNSWIndex(entity.L2, 16, 64)))
+	denseTask, err := m.client.CreateIndex(ctx, milvusclient.NewCreateIndexOption(
+		name, "embedding", milvusindex.NewHNSWIndex(entity.L2, 16, 64),
+	))
 	if err != nil {
 		return fmt.Errorf("milvus create_index embedding %q: %w", name, err)
 	}
@@ -387,8 +376,9 @@ func (m *Milvus) ensureCollection(ctx context.Context, cfg CollectionConfig) err
 		return fmt.Errorf("milvus index embedding await %q: %w", name, err)
 	}
 
-	sparseTask, err := m.client.CreateIndex(ctx, milvusclient.NewCreateIndexOption(name, "sparse",
-		milvidx.NewSparseInvertedIndex(entity.BM25, 0.0)))
+	sparseTask, err := m.client.CreateIndex(ctx, milvusclient.NewCreateIndexOption(
+		name, "sparse", milvusindex.NewSparseInvertedIndex(entity.BM25, 0.0),
+	))
 	if err != nil {
 		return fmt.Errorf("milvus create_index sparse %q: %w", name, err)
 	}
@@ -401,4 +391,18 @@ func (m *Milvus) ensureCollection(ctx context.Context, cfg CollectionConfig) err
 		return fmt.Errorf("milvus load_collection %q: %w", name, err)
 	}
 	return loadTask.Await(ctx)
+}
+
+// analyzerType extracts the "type" field from a Milvus analyzer_params JSON string.
+// Falls back to the raw string when the value is not valid JSON, so a plain type
+// name (e.g. "chinese") also compares correctly.
+func analyzerType(raw string) string {
+	var m map[string]any
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		return raw
+	}
+	if t, ok := m["type"].(string); ok {
+		return t
+	}
+	return raw
 }

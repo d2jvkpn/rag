@@ -49,7 +49,8 @@ func NewPostgresStore(dsn string, accounts []AccountSeed) (*PostgresStore, error
 	}
 
 	db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{
-		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+		DefaultContextTimeout: 10 * time.Second,
+		Logger:                gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	if err != nil {
 		return nil, err

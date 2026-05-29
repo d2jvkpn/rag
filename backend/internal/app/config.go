@@ -2,7 +2,7 @@ package app
 
 import (
 	"log"
-	"path/filepath"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -19,7 +19,7 @@ func LoadConfig(path string) (config *viper.Viper) {
 
 	config.SetDefault("app.data_dir", "data")
 
-	base_path := strings.TrimRight(cfg.GetString("http.base_path"), "/")
+	basePath := strings.TrimRight(config.GetString("http.base_path"), "/")
 	// basePath := filepath.Join(config.GetString("http.base_path"), "/")
 	config.Set("http.base_path", basePath)
 

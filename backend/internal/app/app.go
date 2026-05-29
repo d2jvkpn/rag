@@ -194,7 +194,7 @@ func buildServiceOpts(v *viper.Viper) (opts []func(*service.DocumentService), er
 		db = v.GetString("milvus.db")
 		infra.L.Info("vectorstore: milvus", zap.String("addr", addr), zap.String("db", db))
 
-		if milvus, err = llm.NewMilvus(addr, db, nil); err != nil {
+		if milvus, err = llm.NewMilvus(addr, db); err != nil {
 			return nil, err
 		}
 		opts = append(opts, service.WithVectorStore(milvus))
