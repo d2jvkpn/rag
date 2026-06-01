@@ -13,7 +13,7 @@ import (
 
 	"backend/internal/api"
 	"backend/internal/infra"
-	"backend/internal/llm"
+	"backend/internal/rag"
 	"backend/internal/repository"
 	"backend/internal/service"
 )
@@ -23,7 +23,7 @@ type App struct {
 	DocumentService *service.DocumentService
 	store           repository.Store
 	blacklist       service.TokenBlacklist
-	vectorStore     llm.VectorStore
+	vectorStore     rag.VectorStore
 }
 
 func New(v *viper.Viper) (*App, error) {
@@ -168,7 +168,7 @@ func buildServiceOpts(v *viper.Viper) (opts []func(*service.DocumentService), er
 		embedAPIKey  string
 		addr         string
 		db           string
-		milvus       *llm.Milvus
+		milvus       *rag.Milvus
 	)
 
 	embedBaseURL = v.GetString("embedder.base_url")
@@ -182,7 +182,7 @@ func buildServiceOpts(v *viper.Viper) (opts []func(*service.DocumentService), er
 			zap.Int("batch_size", batchSize),
 		)
 		v := service.WithEmbedder(
-			llm.NewOpenAIEmbedder(embedBaseURL, embedAPIKey, model, batchSize),
+			rag.NewOpenAIEmbedder(embedBaseURL, embedAPIKey, model, batchSize),
 		)
 
 		opts = append(opts, v)
@@ -194,7 +194,7 @@ func buildServiceOpts(v *viper.Viper) (opts []func(*service.DocumentService), er
 		db = v.GetString("milvus.db")
 		infra.L.Info("vectorstore: milvus", zap.String("addr", addr), zap.String("db", db))
 
-		if milvus, err = llm.NewMilvus(addr, db); err != nil {
+		if milvus, err = rag.NewMilvus(addr, db); err != nil {
 			return nil, err
 		}
 		opts = append(opts, service.WithVectorStore(milvus))

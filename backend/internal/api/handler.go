@@ -58,7 +58,7 @@ func (h *Handler) Routes() http.Handler {
 	}
 
 	router.NoRoute(func(c *gin.Context) {
-		if webDir != "" && h.serveUIAsset(c, filepath.Join(basePath, "/ui"), webDir) {
+		if webDir != "" && infra.GinSPA(c, filepath.Join(basePath, "/ui"), webDir) {
 			return
 		}
 		writeError(c, 404, "route_not_found", "route not found", nil)
@@ -128,33 +128,6 @@ func (h *Handler) Routes() http.Handler {
 	apiGroup.GET("/knowledge-bases/available", h.handleListAvailableKnowledgeBases)
 
 	return router
-}
-
-func (h *Handler) serveUIAsset(c *gin.Context, uiPath, webDir string) bool {
-	if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
-		return false
-	}
-
-	requestPath := c.Request.URL.Path
-	if requestPath == uiPath {
-		c.Redirect(http.StatusMovedPermanently, uiPath+"/")
-		return true
-	}
-	if requestPath != uiPath+"/" && !strings.HasPrefix(requestPath, uiPath+"/") {
-		return false
-	}
-
-	relPath := strings.TrimPrefix(requestPath, uiPath+"/")
-	if relPath != "" {
-		assetPath := filepath.Join(webDir, filepath.FromSlash(relPath))
-		if info, err := os.Stat(assetPath); err == nil && !info.IsDir() {
-			c.File(assetPath)
-			return true
-		}
-	}
-
-	c.File(filepath.Join(webDir, "index.html"))
-	return true
 }
 
 func (h *Handler) handleLogin(c *gin.Context) {

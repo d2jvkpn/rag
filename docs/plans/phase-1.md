@@ -75,7 +75,7 @@
 - `rechunk` 已提前落地
 - 第 6 步已抽象为 `TaskQueue`，默认使用进程内 goroutine 队列，配置 `redis.dsn` 后启用 Asynq
 - `PostgresStore` 已完整实现，通过 `database.dsn` 启用
-- embedding、Milvus、LLM 已提供可配置实现；未配置时使用 Noop，不作为第一阶段本地验收阻塞
+- embedding 和 Milvus 已提供可配置实现；未配置时使用 Noop，不作为第一阶段本地验收阻塞
 
 ## 前端落地顺序
 

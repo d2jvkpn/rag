@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"backend/internal/parser"
+	"backend/internal/rag/parser"
 )
 
 func TestBuildChunksShortDocument(t *testing.T) {

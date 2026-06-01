@@ -28,8 +28,8 @@
 
 ### `GET /ui/*filepath`
 
-- 后端运行目录存在 `{app.data_dir}/ui/index.html` 或 `target/ui/index.html` 时启用，用于托管前端 SPA
-- `/ui` 重定向到 `/ui/`，`/ui/*` 优先返回 `{app.data_dir}/ui` 或 `target/ui` 下的真实文件，未命中时 fallback 到 `{app.data_dir}/ui/index.html` 或 `target/ui/index.html`
+- 后端运行目录存在 `target/ui/index.html` 时启用，用于托管前端 SPA
+- `/ui` 重定向到 `/ui/`，`/ui/*` 优先返回 `target/ui` 下的真实文件，未命中时 fallback 到 `target/ui/index.html`
 - `/` 和 `/index.html` 重定向到 `/ui/index.html`
 
 ## 统一响应格式
@@ -407,7 +407,6 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
   "data": {
     "query": "...",
     "knowledge_base_id": "public",
-    "answer": "...",
     "items": [
       {
         "chunk_id": "...",
@@ -427,7 +426,6 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 }
 ```
 
-- `answer`：LLM 基于 chunk 上下文生成的回答，未配置 LLM 时为 `""`
 - `score`：dense 模式为余弦相似度（0~1），bm25/hybrid 模式为原始分值
 - dense/hybrid 模式未配置 `embedder.base_url` + `embedder.api_key` 时返回 500
 

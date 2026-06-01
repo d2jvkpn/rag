@@ -319,10 +319,9 @@ accounts:
 
 | 组件 | 包 | 装配函数 | 激活条件 |
 |---|---|---|---|
-| Embedder | `internal/llm/` | `WithEmbedder()` | `embedder.base_url` + `api_key` 均已配置 |
-| VectorStore | `internal/llm/` | `WithVectorStore()` | `milvus.addr` 已配置 |
+| Embedder | `internal/rag/` | `WithEmbedder()` | `embedder.base_url` + `api_key` 均已配置 |
+| VectorStore | `internal/rag/` | `WithVectorStore()` | `milvus.addr` 已配置 |
 | TaskQueue | `internal/queue/` | `WithTaskQueue()` | `redis.dsn` 已配置（否则用 GoroutineQueue） |
-| LLM | `internal/llm/` | `WithLLM()` | `llm.base_url` + `api_key` 均已配置 |
 
 **Embedder** 实现：Noop（默认）和 OpenAI-compatible（`embedder.base_url` 指向任意兼容端点）。`batch_size` 默认 `10`，DashScope 兼容端点不支持更大批次，不要调大。
 
@@ -330,9 +329,7 @@ accounts:
 
 **TaskQueue** 实现：`GoroutineQueue`（单 worker goroutine，默认）和 `AsynqQueue`（Redis 支持）。选择逻辑封装在 `NewDocumentService` 内部。
 
-**LLM** 实现：Noop（默认，`answer` 返回 `""`）和 OpenAI-compatible。`POST /api/query` 在有 LLM 时用检索结果上下文生成回答。
-
-**Config 补充字段：** `http.base_path`（所有路由的 URL 前缀，默认 `""`，例如 `"/rag"`）。后端运行目录存在 `{app.data_dir}/ui/index.html` 或 `target/ui/index.html` 时自动启用前端 SPA 托管，路径为 `/ui`，并将 `/` 和 `/index.html` 重定向到 `/ui/index.html`；`/static` 仍只服务 `{app.data_dir}/static`。
+**Config 补充字段：** `http.base_path`（所有路由的 URL 前缀，默认 `""`，例如 `"/rag"`）。后端运行目录存在 `target/ui/index.html` 时自动启用前端 SPA 托管，路径为 `/ui`，并将 `/` 和 `/index.html` 重定向到 `/ui/index.html`；`/static` 仍只服务 `{app.data_dir}/static`。
 
 ## 推荐目录结构
 
@@ -392,9 +389,9 @@ backend/
   internal/
     migrations/sql/         # numbered up/down SQL
     api/                     # gin handler、middleware、response
-    app/                     # App 装配（store/embedder/llm/queue/milvus 等）
+    app/                     # App 装配（store/embedder/queue/milvus 等）
     infra/                   # 全局 logger、请求日志中间件
-    llm/                     # Embedder、VectorStore (Milvus)、LLM
+    rag/                     # Embedder、VectorStore (Milvus)
     parser/                  # Markdown/DOCX/PPTX/PDF parser
     model/                   # 领域模型
     queue/                   # TaskQueue（GoroutineQueue / AsynqQueue）
@@ -402,7 +399,7 @@ backend/
     service/                 # AuthService、DocumentService、blacklist、chunker
 ```
 
-> 历史 README/计划里出现过的 `config/`、`uuid/` 包已并入 `app/` / 相关内部包；parser 已迁移为 `internal/parser`。
+> 历史 README/计划里出现过的 `config/`、`uuid/` 包已并入 `app/` / 相关内部包；parser 已迁移为 `internal/rag/parser`。
 
 ## 实现顺序
 

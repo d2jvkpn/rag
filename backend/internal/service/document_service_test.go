@@ -12,8 +12,8 @@ import (
 
 	"github.com/spf13/viper"
 
-	"backend/internal/llm"
 	"backend/internal/model"
+	"backend/internal/rag"
 	"backend/internal/repository"
 )
 
@@ -300,11 +300,11 @@ func (f *memoryFile) String() string {
 }
 
 type trackingVectorStore struct {
-	llm.NoopVectorStore
-	created []llm.CollectionConfig
+	rag.NoopVectorStore
+	created []rag.CollectionConfig
 }
 
-func (s *trackingVectorStore) CreateKnowledgeBase(_ context.Context, cfg llm.CollectionConfig) error {
+func (s *trackingVectorStore) CreateKnowledgeBase(_ context.Context, cfg rag.CollectionConfig) error {
 	s.created = append(s.created, cfg)
 	return nil
 }

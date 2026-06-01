@@ -64,10 +64,9 @@ uploaded
 
 | 组件 | 包 | 装配函数 | 激活条件 |
 |---|---|---|---|
-| Embedder | `internal/llm/` | `WithEmbedder()` | `embedder.base_url` + `api_key` 均已配置 |
-| VectorStore | `internal/llm/` | `WithVectorStore()` | `milvus.addr` 已配置 |
+| Embedder | `internal/rag/` | `WithEmbedder()` | `embedder.base_url` + `api_key` 均已配置 |
+| VectorStore | `internal/rag/` | `WithVectorStore()` | `milvus.addr` 已配置 |
 | TaskQueue | `internal/queue/` | `WithTaskQueue()` | `redis.dsn` 已配置（否则用 GoroutineQueue） |
-| LLM | `internal/llm/` | `WithLLM()` | `llm.base_url` + `api_key` 均已配置 |
 
 **Embedder**：`batch_size` 默认 10，DashScope 兼容端点不支持更大批次，不要调大。
 
@@ -87,7 +86,7 @@ uploaded
 
 `SearchRequest` 调参字段：`EF`（HNSW 搜索精度）、`DropRatio`（BM25 稀疏向量剪枝比例）、`RRFK`（Hybrid RRF k 值）。
 
-dense / hybrid 模式未配置 Embedder 时返回 500；BM25 模式无此限制，可在 Noop Embedder 下使用。`answer` 字段在 LLM 为 Noop 时始终返回 `""`。
+dense / hybrid 模式未配置 Embedder 时返回 500；BM25 模式无此限制，可在 Noop Embedder 下使用。
 
 ## 解析与切分接口
 

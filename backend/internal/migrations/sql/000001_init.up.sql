@@ -18,8 +18,8 @@ CREATE TABLE knowledge_bases (
   dim INTEGER NOT NULL,
   model TEXT NOT NULL,
   analyzer TEXT NOT NULL,
-  chunk_size INTEGER NOT NULL DEFAULT 1000,
-  chunk_overlap INTEGER NOT NULL DEFAULT 150,
+  chunk_size INTEGER NOT NULL DEFAULT 800,
+  chunk_overlap INTEGER NOT NULL DEFAULT 100,
   min_chunks INTEGER NOT NULL DEFAULT 2
 );
 

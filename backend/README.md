@@ -24,9 +24,8 @@ go run ./cmd/server --config examples/local.yaml
 
 监听地址优先级：
 
-- 优先使用 `--addr`
-- 未传时使用配置文件里的 `http.addr`
-- 配置缺省时使用代码默认值 `:3061`
+- 使用 `--addr` 命令行参数
+- 未传时使用代码默认值 `:3061`
 
 默认账号来自配置文件 `accounts[]`。示例配置提供：
 
@@ -45,11 +44,9 @@ go run ./cmd/server --config examples/local.yaml
 - `redis.dsn` 为空时使用内存 token blacklist 和进程内 goroutine 任务队列
 - `embedder.base_url` / `embedder.api_key` 为空时使用 Noop embedder
 - `milvus.addr` 为空时使用 Noop vector store
-- `llm.base_url` / `llm.api_key` 为空时不生成回答
 
 常用配置项：
 
-- `http.addr`
 - `http.base_path`
 - `http.jwt_secret`
 - `http.jwt_token_ttl`
@@ -69,9 +66,6 @@ go run ./cmd/server --config examples/local.yaml
 - `milvus.addr`
 - `milvus.db`
 - `embedder.dim`
-- `llm.base_url`
-- `llm.api_key`
-- `llm.model`
 
 ## PostgreSQL 配置（可选）
 
@@ -108,4 +102,4 @@ redis:
 - 异步任务支持进程内 goroutine 队列和 Asynq，通过 `redis.dsn` 选择
 - `markdown`、`docx`、`pptx` 已实现基础文本提取，其中 `docx/pptx` 原生表格会转成 Markdown 表格文本
 - `pdf` 使用 `pdfplumber` 提取文本并尝试抽取页内表格；扫描版、复杂跨页表或复杂编码 PDF 仍可能失败
-- embedding、Milvus、LLM 都按配置启用；未配置时使用 Noop 实现或不生成回答
+- embedding 和 Milvus 都按配置启用；未配置时使用 Noop 实现

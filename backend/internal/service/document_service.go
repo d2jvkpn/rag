@@ -21,10 +21,10 @@ import (
 	"go.uber.org/zap"
 
 	"backend/internal/infra"
-	"backend/internal/llm"
 	"backend/internal/model"
-	"backend/internal/parser"
 	"backend/internal/queue"
+	"backend/internal/rag"
+	"backend/internal/rag/parser"
 	"backend/internal/repository"
 )
 
@@ -38,8 +38,8 @@ type docStore interface {
 type DocumentService struct {
 	cfg         *viper.Viper
 	store       docStore
-	embedder    llm.Embedder
-	vectorStore llm.VectorStore
+	embedder    rag.Embedder
+	vectorStore rag.VectorStore
 	taskQueue   queue.TaskQueue
 	wg          sync.WaitGroup
 }
@@ -59,8 +59,8 @@ func NewDocumentService(
 	svc := &DocumentService{
 		cfg:         cfg,
 		store:       store,
-		embedder:    llm.NoopEmbedder{},
-		vectorStore: llm.NoopVectorStore{},
+		embedder:    rag.NoopEmbedder{},
+		vectorStore: rag.NoopVectorStore{},
 	}
 	for _, opt := range opts {
 		opt(svc)
@@ -98,11 +98,11 @@ func NewDocumentService(
 	return svc, nil
 }
 
-func WithEmbedder(e llm.Embedder) func(*DocumentService) {
+func WithEmbedder(e rag.Embedder) func(*DocumentService) {
 	return func(s *DocumentService) { s.embedder = e }
 }
 
-func WithVectorStore(vs llm.VectorStore) func(*DocumentService) {
+func WithVectorStore(vs rag.VectorStore) func(*DocumentService) {
 	return func(s *DocumentService) { s.vectorStore = vs }
 }
 
@@ -110,11 +110,11 @@ func WithTaskQueue(tq queue.TaskQueue) func(*DocumentService) {
 	return func(s *DocumentService) { s.taskQueue = tq }
 }
 
-func (s *DocumentService) VectorStore() llm.VectorStore {
+func (s *DocumentService) VectorStore() rag.VectorStore {
 	return s.vectorStore
 }
 
-func (s *DocumentService) collectionCfg(kbID string) llm.CollectionConfig {
+func (s *DocumentService) collectionCfg(kbID string) rag.CollectionConfig {
 	kb, err := s.store.GetKnowledgeBase(kbID)
 	if err != nil {
 		return defaultCollectionConfig(kbID, s.cfg.GetInt("embedder.dim"))
@@ -122,8 +122,8 @@ func (s *DocumentService) collectionCfg(kbID string) llm.CollectionConfig {
 	return collectionConfigFromKnowledgeBase(kb)
 }
 
-func defaultCollectionConfig(kbID string, dim int) llm.CollectionConfig {
-	return llm.CollectionConfig{
+func defaultCollectionConfig(kbID string, dim int) rag.CollectionConfig {
+	return rag.CollectionConfig{
 		Name:         kbID,
 		Dim:          dim,
 		Analyzer:     "chinese",
@@ -133,8 +133,8 @@ func defaultCollectionConfig(kbID string, dim int) llm.CollectionConfig {
 	}
 }
 
-func collectionConfigFromKnowledgeBase(kb model.KnowledgeBase) llm.CollectionConfig {
-	return llm.CollectionConfig{
+func collectionConfigFromKnowledgeBase(kb model.KnowledgeBase) rag.CollectionConfig {
+	return rag.CollectionConfig{
 		Name:         kb.KnowledgeBaseID,
 		Dim:          kb.Dim,
 		Analyzer:     kb.Analyzer,
@@ -675,7 +675,7 @@ func (s *DocumentService) runIndex(document model.Document) {
 		)
 	}
 
-	records := llm.BuildRecords(document, approved, embeddings)
+	records := rag.BuildRecords(document, approved, embeddings)
 	if err := s.vectorStore.Upsert(context.Background(), records); err != nil {
 		s.failDocument(document, "index", err)
 		return
@@ -924,13 +924,13 @@ func datedDocumentPathParts(documentID string, createdAt time.Time) []string {
 
 // QueryResult bundles semantic search hits.
 type QueryResult struct {
-	Items []llm.SearchResult
+	Items []rag.SearchResult
 }
 
 // QueryOptions controls search behaviour for a Query call.
 type QueryOptions struct {
 	DocumentIDs []string       // optional: restrict results to these documents
-	SearchMode  llm.SearchMode // defaults to dense when empty
+	SearchMode  rag.SearchMode // defaults to dense when empty
 	EF          int            // HNSW ef; 0 = server default
 	DropRatio   float64        // BM25 drop_ratio_search; 0 = server default
 	RRFK        int            // RRF k (hybrid only); 0 = default (60)
@@ -954,7 +954,7 @@ func (s *DocumentService) Query(
 		topK = 50
 	}
 
-	req := llm.SearchRequest{
+	req := rag.SearchRequest{
 		KnowledgeBaseID: knowledgeBaseID,
 		Query:           queryText,
 		TopK:            topK,
@@ -965,7 +965,7 @@ func (s *DocumentService) Query(
 		RRFK:            opts.RRFK,
 	}
 
-	if opts.SearchMode != llm.SearchModeBM25 {
+	if opts.SearchMode != rag.SearchModeBM25 {
 		embeddings, err := s.embedder.Embed(context.Background(), []string{queryText})
 		if err != nil {
 			return QueryResult{}, fmt.Errorf("embed query: %w", err)

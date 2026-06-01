@@ -46,7 +46,7 @@ func TestJSONStoreBackfillsKnowledgeBasesFromDocuments(t *testing.T) {
 	if len(items) != 1 || items[0].KnowledgeBaseID != "legacy-kb" {
 		t.Fatalf("expected legacy-kb backfill, got %+v", items)
 	}
-	if items[0].Dim != 768 || items[0].Model != "text-embedding-v4" || items[0].ChunkSize != 1000 || items[0].ChunkOverlap != 150 || items[0].MinChunks != 2 {
+	if items[0].Dim != 768 || items[0].Model != "text-embedding-v4" || items[0].ChunkSize != 800 || items[0].ChunkOverlap != 100 || items[0].MinChunks != 2 {
 		t.Fatalf("unexpected backfilled config: %+v", items[0])
 	}
 }

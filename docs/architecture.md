@@ -206,7 +206,6 @@ Loader 将 snake_case 字段规范化为 camelCase，兼容旧版 camelCase 配�
 
 | 键 | 默认值 | 说明 |
 |---|---|---|
-| `http.addr` | `:3061` | 监听地址，可被 `--addr` 覆盖 |
 | `http.base_path` | `""` | 所有路由的 URL 前缀，如 `"/rag"` |
 | `http.jwt_secret` | — | JWT 签名密钥（必填） |
 | `http.jwt_token_ttl` | `8h` | Token 有效期，支持 `time.ParseDuration` 格式 |
@@ -226,10 +225,6 @@ Loader 将 snake_case 字段规范化为 camelCase，兼容旧版 camelCase 配�
 | `milvus.addr` | — | Milvus gRPC 地址 |
 | `milvus.db` | — | Milvus 数据库名 |
 | `embedder.dim` | — | 必填。Embedding 模型输出维度，UI 新建知识库时写入 collection schema |
-| `llm.base_url` | — | OpenAI-compatible LLM 端点 |
-| `llm.api_key` | — | LLM API Key |
-| `llm.model` | `gpt-4o-mini` | LLM 模型名 |
+未配置 `database.dsn` 时使用 JSONStore；未配置 `redis.dsn` 时使用 GoroutineQueue 和 MemoryBlacklist；`embedder.dim` 必填；未配置 `embedder.base_url` / `embedder.api_key`、`milvus.addr` 时对应外部组件回落 Noop 实现。
 
-未配置 `database.dsn` 时使用 JSONStore；未配置 `redis.dsn` 时使用 GoroutineQueue 和 MemoryBlacklist；`embedder.dim` 必填；未配置 `embedder.base_url` / `embedder.api_key`、`milvus.addr`、`llm.*` 时对应外部组件回落 Noop 实现。
-
-后端运行目录存在 `{app.data_dir}/ui/index.html` 或 `target/ui/index.html` 时自动托管前端 SPA：`/ui` 为前端入口，`/` 和 `/index.html` 重定向到 `/ui/index.html`；`/api`、`/healthz`、`/static` 保持后端路由，其中 `/static` 服务 `{app.data_dir}/static`。
+后端运行目录存在 `target/ui/index.html` 时自动托管前端 SPA：`/ui` 为前端入口，`/` 和 `/index.html` 重定向到 `/ui/index.html`；`/api`、`/healthz`、`/static` 保持后端路由，其中 `/static` 服务 `{app.data_dir}/static`。
