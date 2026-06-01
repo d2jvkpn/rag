@@ -13,4 +13,9 @@ frontend_build:
 	$(MAKE) -C frontend build
 
 build_image:
-	docker build -f deploy/Containerfile --no-cache -t q.local/rag:latest ./
+	docker build -f deploy/Containerfile \
+	  --no-cache \
+	  --build-arg build_region=cn \
+	  --build-arg PUID=1000 \
+	  --build-arg PU=GID=1000 \
+	  -t q.local/rag:latest ./

@@ -1,5 +1,16 @@
-####
-FROM node:24-alpine AS frontend-build
+ARG node_tag=24-alpine
+ARG golang_tag=1-alpine
+ARG python_tag=3.14-alpine
+
+#### Stage 1
+FROM node:${node_tag} AS frontend-build
+
+ARG build_region
+ARG http_proxy
+ARG https_proxy
+ARG no_proxy
+
+ENV http_proxy="$http_proxy" https_proxy="$https_proxy" no_proxy="$no_proxy"
 
 WORKDIR /app
 
@@ -7,7 +18,9 @@ ADD frontend/*.json frontend/*.js frontend/index.html  ./
 COPY frontend/public  ./public
 COPY frontend/src  ./src
 
-RUN npm config set registry https://registry.npmmirror.com
+RUN if [ "$build_region" == "cn" ]; then \
+        npm config set registry https://registry.npmmirror.com; \
+    fi
 
 ENV BASE_PATH=/ui \
     OUT_DIR=target/dist
@@ -15,40 +28,81 @@ ENV BASE_PATH=/ui \
 RUN npm install &> /dev/null && \
     npm run build
 
-####
-FROM golang:1-alpine AS backend-build
+#### Stage 2
+FROM golang:${golang_tag} AS backend-build
+
+ARG build_region
+ARG http_proxy
+ARG https_proxy
+ARG no_proxy
+
+ENV http_proxy="$http_proxy" https_proxy="$https_proxy" no_proxy="$no_proxy"
 
 WORKDIR /app
 ADD backend/go.mod backend/go.sum ./
 COPY backend/cmd ./cmd
 COPY backend/internal ./internal
 
-RUN go env -w GOPROXY=https://goproxy.cn,direct
+RUN if [ "$build_region" == "cn" ]; then \
+        go env -w GOPROXY=https://goproxy.cn,direct; \
+    fi
 
 RUN go mod download && \
     CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o target/server ./cmd/server
 
-####
-FROM alpine:3 AS runtime
+#### Stage 3
+FROM python:${python_tag} AS runtime
+
+ARG build_region
+ARG http_proxy
+ARG https_proxy
+ARG no_proxy
+
+ENV http_proxy="$http_proxy" https_proxy="$https_proxy" no_proxy="$no_proxy"
+
+ARG PUID=1000
+ARG PGID=1000
+
+RUN if [ "$build_region" = "cn" ]; then \
+        echo "==> build_region: $build_region"; \
+        mv /etc/apk/repositories /etc/apk/repositories.bk; \
+        cp /etc/apk/repositories.bk /etc/apk/repositories; \
+        sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories; \
+    fi
+
+RUN apk --no-cache update && \
+    apk --no-cache upgrade && \
+    apk --no-cache add tzdata coreutils ca-certificates
 
 WORKDIR /app
 
-RUN addgroup -g 1000 appuser \
-    && adduser -D -H -u 1000 -G appuser -h /app -s /sbin/nologin appuser \
-    && mkdir -p /app/configs /app/data /app/logs /app/target
+RUN addgroup -g "$PGID" appuser && \
+    adduser -D -H -u "$PUID" -G appuser -h /app -s /sbin/nologin appuser && \
+    mkdir -p /app/configs /app/data /app/logs /app/target
 
 COPY --from=frontend-build /app/target/dist /app/target/ui
 RUN sed -i 's/:3061/:3060/' /app/target/ui/app.json
-
 COPY --from=backend-build /app/target/server /app/target/
+
 COPY backend/examples/local.yaml /app/configs/local.yaml
+COPY backend/scripts /app/scripts
 
-RUN chown -R 1000:1000 /app
+RUN chown -R appuser:appuser /app
 
-USER 1000:1000
-EXPOSE 3060
+USER appuser:appuser
+
+RUN if [ "$build_region" == "cn" ]; then \
+        pip3 config set global.index-url 'https://pypi.tuna.tsinghua.edu.cn/simple'; \
+        pip3 config set install.trusted-host 'pypi.tuna.tsinghua.edu.cn'; \
+    fi
+
+RUN pip3 install --upgrade pip && \
+    pip3 install -r scripts/requirements.txt
 
 ENV FRONEND_CONFIG=/app/target/ui/app.json
+
+EXPOSE 3060
+ENV http_proxy="" https_proxy="" no_proxy=""
 
 VOLUME /app/configs
 VOLUME /app/data

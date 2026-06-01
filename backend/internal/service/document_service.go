@@ -41,7 +41,7 @@ type DocumentService struct {
 	embedder    llm.Embedder
 	vectorStore llm.VectorStore
 	taskQueue   queue.TaskQueue
-	indexWg     sync.WaitGroup
+	wg          sync.WaitGroup
 }
 
 func NewDocumentService(
@@ -146,7 +146,7 @@ func collectionConfigFromKnowledgeBase(kb model.KnowledgeBase) llm.CollectionCon
 
 func (s *DocumentService) Close() {
 	s.taskQueue.Shutdown()
-	s.indexWg.Wait()
+	s.wg.Wait()
 }
 
 func (s *DocumentService) Shutdown(ctx context.Context) error {
@@ -599,9 +599,9 @@ func (s *DocumentService) IndexDocument(documentID string) error {
 		return err
 	}
 
-	s.indexWg.Add(1)
+	s.wg.Add(1)
 	go func() {
-		defer s.indexWg.Done()
+		defer s.wg.Done()
 		s.runIndex(document)
 	}()
 	return nil

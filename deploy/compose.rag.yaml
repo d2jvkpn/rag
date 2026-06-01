@@ -11,10 +11,10 @@ services:
     user: 1000:1000
     volumes:
     - ./configs:/app/configs
+    #- ./configs/app.json:/app/target/ui/app.json
     - ./data/documents:/app/data/documents
     - ./data/static:/app/data/static
     - ./logs:/app/logs
-    #- ./configs/app.json:/app/target/ui/app.json
     environment:
       TZ: Asia/Shanghai
     command: ["target/server", "--release", "--config=configs/local.yaml", "--addr=:3060"]
