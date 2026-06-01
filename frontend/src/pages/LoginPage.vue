@@ -112,7 +112,7 @@ async function submit() {
     </n-card>
     <div class="login-footer">
       <n-a href="https://github.com/d2jvkpn/rag" target="_blank" rel="noopener">
-        {{ t('app.sourceLink') }}
+        github.com/d2jvkpn/rag
       </n-a>
     </div>
   </div>

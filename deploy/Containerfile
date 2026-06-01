@@ -44,7 +44,7 @@ ARG no_proxy
 ARG git_branch=unknown
 ARG git_commit=unknown
 ARG commit_time=unknown
-ARG version_pkg=unknown
+ARG version_pkg=github.com/d2jvkpn/rag/backend/internal/infra
 
 ENV http_proxy="$http_proxy" https_proxy="$https_proxy" no_proxy="$no_proxy"
 

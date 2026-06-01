@@ -41,6 +41,18 @@
 - 前端打包文件输出到 `frontend/target/dist`
 - 前端打包 base 由 `BASE_PATH` 环境变量控制；`make build` 使用 `/ui/`，容器镜像将 `target/dist` 复制到后端运行目录 `target/ui`，后端检测到该目录时提供 `/ui` 路由；`/static` 仍由后端业务静态文件路由提供
 
+### 构建时版本注入
+
+`vite.config.js` 通过 `define` 将三个编译期常量注入到前端代码：
+
+| 常量 | 来源（优先级高→低） |
+|---|---|
+| `__GIT_BRANCH__` | 环境变量 `GIT_BRANCH`，否则执行 `git rev-parse --abbrev-ref HEAD` |
+| `__GIT_COMMIT__` | 环境变量 `GIT_COMMIT`，否则执行 `git rev-parse HEAD` |
+| `__COMMIT_TIME__` | 环境变量 `COMMIT_TIME`，否则执行 `git log -1 --format=%cI` |
+
+容器构建时由顶层 `Makefile` 通过 `--build-arg` 传入，确保镜像中的前端与后端显示一致的版本信息。本地 `npm run dev` 不设置环境变量时，vite 自动执行 git 命令获取当前值。
+
 ## 前端分层建议
 
 前端代码建议按职责拆成 5 层：

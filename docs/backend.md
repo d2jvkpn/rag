@@ -122,6 +122,31 @@
 
 当前第一阶段脚手架里，请求校验暂时由 handler 手工完成；后续切到正式 DTO 和 `validator/v10` 时，保持对外错误格式不变。
 
+## 版本注入约定
+
+后端在 `internal/infra/version.go` 声明三个包级变量，默认值为 `"unknown"`：
+
+```go
+var (
+    GitBranch  = "unknown"
+    GitCommit  = "unknown"
+    CommitTime = "unknown"
+)
+```
+
+构建时通过 `-ldflags` 注入：
+
+```makefile
+ldflags := -X '$(version_pkg).GitBranch=$(git_branch)' \
+           -X '$(version_pkg).GitCommit=$(git_commit)'  \
+           -X '$(version_pkg).CommitTime=$(commit_time)'
+```
+
+- `backend/Makefile` 的 `build` 和 `run` 目标均通过 `-ldflags` 注入版本字段
+- 直接使用 `go run ./cmd/server`（不带 `-ldflags`）时变量保持 `"unknown"`
+- `GET /version` 接口直接读取这三个变量返回，无需登录
+- 服务启动日志也会输出这三个字段
+
 ## 日志约定
 
 后端日志使用：

@@ -14,5 +14,4 @@ build:
 	go build -ldflags "$(ldflags)" -o target/server ./cmd/server
 
 run:
-	make build
-	./target/server  --config=configs/local.yaml --addr=:3061
+	go run -ldflags "$(ldflags)" ./cmd/server/ --config=configs/local.yaml --addr=:3061

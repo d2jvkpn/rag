@@ -32,6 +32,20 @@
 - `/ui` 重定向到 `/ui/`，`/ui/*` 优先返回 `target/ui` 下的真实文件，未命中时 fallback 到 `target/ui/index.html`
 - `/` 和 `/index.html` 重定向到 `/ui/index.html`
 
+### `GET /version`
+
+- 版本信息接口，不需要登录
+- 响应字段由构建时 ldflags（后端）和 vite `define`（前端）注入，开发模式下均为 `"unknown"`
+- 响应：
+
+```json
+{
+  "git_branch": "main",
+  "git_commit": "a1b2c3d4...",
+  "commit_time": "2026-05-30T10:00:00+08:00"
+}
+```
+
 ## 统一响应格式
 
 成功返回统一使用：
