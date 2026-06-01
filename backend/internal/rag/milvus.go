@@ -152,8 +152,10 @@ func (m *Milvus) DeleteByDocument(ctx context.Context, knowledgeBaseID, document
 	if err := m.ValidateKnowledgeBase(knowledgeBaseID); err != nil {
 		return err
 	}
-	_, err := m.client.Delete(ctx, milvusclient.NewDeleteOption(knowledgeBaseID).
-		WithExpr(fmt.Sprintf(`document_id == "%s"`, documentID)))
+	_, err := m.client.Delete(ctx,
+		milvusclient.NewDeleteOption(knowledgeBaseID).
+		WithExpr(fmt.Sprintf(`document_id == "%s"`, escapeFilterString(documentID))),
+	)
 	return err
 }
 
@@ -161,18 +163,24 @@ func (m *Milvus) Search(ctx context.Context, req SearchRequest) ([]SearchResult,
 	if err := m.ValidateKnowledgeBase(req.KnowledgeBaseID); err != nil {
 		return nil, err
 	}
-	filter := buildDocFilter(req.DocumentIDs)
+	filter, filterParams := buildDocFilter(req.DocumentIDs)
 
 	if req.Mode == SearchModeBM25 {
-		return m.searchBM25(ctx, req.KnowledgeBaseID, req.Query, req.TopK, req.DropRatio, filter)
+		return m.searchBM25(
+			ctx, req.KnowledgeBaseID, req.Query, req.TopK, req.DropRatio,
+			filter, filterParams,
+		)
 	}
 	if req.Mode != SearchModeHybrid {
-		return m.searchDense(ctx, req.KnowledgeBaseID, req.Embedding, req.TopK, req.EF, filter)
+		return m.searchDense(
+			ctx, req.KnowledgeBaseID, req.Embedding, req.TopK, req.EF,
+			filter, filterParams,
+		)
 	}
 
 	annReqs := []*milvusclient.AnnRequest{
-		denseAnnReq(req.Embedding, req.TopK, req.EF, filter),
-		bm25AnnReq(req.Query, req.TopK, req.DropRatio, filter),
+		denseAnnReq(req.Embedding, req.TopK, req.EF, filter, filterParams),
+		bm25AnnReq(req.Query, req.TopK, req.DropRatio, filter, filterParams),
 	}
 	opt := milvusclient.NewHybridSearchOption(req.KnowledgeBaseID, req.TopK, annReqs...).
 		WithOutputFields(searchOutputFields...)
@@ -193,7 +201,8 @@ func (m *Milvus) Search(ctx context.Context, req SearchRequest) ([]SearchResult,
 }
 
 func (m *Milvus) searchDense(
-	ctx context.Context, collection string, embedding []float32, topK, ef int, filter string,
+	ctx context.Context, collection string, embedding []float32, topK, ef int,
+	filter string, filterParams map[string]any,
 ) ([]SearchResult, error) {
 	opt := milvusclient.NewSearchOption(
 		collection, topK, []entity.Vector{entity.FloatVector(embedding)},
@@ -206,6 +215,9 @@ func (m *Milvus) searchDense(
 	}
 	if filter != "" {
 		opt = opt.WithFilter(filter)
+		for k, v := range filterParams {
+			opt = opt.WithTemplateParam(k, v)
+		}
 	}
 	resultSets, err := m.client.Search(ctx, opt)
 	if err != nil {
@@ -215,7 +227,8 @@ func (m *Milvus) searchDense(
 }
 
 func (m *Milvus) searchBM25(
-	ctx context.Context, collection, query string, topK int, dropRatio float64, filter string,
+	ctx context.Context, collection, query string, topK int, dropRatio float64,
+	filter string, filterParams map[string]any,
 ) ([]SearchResult, error) {
 	opt := milvusclient.NewSearchOption(collection, topK, []entity.Vector{entity.Text(query)}).
 		WithANNSField("sparse").
@@ -225,6 +238,9 @@ func (m *Milvus) searchBM25(
 	}
 	if filter != "" {
 		opt = opt.WithFilter(filter)
+		for k, v := range filterParams {
+			opt = opt.WithTemplateParam(k, v)
+		}
 	}
 	resultSets, err := m.client.Search(ctx, opt)
 	if err != nil {
@@ -240,7 +256,9 @@ func firstResultSet(resultSets []milvusclient.ResultSet) []SearchResult {
 	return parseResults(resultSets[0])
 }
 
-func denseAnnReq(embedding []float32, topK, ef int, filter string) *milvusclient.AnnRequest {
+func denseAnnReq(
+	embedding []float32, topK, ef int, filter string, filterParams map[string]any,
+) *milvusclient.AnnRequest {
 	r := milvusclient.NewAnnRequest("embedding", topK, entity.FloatVector(embedding)).
 		WithSearchParam("metric_type", string(entity.COSINE))
 	if ef > 0 {
@@ -248,33 +266,52 @@ func denseAnnReq(embedding []float32, topK, ef int, filter string) *milvusclient
 	}
 	if filter != "" {
 		r = r.WithFilter(filter)
+		for k, v := range filterParams {
+			r = r.WithTemplateParam(k, v)
+		}
 	}
 	return r
 }
 
-func bm25AnnReq(query string, topK int, dropRatio float64, filter string) *milvusclient.AnnRequest {
+func bm25AnnReq(
+	query string, topK int, dropRatio float64, filter string, filterParams map[string]any,
+) *milvusclient.AnnRequest {
 	r := milvusclient.NewAnnRequest("sparse", topK, entity.Text(query))
 	if dropRatio > 0 {
 		r = r.WithSearchParam("drop_ratio_search", fmt.Sprintf("%g", dropRatio))
 	}
 	if filter != "" {
 		r = r.WithFilter(filter)
+		for k, v := range filterParams {
+			r = r.WithTemplateParam(k, v)
+		}
 	}
 	return r
 }
 
-func buildDocFilter(documentIDs []string) string {
+// buildDocFilter returns a template expression and its parameter map for use
+// with WithFilter + WithTemplateParam, avoiding string interpolation entirely.
+func buildDocFilter(documentIDs []string) (string, map[string]any) {
 	if len(documentIDs) == 0 {
-		return ""
+		return "", nil
 	}
 	if len(documentIDs) == 1 {
-		return fmt.Sprintf(`document_id == "%s"`, documentIDs[0])
+		return "document_id == {doc_id}", map[string]any{"doc_id": documentIDs[0]}
 	}
-	quoted := make([]string, len(documentIDs))
+	ids := make([]any, len(documentIDs))
 	for i, id := range documentIDs {
-		quoted[i] = fmt.Sprintf(`"%s"`, id)
+		ids[i] = id
 	}
-	return fmt.Sprintf("document_id in [%s]", strings.Join(quoted, ", "))
+	return "document_id in {doc_ids}", map[string]any{"doc_ids": ids}
+}
+
+// escapeFilterString escapes backslashes and double-quotes in a string value
+// so it is safe to embed inside a Milvus filter expression string literal.
+// Used only for deleteOption which does not support WithTemplateParam.
+func escapeFilterString(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return s
 }
 
 func parseResults(rs milvusclient.ResultSet) []SearchResult {
