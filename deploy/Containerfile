@@ -10,6 +10,10 @@ ARG http_proxy
 ARG https_proxy
 ARG no_proxy
 
+ARG git_branch=unknown
+ARG git_commit=unknown
+ARG commit_time=unknown
+
 ENV http_proxy="$http_proxy" https_proxy="$https_proxy" no_proxy="$no_proxy"
 
 WORKDIR /app
@@ -23,7 +27,9 @@ RUN if [ "$build_region" == "cn" ]; then \
     fi
 
 ENV BASE_PATH=/ui \
-    OUT_DIR=target/dist
+    GIT_BRANCH="$git_branch" \
+    GIT_COMMIT="$git_commit" \
+    COMMIT_TIME="$commit_time"
 
 RUN npm install &> /dev/null && \
     npm run build
@@ -35,6 +41,10 @@ ARG build_region
 ARG http_proxy
 ARG https_proxy
 ARG no_proxy
+ARG git_branch=unknown
+ARG git_commit=unknown
+ARG commit_time=unknown
+ARG version_pkg=unknown
 
 ENV http_proxy="$http_proxy" https_proxy="$https_proxy" no_proxy="$no_proxy"
 
@@ -48,7 +58,9 @@ RUN if [ "$build_region" == "cn" ]; then \
     fi
 
 RUN go mod download && \
-    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o target/server ./cmd/server
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags \
+        "-s -w -X '${version_pkg}.GitBranch=${git_branch}' -X '${version_pkg}.GitCommit=${git_commit}' -X '${version_pkg}.CommitTime=${commit_time}'" \
+        -o target/server ./cmd/server
 
 #### Stage 3
 FROM python:${python_tag} AS runtime

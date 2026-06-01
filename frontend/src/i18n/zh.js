@@ -1,6 +1,5 @@
 export default {
   appTitle: 'RAG 文档管理',
-  app: { sourceLink: '查看源码' },
   login: {
     username: '用户名',
     password: '密码',
@@ -30,6 +29,15 @@ export default {
     disableTOTP: '关闭两步验证',
     logout: '退出登录',
     language: '语言',
+    about: '关于',
+  },
+  about: {
+    title: '关于',
+    projectUrl: '项目地址',
+    gitBranch: '分支',
+    gitCommit: '提交哈希',
+    commitTime: '提交时间',
+    close: '关闭',
   },
   users: {
     refresh: '刷新',

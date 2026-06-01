@@ -102,6 +102,9 @@ func main() {
 		zap.String("addr", addr),
 		zap.String("config", configPath),
 		zap.String("base_path", config.GetString("http.base_path")),
+		zap.String("git_branch", infra.GitBranch),
+		zap.String("git_commit", infra.GitCommit),
+		zap.String("commit_time", infra.CommitTime),
 	}
 
 	infra.L.Info("server starting", logFields...)

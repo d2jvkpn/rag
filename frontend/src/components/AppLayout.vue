@@ -3,7 +3,7 @@
 import { computed, h, ref, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { NIcon, useDialog, useMessage } from 'naive-ui'
-import { DocumentOutline, SearchOutline, PeopleOutline, LogOutOutline as LogOutIcon, KeyOutline as KeyIcon, PersonCircleOutline as PersonIcon, ShieldCheckmarkOutline as ShieldIcon, LanguageOutline as LangIcon, LogoGithub as LogoGithubIcon } from '@vicons/ionicons5'
+import { DocumentOutline, SearchOutline, PeopleOutline, LogOutOutline as LogOutIcon, KeyOutline as KeyIcon, PersonCircleOutline as PersonIcon, ShieldCheckmarkOutline as ShieldIcon, LanguageOutline as LangIcon, InformationCircleOutline as InfoIcon, LogoGithub as LogoGithubIcon } from '@vicons/ionicons5'
 import { useAuthStore } from '../stores/auth.js'
 import { getConfig } from '../config/app-config.js'
 import { authService } from '../services/auth.js'
@@ -14,6 +14,10 @@ import { toDataURL } from 'qrcode'
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
+
+const gitBranch = __GIT_BRANCH__
+const gitCommit = __GIT_COMMIT__
+const commitTime = __COMMIT_TIME__
 const appTitle = computed(() => t('appTitle'))
 const dialog = useDialog()
 const message = useMessage()
@@ -80,9 +84,12 @@ const userMenuOptions = computed(() => [
     icon: () => h(NIcon, null, { default: () => h(LangIcon) }),
     children: LOCALES.map(l => ({ label: l.label, key: `lang-${l.value}` })),
   },
+  { label: t('user.about'), key: 'about', icon: () => h(NIcon, null, { default: () => h(InfoIcon) }) },
   { type: 'divider', key: 'd1' },
   { label: t('user.logout'), key: 'logout', icon: () => h(NIcon, null, { default: () => h(LogOutIcon) }) },
 ])
+
+const showAboutModal = ref(false)
 
 function handleUserMenuSelect(key) {
   if (key === 'change-password') {
@@ -91,6 +98,8 @@ function handleUserMenuSelect(key) {
     openTOTPModal()
   } else if (key.startsWith('lang-')) {
     setLocale(key.slice(5))
+  } else if (key === 'about') {
+    showAboutModal.value = true
   } else if (key === 'logout') {
     handleLogout()
   }
@@ -257,13 +266,6 @@ async function confirmTOTPDisable() {
         </div>
       </n-dropdown>
 
-      <div class="sider-source" :class="{ 'sider-source--collapsed': collapsed }">
-        <a href="https://github.com/d2jvkpn/rag" target="_blank" rel="noopener">
-          <n-icon size="14"><logo-github-icon /></n-icon>
-          <span v-if="!collapsed">{{ t('app.sourceLink') }}</span>
-        </a>
-      </div>
-
       <div v-if="!collapsed" class="sider-resize-handle" @mousedown="startResize" />
     </n-layout-sider>
 
@@ -335,6 +337,35 @@ async function confirmTOTPDisable() {
       </template>
     </n-modal>
 
+    <n-modal v-model:show="showAboutModal" preset="card" :title="appTitle" style="width:420px" header-style="text-align: center">
+      <div class="about-list">
+        <div class="about-row">
+          <span class="about-label">{{ t('about.projectUrl') }}</span>
+          <a href="https://github.com/d2jvkpn/rag" target="_blank" rel="noopener" class="about-link">
+            <n-icon size="14" class="about-link-icon"><logo-github-icon /></n-icon>
+            <span>github.com/d2jvkpn/rag</span>
+          </a>
+        </div>
+        <div class="about-row">
+          <span class="about-label">{{ t('about.gitBranch') }}</span>
+          <code class="about-mono">{{ gitBranch }}</code>
+        </div>
+        <div class="about-row">
+          <span class="about-label">{{ t('about.gitCommit') }}</span>
+          <code class="about-mono">{{ gitCommit }}</code>
+        </div>
+        <div class="about-row">
+          <span class="about-label">{{ t('about.commitTime') }}</span>
+          <code class="about-mono">{{ commitTime }}</code>
+        </div>
+      </div>
+      <template #footer>
+        <div style="display:flex;justify-content:flex-end">
+          <n-button size="small" @click="showAboutModal = false">{{ t('about.close') }}</n-button>
+        </div>
+      </template>
+    </n-modal>
+
     <n-layout>
       <n-layout-content class="main-content">
         <router-view />
@@ -385,30 +416,47 @@ async function confirmTOTPDisable() {
   justify-content: center;
   padding: 0;
 }
-.sider-source {
-  position: absolute;
-  bottom: 52px;
-  left: 0;
-  right: 0;
-  padding: 4px 16px;
+.about-list {
   display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
-.sider-source a {
+.about-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--n-text-color-disabled, #aaa);
+  gap: 12px;
+  font-size: 13px;
+}
+.about-label {
+  flex: 0 0 84px;
+  color: #6b7280;
+}
+.about-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #2563eb;
   text-decoration: none;
-  white-space: nowrap;
-  overflow: hidden;
+  outline: none;
+  word-break: break-all;
 }
-.sider-source a:hover {
-  color: var(--n-text-color, #333);
+.about-link:hover {
+  text-decoration: underline;
 }
-.sider-source--collapsed {
-  justify-content: center;
-  padding: 4px 0;
+.about-link:focus,
+.about-link:focus-visible {
+  outline: none;
+}
+.about-link-icon {
+  opacity: 0.7;
+}
+.about-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  color: #374151;
+  background: #f5f5f7;
+  padding: 2px 8px;
+  border-radius: 4px;
 }
 .user-name {
   font-size: 13px;

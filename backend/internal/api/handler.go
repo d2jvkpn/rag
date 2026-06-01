@@ -70,6 +70,14 @@ func (h *Handler) Routes() http.Handler {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
+	root.GET("/version", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"git_branch":  infra.GitBranch,
+			"git_commit":  infra.GitCommit,
+			"commit_time": infra.CommitTime,
+		})
+	})
+
 	staticDir := filepath.Join(h.cfg.GetString("app.data_dir"), "static")
 	root.Static("/static", staticDir)
 

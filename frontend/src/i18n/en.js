@@ -1,6 +1,5 @@
 export default {
   appTitle: 'RAG Documents',
-  app: { sourceLink: 'Source on GitHub' },
   login: {
     username: 'Username',
     password: 'Password',
@@ -30,6 +29,15 @@ export default {
     disableTOTP: 'Disable 2FA',
     logout: 'Sign Out',
     language: 'Language',
+    about: 'About',
+  },
+  about: {
+    title: 'About',
+    projectUrl: 'Project',
+    gitBranch: 'Git Branch',
+    gitCommit: 'Commit Hash',
+    commitTime: 'Commit Time',
+    close: 'Close',
   },
   users: {
     refresh: 'Refresh',
