@@ -28,7 +28,7 @@ gin router
 | 接口 | 方法数 | 消费方 |
 |---|---|---|
 | `UserStore` | 4 | `AuthService` |
-| `KnowledgeBaseStore` | 4 | `DocumentService` |
+| `KnowledgeBaseStore` | 5 | `DocumentService` |
 | `DocumentStore` | 7 | `DocumentService` |
 | `ChunkStore` | 6 | `DocumentService` |
 | `Store`（组合以上四个） | — | `app/`，两个实现 |
@@ -130,7 +130,7 @@ data/documents/{yyyy}/{mm}/{dd}/{yyyy-mm-dd}_{document_id}/chunks-vN.json
 - `permissions[]`：纯配置态，不写入 `users` 表，每次从配置文件读取
 - 已存在的账户不被修改；`disabled` 用户在登录和每次鉴权请求时均被拦截
 
-支持的权限：`view_user_list` / `delete_documents` / `disable_users`
+支持的权限：`view_user_list` / `delete_documents` / `disable_users` / `create_knowledge_bases` / `delete_knowledge_bases`
 
 ## 文档所有权
 

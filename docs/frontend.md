@@ -111,6 +111,7 @@
 - `services/documents.js`
 - `services/chunks.js`
 - `services/users.js`
+- `services/knowledge-bases.js`
 - `services/search.js`
 
 职责：
@@ -120,7 +121,8 @@
 - `documents.js`：文档上传、列表、详情、删除、触发入库；同时负责文档标签下拉数据（`GET /api/document-tags`）
 - `chunks.js`：chunk 列表、重切分、合并、编辑、拒绝、恢复、审核
 - `users.js`：用户列表、启用、禁用
-- `search.js`：语义检索（`POST /api/knowledge-bases/query`）、知识库列表与可用 collection 配置
+- `knowledge-bases.js`：知识库列表、创建、删除（`GET/POST/DELETE /api/knowledge-bases`）
+- `search.js`：语义检索（`POST /api/knowledge-bases/query`）、可用 collection 配置（`GET /api/knowledge-bases/available`）、知识库列表（供检索页下拉使用）
 
 实现约定：
 
@@ -306,6 +308,7 @@ frontend/
       documents.js
       chunks.js
       users.js
+      knowledge-bases.js
       search.js
     config/
       app-config.js

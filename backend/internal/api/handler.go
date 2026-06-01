@@ -556,7 +556,7 @@ func (h *Handler) handleDeleteKnowledgeBase(c *gin.Context) {
 			writeError(c, 409, "conflict", err.Error(), nil)
 			return
 		}
-		writeError(c, 400, "bad_request", err.Error(), nil)
+		h.writeStoreError(c, err)
 		return
 	}
 	c.Status(204)

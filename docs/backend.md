@@ -291,6 +291,8 @@ chunk 快照约定：
 - `view_user_list`
 - `delete_documents`
 - `disable_users`
+- `create_knowledge_bases`
+- `delete_knowledge_bases`
 
 `users.status` 是运行态状态，当前使用：
 

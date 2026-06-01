@@ -379,6 +379,14 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 
 重复创建返回 `409 conflict`。
 
+### `DELETE /api/knowledge-bases/:knowledge_base_id`
+
+- 删除知识库，并同步删除对应 Milvus collection
+- 需要登录且拥有 `delete_knowledge_bases` 权限
+- 知识库下仍有文档时返回 `409 conflict`，需先删除所有文档
+- 知识库不存在返回 `404 not_found`
+- 删除成功返回 `204 No Content`
+
 ## 语义检索接口
 
 ### `POST /api/knowledge-bases/query`

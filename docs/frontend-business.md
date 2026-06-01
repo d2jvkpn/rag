@@ -258,7 +258,7 @@
 
 权限：
 
-- 登录用户可查看知识库管理页；仅 `create_knowledge_bases` 权限用户可看到创建按钮并调用创建接口
+- 登录用户可查看知识库管理页；仅 `create_knowledge_bases` 权限用户可看到创建按钮并调用创建接口；仅 `delete_knowledge_bases` 权限用户可看到删除按钮并调用删除接口
 
 ### 知识库查询页
 
