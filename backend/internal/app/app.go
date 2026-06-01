@@ -168,6 +168,7 @@ func buildServiceOpts(v *viper.Viper) (opts []func(*service.DocumentService), er
 		embedAPIKey  string
 		addr         string
 		db           string
+		apiKey       string
 		milvus       *rag.Milvus
 	)
 
@@ -192,9 +193,15 @@ func buildServiceOpts(v *viper.Viper) (opts []func(*service.DocumentService), er
 
 	if addr = v.GetString("milvus.addr"); addr != "" {
 		db = v.GetString("milvus.db")
-		infra.L.Info("vectorstore: milvus", zap.String("addr", addr), zap.String("db", db))
+		apiKey = v.GetString("milvus.api_key")
+		infra.L.Info(
+			"vectorstore: milvus",
+			zap.String("addr", addr),
+			zap.String("db", db),
+			zap.Bool("api_key_configured", apiKey != ""),
+		)
 
-		if milvus, err = rag.NewMilvus(addr, db); err != nil {
+		if milvus, err = rag.NewMilvus(addr, db, apiKey); err != nil {
 			return nil, err
 		}
 		opts = append(opts, service.WithVectorStore(milvus))

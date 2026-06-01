@@ -325,11 +325,11 @@ accounts:
 
 **Embedder** 实现：Noop（默认）和 OpenAI-compatible（`embedder.base_url` 指向任意兼容端点）。`batch_size` 默认 `10`，DashScope 兼容端点不支持更大批次，不要调大。
 
-**VectorStore** 接口方法：`ValidateKnowledgeBase`、`ListKnowledgeBases`、`Upsert`、`DeleteByDocument`、`Search(ctx, SearchRequest)`。`SearchRequest` 携带 `KnowledgeBaseID`、`Embedding`、`Query`、`TopK`、`DocumentIDs`、`Mode`（`""` dense / `"bm25"` / `"hybrid"`）、`EF`、`DropRatio`、`RRFK`。BM25 模式跳过 Embedder；dense / hybrid 模式要求 Embedder 已配置。
+**VectorStore** 接口方法：`ValidateKnowledgeBase`、`ListKnowledgeBases`、`Upsert`、`DeleteByDocument`、`Search(ctx, SearchRequest)`。`SearchRequest` 携带 `KnowledgeBaseID`、`Embedding`、`Query`、`TopK`、`DocumentIDs`、`Mode`（`""` dense / `"bm25"` / `"hybrid"`）、`EF`、`DropRatio`、`RRFK`。BM25 模式跳过 Embedder；dense / hybrid 模式要求 Embedder 已配置。Milvus dense index/search 使用 `COSINE` metric；dense/BM25 单路查询使用 Milvus Search；hybrid 使用 Milvus HybridSearch + RRF reranker 融合 dense 与 BM25 排名，不直接混排两路原始分数。
 
 **TaskQueue** 实现：`GoroutineQueue`（单 worker goroutine，默认）和 `AsynqQueue`（Redis 支持）。选择逻辑封装在 `NewDocumentService` 内部。
 
-**Config 补充字段：** `http.base_path`（所有路由的 URL 前缀，默认 `""`，例如 `"/rag"`）。后端运行目录存在 `target/ui/index.html` 时自动启用前端 SPA 托管，路径为 `/ui`，并将 `/` 和 `/index.html` 重定向到 `/ui/index.html`；`/static` 仍只服务 `{app.data_dir}/static`。
+**Config 补充字段：** `http.base_path`（所有路由的 URL 前缀，默认 `""`，例如 `"/rag"`）；`milvus.api_key`（Milvus API key，默认 `""`）。后端运行目录存在 `target/ui/index.html` 时自动启用前端 SPA 托管，路径为 `/ui`，并将 `/` 和 `/index.html` 重定向到 `/ui/index.html`；`/static` 仍只服务 `{app.data_dir}/static`。
 
 ## 推荐目录结构
 
@@ -441,6 +441,8 @@ backend/
 - `Embedder` 接口 + Noop 实现 + OpenAI-compatible 实现
 - `VectorStore` 接口 + Noop 实现 + Milvus 官方 Go SDK v2 实现（gRPC，Milvus 2.5+）
   - 支持 dense / BM25 / hybrid 三种搜索模式
+  - dense 使用 Milvus HNSW `COSINE` metric，search params 显式传 `metric_type=COSINE`
+  - hybrid 使用 RRF reranker 融合两路排名，不直接混排原始分数
   - 支持 HNSW ef、BM25 drop_ratio、RRF k 调参
   - 支持按 document_ids 过滤
   - 每个 collection 可独立配置 analyzer（默认 `chinese`），启动时自动检测 schema 并按需重建

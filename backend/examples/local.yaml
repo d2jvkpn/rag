@@ -43,6 +43,7 @@ embedder:
 milvus:
   addr: "127.0.0.1:19530"
   db: "rag"
+  api_key: ""
   #collections:
   #- collection: public
   #  chunk_size: 800    # optional, default 800

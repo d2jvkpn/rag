@@ -325,6 +325,9 @@ export default {
     aiAnswer: 'AI Answer',
     emptyResult: 'No results found. Try different keywords or confirm documents are indexed.',
     viewDocument: 'View Document',
+    knowledgeBase: 'Knowledge Base',
+    downloadResults: 'Download',
+    docCount: 'Docs {selected}/{total}',
     drawer: {
       title: 'Select Documents',
       searchPlaceholder: 'Search filenames…',

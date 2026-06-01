@@ -1,7 +1,7 @@
-
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { DocumentTextOutline as DocumentTextIcon, DownloadOutline as DownloadIcon, OpenOutline as OpenIcon } from '@vicons/ionicons5'
 import { searchService } from '../services/search.js'
 import { documentsService } from '../services/documents.js'
 import { useI18n } from '../i18n/index.js'
@@ -9,10 +9,10 @@ import { useI18n } from '../i18n/index.js'
 const router = useRouter()
 const { t } = useI18n()
 
+const searchMode = ref('dense')
 const knowledgeBaseId = ref(null)
 const queryText = ref('')
 const topK = ref(5)
-const searchMode = ref('')
 const selectedDocIds = ref([])
 const showAdvanced = ref(false)
 const ef = ref(0)
@@ -25,11 +25,13 @@ const error = ref('')
 const results = ref([])
 const answer = ref('')
 const searched = ref(false)
+const lastSearchSnapshot = ref(null)
 const kbOptions = ref([])
 const kbConfigs = ref({})
 const docOptions = ref([])
 
 const currentKbConfig = computed(() => kbConfigs.value[knowledgeBaseId.value] || null)
+const canDownloadResults = computed(() => Boolean(searched.value && lastSearchSnapshot.value))
 
 // Drawer state
 const drawerVisible = ref(false)
@@ -51,10 +53,10 @@ const someSelected = computed(() =>
   filteredDocs.value.some(d => tempSelectedDocIds.value.includes(d.value)) && !allSelected.value
 )
 
-const docButtonLabel = computed(() => {
-  if (selectedDocIds.value.length === 0) return t('search.allDocs')
-  return t('search.selectedDocs', { n: selectedDocIds.value.length })
-})
+const docButtonLabel = computed(() => t('search.docCount', {
+  selected: selectedDocIds.value.length,
+  total: docOptions.value.length,
+}))
 
 function openDocDrawer() {
   tempSelectedDocIds.value = [...selectedDocIds.value]
@@ -115,8 +117,147 @@ const rrfKOptions = computed(() => [
 ])
 
 function formatScore(score) {
-  if (!searchMode.value) return (score * 100).toFixed(1) + '%'
+  if (searchMode.value === 'dense') return (score * 100).toFixed(1) + '%'
   return score.toFixed(4)
+}
+
+function shortId(id) {
+  if (!id) return ''
+  return id.length > 12 ? `${id.slice(0, 8)}...${id.slice(-4)}` : id
+}
+
+function selectedDocumentSnapshots() {
+  const docMap = new Map(docOptions.value.map(doc => [doc.value, doc]))
+  return selectedDocIds.value.map(id => {
+    const doc = docMap.get(id)
+    return {
+      document_id: id,
+      filename: doc?.label || '',
+      source_type: doc?.sourceType || '',
+      uploader_name: doc?.uploaderName || '',
+    }
+  })
+}
+
+function buildSearchSnapshot(query, items, aiAnswer) {
+  return {
+    generated_at: new Date().toISOString(),
+    site: window.location.href,
+    query: {
+      knowledge_base_id: knowledgeBaseId.value || '',
+      text: query,
+      top_k: topK.value,
+      mode: searchMode.value,
+      document_ids: [...selectedDocIds.value],
+      documents: selectedDocumentSnapshots(),
+      advanced: {
+        ef: ef.value,
+        drop_ratio: dropRatio.value,
+        rrf_k: rrfK.value,
+      },
+      knowledge_base_config: currentKbConfig.value ? { ...currentKbConfig.value } : null,
+    },
+    output: {
+      answer: aiAnswer || '',
+      result_count: items.length,
+      results: items.map((item, idx) => ({
+        rank: idx + 1,
+        score: item.score,
+        knowledge_base_id: item.knowledge_base_id,
+        document_id: item.document_id,
+        chunk_id: item.chunk_id,
+        chunk_index: item.chunk_index,
+        filename: item.filename,
+        source_type: item.source_type,
+        section_title: item.section_title || '',
+        page_start: item.page_start || 0,
+        page_end: item.page_end || 0,
+        text: item.text || '',
+      })),
+    },
+  }
+}
+
+function yamlScalar(value, indent) {
+  if (value === null || value === undefined) return 'null'
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  const str = String(value)
+  if (!str) return "''"
+  if (str.includes('\n')) {
+    const pad = ' '.repeat(indent + 2)
+    return `|\n${str.split('\n').map(line => `${pad}${line}`).join('\n')}`
+  }
+  if (/^[A-Za-z0-9_./@-]+$/.test(str)) return str
+  return `'${str.replace(/'/g, "''")}'`
+}
+
+function isEmptyCollection(value) {
+  return value && typeof value === 'object' && Object.keys(value).length === 0
+}
+
+function toYaml(value, indent = 0) {
+  const pad = ' '.repeat(indent)
+  if (Array.isArray(value)) {
+    if (!value.length) return '[]'
+    return value.map(item => {
+      if (item && typeof item === 'object') {
+        const nested = toYaml(item, indent + 2)
+        return `${pad}- ${nested.trimStart()}`
+      }
+      return `${pad}- ${yamlScalar(item, indent)}`
+    }).join('\n')
+  }
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value)
+    if (!entries.length) return '{}'
+    return entries.map(([key, item]) => {
+      if (Array.isArray(item) && !item.length) {
+        return `${pad}${key}: []`
+      }
+      if (item && typeof item === 'object') {
+        if (isEmptyCollection(item)) return `${pad}${key}: {}`
+        return `${pad}${key}:\n${toYaml(item, indent + 2)}`
+      }
+      return `${pad}${key}: ${yamlScalar(item, indent)}`
+    }).join('\n')
+  }
+  return `${pad}${yamlScalar(value, indent)}`
+}
+
+function pad2(value) {
+  return String(value).padStart(2, '0')
+}
+
+function formatDownloadFilename(generatedAt) {
+  const date = new Date(generatedAt)
+  const yyyy = date.getFullYear()
+  const dd = pad2(date.getDate())
+  const mm = pad2(date.getMonth() + 1)
+  const timestamp = `${pad2(date.getHours())}${pad2(date.getMinutes())}${pad2(date.getSeconds())}`
+  return `rag_query--test_01.${yyyy}-${dd}-${mm}-${timestamp}.yaml`
+}
+
+function downloadSearchResults() {
+  if (!lastSearchSnapshot.value) return
+  const yaml = `${toYaml(lastSearchSnapshot.value)}\n`
+  const blob = new Blob([yaml], { type: 'application/x-yaml;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = formatDownloadFilename(lastSearchSnapshot.value.generated_at)
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+function handleSearchModeChange(nextMode) {
+  searchMode.value = nextMode
+  results.value = []
+  answer.value = ''
+  searched.value = false
+  error.value = ''
+  lastSearchSnapshot.value = null
 }
 
 async function loadKnowledgeBases() {
@@ -164,9 +305,10 @@ async function handleSearch() {
   answer.value = ''
   searched.value = false
   try {
+    const query = queryText.value.trim()
     const resp = await searchService.query(
       knowledgeBaseId.value || '',
-      queryText.value.trim(),
+      query,
       topK.value,
       {
         searchMode: searchMode.value,
@@ -178,6 +320,7 @@ async function handleSearch() {
     )
     results.value = resp?.items || []
     answer.value = resp?.answer || ''
+    lastSearchSnapshot.value = buildSearchSnapshot(query, results.value, answer.value)
     searched.value = true
   } catch (e) {
     error.value = e.message
@@ -214,17 +357,14 @@ onMounted(loadKnowledgeBases)
               @click="openDocDrawer"
             >
               {{ docButtonLabel }}
-              <template v-if="selectedDocIds.length > 0">
-                <n-badge :value="selectedDocIds.length" style="margin-left:6px" />
-              </template>
             </n-button>
             <n-select
               v-model:value="topK"
               :options="topKOptions"
               style="width:96px;flex-shrink:0"
             />
-            <n-radio-group v-model:value="searchMode" size="small">
-              <n-radio-button value="">Dense</n-radio-button>
+            <n-radio-group :value="searchMode" size="small" @update:value="handleSearchModeChange">
+              <n-radio-button value="dense">Dense</n-radio-button>
               <n-radio-button value="bm25">BM25</n-radio-button>
               <n-radio-button value="hybrid">Hybrid</n-radio-button>
             </n-radio-group>
@@ -236,26 +376,6 @@ onMounted(loadKnowledgeBases)
             >
               {{ showAdvanced ? t('search.collapseParams') : t('search.advancedParams') }}
             </n-button>
-          </div>
-
-          <!-- KB config info -->
-          <div
-            v-if="currentKbConfig"
-            style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:4px 2px 0"
-          >
-            <n-text depth="3" style="font-size:12px">
-              dim <n-tag size="tiny" :bordered="false">{{ currentKbConfig.dim }}</n-tag>
-            </n-text>
-            <n-text depth="3" style="font-size:12px">
-              analyzer <n-tag size="tiny" :bordered="false">{{ currentKbConfig.analyzer || 'chinese' }}</n-tag>
-            </n-text>
-            <n-text depth="3" style="font-size:12px">
-              chunk <n-tag size="tiny" :bordered="false">{{ currentKbConfig.chunk_size }}</n-tag>
-              overlap <n-tag size="tiny" :bordered="false">{{ currentKbConfig.chunk_overlap }}</n-tag>
-            </n-text>
-            <n-text depth="3" style="font-size:12px">
-              min chunks <n-tag size="tiny" :bordered="false">{{ currentKbConfig.min_chunks }}</n-tag>
-            </n-text>
           </div>
 
           <!-- Advanced params -->
@@ -286,30 +406,39 @@ onMounted(loadKnowledgeBases)
             </n-form-item>
           </div>
 
-          <!-- Row 2: Textarea + Button -->
-          <div style="display:flex;gap:10px;align-items:flex-end">
+          <!-- Row 2: Textarea + Search/Download -->
+          <div class="search-input-row">
             <n-input
               v-model:value="queryText"
               type="textarea"
               :placeholder="t('search.searchPlaceholder')"
               :autosize="{ minRows: 2, maxRows: 8 }"
-              style="flex:1"
+              class="search-input"
               @keydown.ctrl.enter="handleSearch"
               @keydown.meta.enter="handleSearch"
             />
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+            <div class="search-actions">
               <n-button
                 type="primary"
                 :loading="loading"
                 :disabled="!knowledgeBaseId || !queryText.trim()"
-                style="width:72px"
+                class="search-button"
                 @click="handleSearch"
               >
                 {{ t('search.search') }}
               </n-button>
-              <n-text v-if="searched && !loading" depth="3" style="font-size:11px;white-space:nowrap">
-                {{ results.length > 0 ? t('search.results', { n: results.length }) : t('search.noResults') }}
-              </n-text>
+              <n-button
+                size="small"
+                secondary
+                class="search-download-button"
+                :disabled="!canDownloadResults"
+                @click="downloadSearchResults"
+              >
+                <template #icon>
+                  <n-icon><DownloadIcon /></n-icon>
+                </template>
+                {{ t('search.downloadResults') }}
+              </n-button>
             </div>
           </div>
 
@@ -343,8 +472,7 @@ onMounted(loadKnowledgeBases)
           <template #header>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                <n-text style="font-size:13px;font-weight:600">{{ idx + 1 }}.</n-text>
-                <n-text style="font-size:13px">{{ item.filename }}</n-text>
+                <n-text style="font-size:13px;font-weight:600">{{ idx + 1 }}/{{ results.length }}. {{ item.filename }}</n-text>
                 <n-tag size="tiny">{{ t(`sourceType.${item.source_type}`) || item.source_type }}</n-tag>
                 <n-text v-if="item.section_title" depth="3" style="font-size:12px">{{ item.section_title }}</n-text>
                 <n-text v-if="item.page_start" depth="3" style="font-size:12px">
@@ -356,11 +484,25 @@ onMounted(loadKnowledgeBases)
               </n-tag>
             </div>
           </template>
-          <pre style="white-space:pre-wrap;font-size:13px;font-family:inherit;margin:0;line-height:1.6">{{ item.text }}</pre>
+          <pre class="search-result-text">{{ item.text }}</pre>
           <template #footer>
-            <div style="display:flex;align-items:center;gap:8px">
-              <n-text depth="3" style="font-size:11px">{{ item.knowledge_base_id }}</n-text>
-              <n-button text size="tiny" @click="router.push(`/documents/${item.document_id}`)">
+            <div class="search-result-footer">
+              <div class="search-result-meta">
+                <span class="search-result-badge search-result-badge--kb">
+                  {{ t('search.knowledgeBase') }} {{ item.knowledge_base_id }}
+                </span>
+                <span v-if="item.chunk_index !== undefined" class="search-result-badge search-result-badge--chunk">
+                  Chunk #{{ item.chunk_index + 1 }}
+                </span>
+                <n-text v-if="item.document_id" depth="3" class="search-result-doc-id">
+                  <n-icon size="13"><DocumentTextIcon /></n-icon>
+                  {{ shortId(item.document_id) }}
+                </n-text>
+              </div>
+              <n-button secondary size="tiny" class="search-result-action" @click="router.push(`/documents/${item.document_id}`)">
+                <template #icon>
+                  <n-icon><OpenIcon /></n-icon>
+                </template>
                 {{ t('search.viewDocument') }}
               </n-button>
             </div>
@@ -433,3 +575,102 @@ onMounted(loadKnowledgeBases)
     </n-drawer-content>
   </n-drawer>
 </template>
+
+<style scoped>
+.search-input-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.search-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.search-button {
+  width: 72px;
+}
+
+.search-result-text {
+  margin: 0;
+  color: #2f3437;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.68;
+  white-space: pre-wrap;
+}
+
+.search-download-button {
+  --n-font-size: 12px;
+  --n-padding: 0 10px;
+  font-weight: 500;
+}
+
+.search-result-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 2px;
+}
+
+.search-result-meta {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.search-result-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.search-result-badge--kb {
+  color: #24624a;
+  background: #eef8f2;
+  border-color: #c9ead7;
+}
+
+.search-result-badge--chunk {
+  color: #315b8f;
+  background: #eef5ff;
+  border-color: #cadfff;
+}
+
+.search-result-doc-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #69717a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.search-result-action {
+  --n-font-size: 12px;
+  --n-padding: 0 10px;
+  font-weight: 500;
+}
+</style>

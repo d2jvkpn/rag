@@ -325,6 +325,9 @@ export default {
     aiAnswer: 'AI 回答',
     emptyResult: '未找到相关内容，请尝试不同查询词或确认文档已完成入库',
     viewDocument: '查看文档',
+    knowledgeBase: '知识库',
+    downloadResults: '下载',
+    docCount: '文档 {selected}/{total}',
     drawer: {
       title: '选择文档',
       searchPlaceholder: '搜索文件名…',

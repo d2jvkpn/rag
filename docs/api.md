@@ -385,7 +385,7 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 
 - 输入查询文本，在指定知识库中检索相似 chunk
 - 不支持跨知识库检索，`knowledge_base_id` 为必填项
-- `search_mode` 为空时使用 dense（纯向量语义搜索）；`bm25` 时跳过 Embedder，仅做全文检索；`hybrid` 时两路并行后 RRF 重排
+- `search_mode` 为 `"dense"` 或空字符串时使用 dense（纯向量语义搜索，Milvus `COSINE` metric）；`bm25` 时跳过 Embedder，仅做全文检索；`hybrid` 时使用 Milvus HybridSearch 两路并行后 RRF 重排，不直接混排原始分数
 
 请求字段：
 
@@ -394,7 +394,7 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 | `knowledge_base_id` | string | 必填 |
 | `query` | string | 查询文本，必填 |
 | `top_k` | int | 返回条数，默认 5，最大 50 |
-| `search_mode` | string | `""`（dense）/ `"bm25"` / `"hybrid"` |
+| `search_mode` | string | `"dense"` / `"bm25"` / `"hybrid"`；兼容空字符串表示 dense |
 | `document_ids` | []string | 可选，限定搜索范围内的文档 ID 列表 |
 | `ef` | int | HNSW 搜索精度参数，0 = Milvus 默认 |
 | `drop_ratio` | float | BM25 稀疏向量剪枝比例，0 = 不剪枝 |
@@ -426,7 +426,7 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 }
 ```
 
-- `score`：dense 模式为余弦相似度（0~1），bm25/hybrid 模式为原始分值
+- `score`：dense 模式为余弦相似度（0~1）；bm25 为 BM25 原始分；hybrid 为 RRF 重排后的融合分，不应与 dense/BM25 原始分直接比较
 - dense/hybrid 模式未配置 `embedder.base_url` + `embedder.api_key` 时返回 500
 
 ## 状态查询建议

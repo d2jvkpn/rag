@@ -31,6 +31,7 @@ func LoadConfig(path string) (config *viper.Viper) {
 	config.SetDefault("admin.password", "admin123")
 	config.SetDefault("embedder.model", "text-embedding-v3")
 	config.SetDefault("embedder.batch_size", 10)
+	config.SetDefault("milvus.api_key", "")
 
 	if config.GetInt("embedder.dim") <= 0 {
 		log.Fatal("embedder.dim is required and must be positive")

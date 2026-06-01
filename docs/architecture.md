@@ -164,11 +164,11 @@ data/documents/{yyyy}/{mm}/{dd}/{yyyy-mm-dd}_{document_id}/chunks-vN.json
 
 Collection schema：
 
-- `embedding`：dense float 向量（dim 来自创建知识库时的服务端 `embedder.dim`）
+- `embedding`：dense float 向量（dim 来自创建知识库时的服务端 `embedder.dim`），HNSW 索引使用 `COSINE` metric，dense search 显式传 `metric_type=COSINE`
 - `sparse`：BM25 稀疏向量，由 Milvus 内置 BM25 function 从 `text` 字段自动生成
 - 其余元数据字段（`chunk_id`、`document_id`、`knowledge_base_id`、`text` 等）
 
-创建知识库时后端会同步创建或加载对应 collection。`ensureCollection` 检查 schema，发现 `sparse` 缺失或 `analyzer` 不匹配时 **drop + recreate**，数据丢失，需重新入库。完整 schema 见 [数据模型](./data-model.md)。
+创建知识库时后端会同步创建或加载对应 collection。`ensureCollection` 检查 schema，发现 `sparse` 缺失或 `analyzer` 不匹配时 **drop + recreate**，数据丢失，需重新入库。dense index metric 从旧版本 `L2` 改为 `COSINE` 后，既有 collection 需要重建索引或重建 collection 后重新入库。完整 schema 见 [数据模型](./data-model.md)。
 
 ## 前端架构
 
@@ -224,6 +224,7 @@ Loader 将 snake_case 字段规范化为 camelCase，兼容旧版 camelCase 配�
 | `embedder.batch_size` | `10` | 每次请求的最大 input 条数 |
 | `milvus.addr` | — | Milvus gRPC 地址 |
 | `milvus.db` | — | Milvus 数据库名 |
+| `milvus.api_key` | `""` | Milvus API key，默认空字符串，不启用认证 |
 | `embedder.dim` | — | 必填。Embedding 模型输出维度，UI 新建知识库时写入 collection schema |
 未配置 `database.dsn` 时使用 JSONStore；未配置 `redis.dsn` 时使用 GoroutineQueue 和 MemoryBlacklist；`embedder.dim` 必填；未配置 `embedder.base_url` / `embedder.api_key`、`milvus.addr` 时对应外部组件回落 Noop 实现。
 

@@ -32,9 +32,12 @@ type Milvus struct {
 	client *milvusclient.Client
 }
 
-func NewMilvus(addr, db string) (*Milvus, error) {
+func NewMilvus(addr, db, apiKey string) (*Milvus, error) {
 	cfg := &milvusclient.ClientConfig{
 		Address: addr,
+	}
+	if apiKey != "" {
+		cfg.APIKey = apiKey
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -160,46 +163,86 @@ func (m *Milvus) Search(ctx context.Context, req SearchRequest) ([]SearchResult,
 	}
 	filter := buildDocFilter(req.DocumentIDs)
 
-	var annReqs []*milvusclient.AnnRequest
-	switch req.Mode {
-	case SearchModeBM25:
-		annReqs = []*milvusclient.AnnRequest{
-			bm25AnnReq(req.Query, req.TopK, req.DropRatio, filter),
-		}
-	case SearchModeHybrid:
-		annReqs = []*milvusclient.AnnRequest{
-			denseAnnReq(req.Embedding, req.TopK, req.EF, filter),
-			bm25AnnReq(req.Query, req.TopK, req.DropRatio, filter),
-		}
-	default:
-		annReqs = []*milvusclient.AnnRequest{
-			denseAnnReq(req.Embedding, req.TopK, req.EF, filter),
-		}
+	if req.Mode == SearchModeBM25 {
+		return m.searchBM25(ctx, req.KnowledgeBaseID, req.Query, req.TopK, req.DropRatio, filter)
+	}
+	if req.Mode != SearchModeHybrid {
+		return m.searchDense(ctx, req.KnowledgeBaseID, req.Embedding, req.TopK, req.EF, filter)
 	}
 
+	annReqs := []*milvusclient.AnnRequest{
+		denseAnnReq(req.Embedding, req.TopK, req.EF, filter),
+		bm25AnnReq(req.Query, req.TopK, req.DropRatio, filter),
+	}
 	opt := milvusclient.NewHybridSearchOption(req.KnowledgeBaseID, req.TopK, annReqs...).
 		WithOutputFields(searchOutputFields...)
-	if req.Mode == SearchModeHybrid {
-		rrf := milvusclient.NewRRFReranker()
-		if req.RRFK > 0 {
-			rrf = rrf.WithK(float64(req.RRFK))
-		}
-		opt = opt.WithReranker(rrf)
+
+	// Hybrid search must use a Milvus reranker so dense cosine and BM25
+	// scores are fused by rank, not by directly mixing raw score scales.
+	rrf := milvusclient.NewRRFReranker()
+	if req.RRFK > 0 {
+		rrf = rrf.WithK(float64(req.RRFK))
 	}
+	opt = opt.WithReranker(rrf)
 
 	resultSets, err := m.client.HybridSearch(ctx, opt)
 	if err != nil {
 		return nil, err
 	}
-	if len(resultSets) == 0 {
-		return []SearchResult{}, nil
-	}
+	return firstResultSet(resultSets), nil
+}
 
-	return parseResults(resultSets[0]), nil
+func (m *Milvus) searchDense(
+	ctx context.Context, collection string, embedding []float32, topK, ef int, filter string,
+) ([]SearchResult, error) {
+	opt := milvusclient.NewSearchOption(
+		collection, topK, []entity.Vector{entity.FloatVector(embedding)},
+	).
+		WithANNSField("embedding").
+		WithOutputFields(searchOutputFields...).
+		WithSearchParam("metric_type", string(entity.COSINE))
+	if ef > 0 {
+		opt = opt.WithSearchParam("ef", fmt.Sprintf("%d", ef))
+	}
+	if filter != "" {
+		opt = opt.WithFilter(filter)
+	}
+	resultSets, err := m.client.Search(ctx, opt)
+	if err != nil {
+		return nil, err
+	}
+	return firstResultSet(resultSets), nil
+}
+
+func (m *Milvus) searchBM25(
+	ctx context.Context, collection, query string, topK int, dropRatio float64, filter string,
+) ([]SearchResult, error) {
+	opt := milvusclient.NewSearchOption(collection, topK, []entity.Vector{entity.Text(query)}).
+		WithANNSField("sparse").
+		WithOutputFields(searchOutputFields...)
+	if dropRatio > 0 {
+		opt = opt.WithSearchParam("drop_ratio_search", fmt.Sprintf("%g", dropRatio))
+	}
+	if filter != "" {
+		opt = opt.WithFilter(filter)
+	}
+	resultSets, err := m.client.Search(ctx, opt)
+	if err != nil {
+		return nil, err
+	}
+	return firstResultSet(resultSets), nil
+}
+
+func firstResultSet(resultSets []milvusclient.ResultSet) []SearchResult {
+	if len(resultSets) == 0 {
+		return []SearchResult{}
+	}
+	return parseResults(resultSets[0])
 }
 
 func denseAnnReq(embedding []float32, topK, ef int, filter string) *milvusclient.AnnRequest {
-	r := milvusclient.NewAnnRequest("embedding", topK, entity.FloatVector(embedding))
+	r := milvusclient.NewAnnRequest("embedding", topK, entity.FloatVector(embedding)).
+		WithSearchParam("metric_type", string(entity.COSINE))
 	if ef > 0 {
 		r = r.WithSearchParam("ef", fmt.Sprintf("%d", ef))
 	}
@@ -378,7 +421,7 @@ func (m *Milvus) ensureCollection(ctx context.Context, cfg CollectionConfig) err
 	}
 
 	denseTask, err := m.client.CreateIndex(ctx, milvusclient.NewCreateIndexOption(
-		name, "embedding", milvusindex.NewHNSWIndex(entity.L2, 16, 64),
+		name, "embedding", milvusindex.NewHNSWIndex(entity.COSINE, 16, 64),
 	))
 	if err != nil {
 		return fmt.Errorf("milvus create_index embedding %q: %w", name, err)

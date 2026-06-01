@@ -188,7 +188,7 @@
 - `page_end`
 - `chunk_index`
 - `text`：原文
-- `embedding`：稠密向量，dim 由 `knowledge_bases.dim` 决定
+- `embedding`：稠密向量，dim 由 `knowledge_bases.dim` 决定，HNSW index 使用 `COSINE` metric
 - `sparse`：BM25 稀疏向量，由 Milvus 内置 BM25 function 从 `text` 自动生成（基于 collection 配置的 `analyzer`，默认 `chinese`）
 
 说明：

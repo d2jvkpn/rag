@@ -80,11 +80,11 @@ uploaded
 
 | 模式 | 值 | 说明 |
 |---|---|---|
-| Dense | `""` （默认） | 纯向量语义检索，调用 Embedder |
+| Dense | `"dense"`（兼容 `""`） | 纯向量语义检索，调用 Embedder |
 | BM25 | `"bm25"` | 全文检索，跳过 Embedder，不需要 embedding 配置 |
-| Hybrid | `"hybrid"` | 两路并行后 RRF 重排，需要 Embedder |
+| Hybrid | `"hybrid"` | 使用 Milvus HybridSearch 两路并行后 RRF 重排，需要 Embedder；不直接混排原始分数 |
 
-`SearchRequest` 调参字段：`EF`（HNSW 搜索精度）、`DropRatio`（BM25 稀疏向量剪枝比例）、`RRFK`（Hybrid RRF k 值）。
+`SearchRequest` 调参字段：`EF`（HNSW 搜索精度）、`DropRatio`（BM25 稀疏向量剪枝比例）、`RRFK`（Hybrid RRF k 值）。Dense 向量索引和查询均使用 Milvus `COSINE` metric。
 
 dense / hybrid 模式未配置 Embedder 时返回 500；BM25 模式无此限制，可在 Noop Embedder 下使用。
 

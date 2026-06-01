@@ -954,18 +954,23 @@ func (s *DocumentService) Query(
 		topK = 50
 	}
 
+	searchMode := opts.SearchMode
+	if searchMode == "" {
+		searchMode = rag.SearchModeDense
+	}
+
 	req := rag.SearchRequest{
 		KnowledgeBaseID: knowledgeBaseID,
 		Query:           queryText,
 		TopK:            topK,
 		DocumentIDs:     opts.DocumentIDs,
-		Mode:            opts.SearchMode,
+		Mode:            searchMode,
 		EF:              opts.EF,
 		DropRatio:       opts.DropRatio,
 		RRFK:            opts.RRFK,
 	}
 
-	if opts.SearchMode != rag.SearchModeBM25 {
+	if searchMode != rag.SearchModeBM25 {
 		embeddings, err := s.embedder.Embed(context.Background(), []string{queryText})
 		if err != nil {
 			return QueryResult{}, fmt.Errorf("embed query: %w", err)

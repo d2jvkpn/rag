@@ -44,6 +44,7 @@ go run ./cmd/server --config examples/local.yaml
 - `redis.dsn` 为空时使用内存 token blacklist 和进程内 goroutine 任务队列
 - `embedder.base_url` / `embedder.api_key` 为空时使用 Noop embedder
 - `milvus.addr` 为空时使用 Noop vector store
+- `milvus.api_key` 默认为空；配置后作为 Milvus API key 使用
 
 常用配置项：
 
@@ -64,6 +65,7 @@ go run ./cmd/server --config examples/local.yaml
 - `embedder.model`
 - `embedder.batch_size`
 - `milvus.addr`
+- `milvus.api_key`（默认空，配置后作为 Milvus API key 使用）
 - `milvus.db`
 - `embedder.dim`
 
