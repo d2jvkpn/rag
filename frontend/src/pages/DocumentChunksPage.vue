@@ -521,8 +521,8 @@ onMounted(loadAll)
           <section v-if="selectedChunk" class="chunk-modal-section">
             <div class="chunk-modal-section__title">{{ t('chunks.metadata') }}</div>
             <div class="chunk-meta-grid">
-              <div class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.meta.chunkId') }}</span><n-text code style="font-size:11px">{{ selectedChunk.chunk_id }}</n-text></div>
-              <div class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.meta.documentId') }}</span><n-text code style="font-size:11px">{{ selectedChunk.document_id }}</n-text></div>
+              <div class="chunk-meta-item chunk-meta-item--wide"><span class="chunk-meta-item__label">{{ t('chunks.meta.chunkId') }}</span><n-text code style="font-size:11px;word-break:break-all">{{ selectedChunk.chunk_id }}</n-text></div>
+              <div class="chunk-meta-item chunk-meta-item--wide"><span class="chunk-meta-item__label">{{ t('chunks.meta.documentId') }}</span><n-text code style="font-size:11px;word-break:break-all">{{ selectedChunk.document_id }}</n-text></div>
               <div class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.version') }}</span><n-text>v{{ selectedChunk.chunk_version }}</n-text></div>
               <div class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.source') }}</span><n-text>{{ selectedChunk.source || '—' }}</n-text></div>
               <div v-if="selectedChunk.filename" class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.meta.filename') }}</span><n-text>{{ selectedChunk.filename }}</n-text></div>

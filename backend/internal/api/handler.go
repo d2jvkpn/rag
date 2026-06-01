@@ -117,8 +117,6 @@ func (h *Handler) Routes() http.Handler {
 		h.withPermission("disable_users"),
 		h.handleEnableUser,
 	)
-	apiGroup.POST("/query", h.handleQuery)
-
 	apiGroup.GET("/knowledge-bases", h.handleListKnowledgeBases)
 	apiGroup.POST(
 		"/knowledge-bases",
@@ -126,6 +124,7 @@ func (h *Handler) Routes() http.Handler {
 		h.handleCreateKnowledgeBase,
 	)
 	apiGroup.GET("/knowledge-bases/available", h.handleListAvailableKnowledgeBases)
+	apiGroup.POST("/knowledge-bases/query", h.handleQuery)
 
 	return router
 }

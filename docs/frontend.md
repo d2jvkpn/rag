@@ -73,7 +73,7 @@
 - `/documents`
 - `/documents/:documentId`
 - `/documents/:documentId/chunks`
-- `/search`：语义检索页（调用 `POST /api/query`）
+- `/search`：语义检索页（调用 `POST /api/knowledge-bases/query`）
 - `/users`（仅当当前用户具备 `view_user_list` 权限时可访问）
 - `/` 重定向到 `/documents`
 
@@ -120,7 +120,7 @@
 - `documents.js`：文档上传、列表、详情、删除、触发入库；同时负责文档标签下拉数据（`GET /api/document-tags`）
 - `chunks.js`：chunk 列表、重切分、合并、编辑、拒绝、恢复、审核
 - `users.js`：用户列表、启用、禁用
-- `search.js`：语义检索（`POST /api/query`）、知识库列表与可用 collection 配置
+- `search.js`：语义检索（`POST /api/knowledge-bases/query`）、知识库列表与可用 collection 配置
 
 实现约定：
 

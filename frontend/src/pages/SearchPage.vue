@@ -33,6 +33,12 @@ const docOptions = ref([])
 const currentKbConfig = computed(() => kbConfigs.value[knowledgeBaseId.value] || null)
 const canDownloadResults = computed(() => Boolean(searched.value && lastSearchSnapshot.value))
 
+const searchCache = new Map()
+
+function buildCacheKey(kbId, query, topK, mode, docIds, ef, dropRatio, rrfK) {
+  return JSON.stringify({ kbId, query, topK, mode, docIds: [...docIds].sort(), ef, dropRatio, rrfK })
+}
+
 // Drawer state
 const drawerVisible = ref(false)
 const docSearchText = ref('')
@@ -124,6 +130,10 @@ function formatScore(score) {
 function shortId(id) {
   if (!id) return ''
   return id.length > 12 ? `${id.slice(0, 8)}...${id.slice(-4)}` : id
+}
+
+function openDocument(documentId) {
+  window.open(`/documents/${documentId}`, '_blank')
 }
 
 function selectedDocumentSnapshots() {
@@ -253,11 +263,23 @@ function downloadSearchResults() {
 
 function handleSearchModeChange(nextMode) {
   searchMode.value = nextMode
-  results.value = []
-  answer.value = ''
-  searched.value = false
   error.value = ''
-  lastSearchSnapshot.value = null
+  const key = buildCacheKey(
+    knowledgeBaseId.value, queryText.value.trim(), topK.value,
+    nextMode, selectedDocIds.value, ef.value, dropRatio.value, rrfK.value,
+  )
+  const cached = searchCache.get(key)
+  if (cached) {
+    results.value = cached.results
+    answer.value = cached.answer
+    lastSearchSnapshot.value = cached.snapshot
+    searched.value = true
+  } else {
+    results.value = []
+    answer.value = ''
+    searched.value = false
+    lastSearchSnapshot.value = null
+  }
 }
 
 async function loadKnowledgeBases() {
@@ -295,17 +317,31 @@ async function loadDocuments(kbId) {
 }
 
 function onKbChange(val) {
+  searchCache.clear()
   loadDocuments(val)
 }
 
 async function handleSearch() {
   if (!queryText.value.trim()) return
+  const query = queryText.value.trim()
+  const key = buildCacheKey(
+    knowledgeBaseId.value, query, topK.value,
+    searchMode.value, selectedDocIds.value, ef.value, dropRatio.value, rrfK.value,
+  )
+  const cached = searchCache.get(key)
+  if (cached) {
+    results.value = cached.results
+    answer.value = cached.answer
+    lastSearchSnapshot.value = cached.snapshot
+    searched.value = true
+    error.value = ''
+    return
+  }
   loading.value = true
   error.value = ''
   answer.value = ''
   searched.value = false
   try {
-    const query = queryText.value.trim()
     const resp = await searchService.query(
       knowledgeBaseId.value || '',
       query,
@@ -322,6 +358,11 @@ async function handleSearch() {
     answer.value = resp?.answer || ''
     lastSearchSnapshot.value = buildSearchSnapshot(query, results.value, answer.value)
     searched.value = true
+    searchCache.set(key, {
+      results: results.value,
+      answer: answer.value,
+      snapshot: lastSearchSnapshot.value,
+    })
   } catch (e) {
     error.value = e.message
   } finally {
@@ -488,18 +529,11 @@ onMounted(loadKnowledgeBases)
           <template #footer>
             <div class="search-result-footer">
               <div class="search-result-meta">
-                <span class="search-result-badge search-result-badge--kb">
-                  {{ t('search.knowledgeBase') }} {{ item.knowledge_base_id }}
-                </span>
-                <span v-if="item.chunk_index !== undefined" class="search-result-badge search-result-badge--chunk">
-                  Chunk #{{ item.chunk_index + 1 }}
-                </span>
-                <n-text v-if="item.document_id" depth="3" class="search-result-doc-id">
-                  <n-icon size="13"><DocumentTextIcon /></n-icon>
-                  {{ shortId(item.document_id) }}
-                </n-text>
+                <span class="meta-kv"><span class="meta-k">knowledge_base_id</span><span class="meta-sep">=</span><span class="meta-v">{{ item.knowledge_base_id }}</span></span>
+                <span class="meta-kv"><span class="meta-k">chunk_id</span><span class="meta-sep">=</span><span class="meta-v">{{ item.chunk_id }}</span></span>
+                <span class="meta-kv"><span class="meta-k">chunk_index</span><span class="meta-sep">=</span><span class="meta-v">{{ item.chunk_index }}</span></span>
               </div>
-              <n-button secondary size="tiny" class="search-result-action" @click="router.push(`/documents/${item.document_id}`)">
+              <n-button secondary size="tiny" class="search-result-action" @click="openDocument(item.document_id)">
                 <template #icon>
                   <n-icon><OpenIcon /></n-icon>
                 </template>
@@ -617,7 +651,7 @@ onMounted(loadKnowledgeBases)
 
 .search-result-footer {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
@@ -627,50 +661,40 @@ onMounted(loadKnowledgeBases)
 .search-result-meta {
   min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 3px;
 }
 
-.search-result-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  padding: 2px 8px;
-  border: 1px solid transparent;
-  border-radius: 6px;
+.meta-kv {
+  display: flex;
+  align-items: baseline;
   font-size: 11px;
-  font-weight: 500;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-
-.search-result-badge--kb {
-  color: #24624a;
-  background: #eef8f2;
-  border-color: #c9ead7;
-}
-
-.search-result-badge--chunk {
-  color: #315b8f;
-  background: #eef5ff;
-  border-color: #cadfff;
-}
-
-.search-result-doc-id {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: #69717a;
+  line-height: 1.5;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 11px;
+}
+
+.meta-k {
+  color: #a8adb8;
+  font-weight: 400;
+  flex-shrink: 0;
+}
+
+.meta-sep {
+  color: #c8ccd4;
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.meta-v {
+  color: #3d4146;
   font-weight: 500;
-  line-height: 1;
+  word-break: break-all;
 }
 
 .search-result-action {
   --n-font-size: 12px;
   --n-padding: 0 10px;
   font-weight: 500;
+  flex-shrink: 0;
 }
 </style>

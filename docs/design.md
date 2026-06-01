@@ -76,7 +76,7 @@ uploaded
 
 ## 搜索模式
 
-`POST /api/query` 的 `search_mode` 字段控制检索策略：
+`POST /api/knowledge-bases/query` 的 `search_mode` 字段控制检索策略：
 
 | 模式 | 值 | 说明 |
 |---|---|---|

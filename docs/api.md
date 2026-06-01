@@ -381,7 +381,7 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 
 ## 语义检索接口
 
-### `POST /api/query`
+### `POST /api/knowledge-bases/query`
 
 - 输入查询文本，在指定知识库中检索相似 chunk
 - 不支持跨知识库检索，`knowledge_base_id` 为必填项

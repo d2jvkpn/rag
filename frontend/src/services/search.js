@@ -12,7 +12,7 @@ export const searchService = {
     if (ef > 0) body.ef = ef
     if (dropRatio > 0) body.drop_ratio = dropRatio
     if (rrfK > 0) body.rrf_k = rrfK
-    return http.post('/api/query', body)
+    return http.post('/api/knowledge-bases/query', body)
   },
   listKnowledgeBases() {
     return http.get('/api/knowledge-bases')
