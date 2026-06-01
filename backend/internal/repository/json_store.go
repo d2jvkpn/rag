@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"backend/internal/model"
+	"github.com/d2jvkpn/rag/backend/internal/model"
 )
 
 // AccountSeed describes an account to ensure exists on startup.

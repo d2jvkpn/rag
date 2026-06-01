@@ -1,4 +1,4 @@
-module backend
+module github.com/d2jvkpn/rag/backend
 
 go 1.26.0
 

@@ -1,5 +1,6 @@
 export default {
   appTitle: 'RAG 文档管理',
+  app: { sourceLink: '查看源码' },
   login: {
     username: '用户名',
     password: '密码',

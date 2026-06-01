@@ -11,11 +11,11 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 
-	"backend/internal/api"
-	"backend/internal/infra"
-	"backend/internal/rag"
-	"backend/internal/repository"
-	"backend/internal/service"
+	"github.com/d2jvkpn/rag/backend/internal/api"
+	"github.com/d2jvkpn/rag/backend/internal/infra"
+	"github.com/d2jvkpn/rag/backend/internal/rag"
+	"github.com/d2jvkpn/rag/backend/internal/repository"
+	"github.com/d2jvkpn/rag/backend/internal/service"
 )
 
 type App struct {

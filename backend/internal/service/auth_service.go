@@ -11,8 +11,8 @@ import (
 	"github.com/pquerna/otp/totp"
 	"golang.org/x/crypto/bcrypt"
 
-	"backend/internal/model"
-	"backend/internal/repository"
+	"github.com/d2jvkpn/rag/backend/internal/model"
+	"github.com/d2jvkpn/rag/backend/internal/repository"
 )
 
 var ErrTOTPRequired = errors.New("totp_required")

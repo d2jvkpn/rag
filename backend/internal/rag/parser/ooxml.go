@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"backend/internal/model"
+	"github.com/d2jvkpn/rag/backend/internal/model"
 )
 
 type ooxmlBlock struct {

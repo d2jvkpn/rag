@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"backend/internal/model"
+	"github.com/d2jvkpn/rag/backend/internal/model"
 )
 
 func parsePptx(path, mediaDir string) (ParseResult, error) {

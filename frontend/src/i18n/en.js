@@ -1,5 +1,6 @@
 export default {
   appTitle: 'RAG Documents',
+  app: { sourceLink: 'Source on GitHub' },
   login: {
     username: 'Username',
     password: 'Password',

@@ -12,9 +12,9 @@ import (
 
 	"github.com/spf13/viper"
 
-	"backend/internal/model"
-	"backend/internal/rag"
-	"backend/internal/repository"
+	"github.com/d2jvkpn/rag/backend/internal/model"
+	"github.com/d2jvkpn/rag/backend/internal/rag"
+	"github.com/d2jvkpn/rag/backend/internal/repository"
 )
 
 func testConfig(tmpDir string) *viper.Viper {

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode"
 
-	"backend/internal/model"
+	"github.com/d2jvkpn/rag/backend/internal/model"
 )
 
 // ParseBlock is a structural unit from the parser (a section, slide, etc.)

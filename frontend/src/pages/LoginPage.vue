@@ -78,13 +78,12 @@ async function submit() {
       <n-form ref="formRef" :model="form" :rules="activeRules" @keydown.enter="submit">
         <template v-if="!totpStep">
           <n-form-item :label="t('login.username')" path="username">
-            <n-input v-model:value="form.username" :placeholder="t('login.username')" />
+            <n-input v-model:value="form.username" />
           </n-form-item>
           <n-form-item :label="t('login.password')" path="password">
             <n-input
               v-model:value="form.password"
               type="password"
-              :placeholder="t('login.password')"
               show-password-on="click"
             />
           </n-form-item>
@@ -111,6 +110,11 @@ async function submit() {
         </div>
       </n-form>
     </n-card>
+    <div class="login-footer">
+      <n-a href="https://github.com/d2jvkpn/rag" target="_blank" rel="noopener">
+        {{ t('app.sourceLink') }}
+      </n-a>
+    </div>
   </div>
 </template>
 
@@ -118,6 +122,7 @@ async function submit() {
 <style scoped>
 .login-wrapper {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   min-height: 100vh;
@@ -130,5 +135,15 @@ async function submit() {
   position: fixed;
   top: 16px;
   right: 20px;
+}
+.login-footer {
+  margin-top: 16px;
+  font-size: 12px;
+  text-align: center;
+}
+:deep(input:-webkit-autofill),
+:deep(input:-webkit-autofill:hover),
+:deep(input:-webkit-autofill:focus) {
+  -webkit-box-shadow: 0 0 0px 1000px #fff inset;
 }
 </style>

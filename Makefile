@@ -1,7 +1,10 @@
-.PHONY: backend_check backend_run frontend_run frontend_build
+.PHONY: backend_check backend_build backend_run frontend_run frontend_build build_image
 
 backend_check:
 	$(MAKE) -C backend check
+
+backend_build:
+	$(MAKE) -C backend build
 
 backend_run:
 	$(MAKE) -C backend run
@@ -17,5 +20,5 @@ build_image:
 	  --no-cache \
 	  --build-arg build_region=cn \
 	  --build-arg PUID=1000 \
-	  --build-arg PU=GID=1000 \
+	  --build-arg PGID=1000 \
 	  -t q.local/rag:latest ./

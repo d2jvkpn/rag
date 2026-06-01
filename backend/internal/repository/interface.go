@@ -1,6 +1,6 @@
 package repository
 
-import "backend/internal/model"
+import "github.com/d2jvkpn/rag/backend/internal/model"
 
 type UserStore interface {
 	FindUserByUsername(username string) (model.User, error)

@@ -18,8 +18,8 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
-	"backend/internal/migrations"
-	"backend/internal/model"
+	"github.com/d2jvkpn/rag/backend/internal/migrations"
+	"github.com/d2jvkpn/rag/backend/internal/model"
 )
 
 type PostgresStore struct {

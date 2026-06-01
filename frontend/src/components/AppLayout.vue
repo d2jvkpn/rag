@@ -3,7 +3,7 @@
 import { computed, h, ref, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { NIcon, useDialog, useMessage } from 'naive-ui'
-import { DocumentOutline, SearchOutline, PeopleOutline, LogOutOutline as LogOutIcon, KeyOutline as KeyIcon, PersonCircleOutline as PersonIcon, ShieldCheckmarkOutline as ShieldIcon, LanguageOutline as LangIcon } from '@vicons/ionicons5'
+import { DocumentOutline, SearchOutline, PeopleOutline, LogOutOutline as LogOutIcon, KeyOutline as KeyIcon, PersonCircleOutline as PersonIcon, ShieldCheckmarkOutline as ShieldIcon, LanguageOutline as LangIcon, LogoGithub as LogoGithubIcon } from '@vicons/ionicons5'
 import { useAuthStore } from '../stores/auth.js'
 import { getConfig } from '../config/app-config.js'
 import { authService } from '../services/auth.js'
@@ -257,6 +257,13 @@ async function confirmTOTPDisable() {
         </div>
       </n-dropdown>
 
+      <div class="sider-source" :class="{ 'sider-source--collapsed': collapsed }">
+        <a href="https://github.com/d2jvkpn/rag" target="_blank" rel="noopener">
+          <n-icon size="14"><logo-github-icon /></n-icon>
+          <span v-if="!collapsed">{{ t('app.sourceLink') }}</span>
+        </a>
+      </div>
+
       <div v-if="!collapsed" class="sider-resize-handle" @mousedown="startResize" />
     </n-layout-sider>
 
@@ -377,6 +384,31 @@ async function confirmTOTPDisable() {
 .sider-footer--collapsed {
   justify-content: center;
   padding: 0;
+}
+.sider-source {
+  position: absolute;
+  bottom: 52px;
+  left: 0;
+  right: 0;
+  padding: 4px 16px;
+  display: flex;
+}
+.sider-source a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--n-text-color-disabled, #aaa);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.sider-source a:hover {
+  color: var(--n-text-color, #333);
+}
+.sider-source--collapsed {
+  justify-content: center;
+  padding: 4px 0;
 }
 .user-name {
   font-size: 13px;

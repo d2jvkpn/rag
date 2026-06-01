@@ -12,10 +12,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
 
-	"backend/internal/infra"
-	"backend/internal/model"
-	"backend/internal/repository"
-	"backend/internal/service"
+	"github.com/d2jvkpn/rag/backend/internal/infra"
+	"github.com/d2jvkpn/rag/backend/internal/model"
+	"github.com/d2jvkpn/rag/backend/internal/repository"
+	"github.com/d2jvkpn/rag/backend/internal/service"
 )
 
 type Handler struct {

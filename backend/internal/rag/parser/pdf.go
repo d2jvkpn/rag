@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"backend/internal/infra"
-	"backend/internal/model"
+	"github.com/d2jvkpn/rag/backend/internal/infra"
+	"github.com/d2jvkpn/rag/backend/internal/model"
 	"go.uber.org/zap"
 )
 

@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -15,8 +17,8 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 
-	"backend/internal/app"
-	"backend/internal/infra"
+	"github.com/d2jvkpn/rag/backend/internal/app"
+	"github.com/d2jvkpn/rag/backend/internal/infra"
 )
 
 func main() {
@@ -34,6 +36,11 @@ func main() {
 		shutdownCtx context.Context
 		cancel      context.CancelFunc
 	)
+
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "RAG Document Processing Server\nhttps://github.com/d2jvkpn/rag\n\nUsage of %s:\n", os.Args[0])
+		flag.PrintDefaults()
+	}
 
 	flag.BoolVar(&release, "release", false, "run in release mode")
 	flag.StringVar(&addr, "addr", ":3061", "http listen address override")

@@ -3,7 +3,7 @@ package rag
 import (
 	"context"
 
-	"backend/internal/model"
+	"github.com/d2jvkpn/rag/backend/internal/model"
 )
 
 // VectorRecord is what gets written to the vector store for a single chunk.

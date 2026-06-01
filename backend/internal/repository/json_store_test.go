@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"backend/internal/model"
+	"github.com/d2jvkpn/rag/backend/internal/model"
 )
 
 func TestJSONStoreBackfillsKnowledgeBasesFromDocuments(t *testing.T) {

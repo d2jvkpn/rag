@@ -20,12 +20,12 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 
-	"backend/internal/infra"
-	"backend/internal/model"
-	"backend/internal/queue"
-	"backend/internal/rag"
-	"backend/internal/rag/parser"
-	"backend/internal/repository"
+	"github.com/d2jvkpn/rag/backend/internal/infra"
+	"github.com/d2jvkpn/rag/backend/internal/model"
+	"github.com/d2jvkpn/rag/backend/internal/queue"
+	"github.com/d2jvkpn/rag/backend/internal/rag"
+	"github.com/d2jvkpn/rag/backend/internal/rag/parser"
+	"github.com/d2jvkpn/rag/backend/internal/repository"
 )
 
 // docStore is the subset of repository.Store used by DocumentService.

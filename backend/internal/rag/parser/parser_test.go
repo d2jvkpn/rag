@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"backend/internal/model"
+	"github.com/d2jvkpn/rag/backend/internal/model"
 )
 
 func TestCleanText(t *testing.T) {
