@@ -1,7 +1,7 @@
 .PHONY: backend_check backend_build backend_run frontend_run frontend_build build_image
 
 git_branch := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
-git_commit := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+git_commit := $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 commit_time := $(shell git log -1 --format=%cI 2>/dev/null || echo unknown)
 version_pkg := github.com/d2jvkpn/rag/backend/internal/infra
 

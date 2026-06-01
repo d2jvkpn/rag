@@ -19,7 +19,7 @@ function gitCmd(args) {
 }
 
 const gitBranch = process.env.GIT_BRANCH || gitCmd('rev-parse --abbrev-ref HEAD')
-const gitCommit = process.env.GIT_COMMIT || gitCmd('rev-parse --short HEAD')
+const gitCommit = process.env.GIT_COMMIT || gitCmd('rev-parse HEAD')
 const commitTime = process.env.COMMIT_TIME || gitCmd('log -1 --format=%cI')
 
 export default defineConfig({
