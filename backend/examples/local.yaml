@@ -45,8 +45,3 @@ milvus:
   addr: "127.0.0.1:19530"
   db: "rag"
   api_key: ""
-  #collections:
-  #- collection: public
-  #  chunk_size: 800    # optional, default 800
-  #  chunk_overlap: 100  # optional, default 100
-  #  min_chunks: 2       # optional, default 2 (docs shorter than min_chunks×chunk_size become one chunk)
