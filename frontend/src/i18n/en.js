@@ -61,6 +61,13 @@ export default {
       enableSuccess: '{name} enabled',
       actionFailed: 'Action failed',
     },
+    permissions: {
+      view_user_list: 'View Users',
+      create_knowledge_bases: 'Create KB',
+      delete_documents: 'Delete Docs',
+      delete_knowledge_bases: 'Delete KB',
+      disable_users: 'Disable Users',
+    },
   },
   logout: {
     title: 'Sign Out',
@@ -153,6 +160,7 @@ export default {
   },
   knowledgeBases: {
     create: 'Create Knowledge Base',
+    delete: 'Delete',
     refresh: 'Refresh',
     updatedAt: 'Updated at {time}',
     fields: {
@@ -167,6 +175,7 @@ export default {
       chunking: 'Chunking',
       createdBy: 'Created By',
       updatedAt: 'Updated',
+      actions: 'Actions',
     },
     modal: {
       title: 'Create Knowledge Base',
@@ -174,6 +183,13 @@ export default {
       cancel: 'Cancel',
       success: 'Knowledge base created',
       failed: 'Create failed',
+    },
+    deleteDialog: {
+      title: 'Delete Knowledge Base',
+      content: 'Delete "{id}"? All documents in the knowledge base must be manually deleted first.',
+      confirm: 'Delete',
+      cancel: 'Cancel',
+      deleted: 'Knowledge base deleted',
     },
     rules: {
       idRequired: 'Enter a knowledge base ID',

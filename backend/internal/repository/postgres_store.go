@@ -219,6 +219,17 @@ func (s *PostgresStore) ListKnowledgeBases() []model.KnowledgeBase {
 	return items
 }
 
+func (s *PostgresStore) DeleteKnowledgeBase(knowledgeBaseID string) error {
+	result := s.db.Where("knowledge_base_id = ?", knowledgeBaseID).Delete(&knowledgeBaseRow{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *PostgresStore) EnsureKnowledgeBasesFromDocuments(dim int, embedderModel string) error {
 	sql := `
 		INSERT INTO knowledge_bases (

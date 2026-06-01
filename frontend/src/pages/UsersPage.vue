@@ -26,6 +26,17 @@ const pageStart = computed(() => users.value.length === 0 ? 0 : (displayPage.val
 const pageEnd = computed(() => users.value.length === 0 ? 0 : Math.min(displayPage.value * pageSize, users.value.length))
 const pagedUsers = computed(() => users.value.slice(pageStart.value - 1, pageEnd.value))
 
+const permissionTagType = {
+  view_user_list: 'default',
+  create_knowledge_bases: 'success',
+  delete_documents: 'warning',
+  delete_knowledge_bases: 'warning',
+  disable_users: 'error',
+}
+function permissionType(p) {
+  return permissionTagType[p] ?? 'info'
+}
+
 const columns = computed(() => [
   {
     title: t('users.table.username'),
@@ -41,11 +52,15 @@ const columns = computed(() => [
     key: 'permissions',
     render: (row) => {
       const items = Array.isArray(row.permissions) ? row.permissions : []
-      if (items.length === 0) return '—'
-      return h(NSpace, { size: 4, wrapItem: true }, () =>
-        items.map(permission =>
-          h(NTag, { size: 'small', bordered: false }, { default: () => permission })
-        )
+      if (items.length === 0) return h(NText, { depth: 3 }, { default: () => '—' })
+      return h(NSpace, { size: [4, 4], wrap: true }, () =>
+        items.map(p => h('span', { title: p }, [
+          h(NTag, {
+            size: 'small',
+            bordered: false,
+            type: permissionType(p),
+          }, { default: () => t(`users.permissions.${p}`, p) }),
+        ]))
       )
     },
   },

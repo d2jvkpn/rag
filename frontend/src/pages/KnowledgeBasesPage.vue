@@ -1,7 +1,7 @@
 
 <script setup>
 import { computed, h, onMounted, ref } from 'vue'
-import { useMessage, NTag, NText, NEllipsis } from 'naive-ui'
+import { useMessage, useDialog, NButton, NTag, NText, NEllipsis } from 'naive-ui'
 import { knowledgeBasesService } from '../services/knowledge-bases.js'
 import { useAuthStore } from '../stores/auth.js'
 import { useI18n } from '../i18n/index.js'
@@ -10,6 +10,7 @@ import { useFormat } from '../utils/format.js'
 const { t } = useI18n()
 const { rfc3339, fromNow } = useFormat()
 const message = useMessage()
+const dialog = useDialog()
 const auth = useAuthStore()
 
 const loading = ref(false)
@@ -24,6 +25,7 @@ const defaultModel = ref('')
 
 const form = ref(defaultForm())
 const canCreate = computed(() => auth.user?.permissions?.includes('create_knowledge_bases'))
+const canDelete = computed(() => auth.user?.permissions?.includes('delete_knowledge_bases'))
 
 const analyzerOptions = computed(() => [
   { label: 'chinese', value: 'chinese' },
@@ -104,6 +106,15 @@ const columns = computed(() => [
     width: 120,
     render: (row) => h('span', { title: rfc3339(row.updated_at), style: 'font-size:12px;color:#999' }, fromNow(row.updated_at)),
   },
+  ...(canDelete.value ? [{
+    title: t('knowledgeBases.fields.actions'),
+    key: 'actions',
+    width: 80,
+    render: (row) => h(NButton, {
+      size: 'tiny', type: 'error',
+      onClick: () => handleDelete(row),
+    }, { default: () => t('knowledgeBases.delete') }),
+  }] : []),
 ])
 
 function defaultForm() {
@@ -160,6 +171,24 @@ async function handleCreate() {
   }
 }
 
+function handleDelete(kb) {
+  dialog.warning({
+    title: t('knowledgeBases.deleteDialog.title'),
+    content: t('knowledgeBases.deleteDialog.content', { id: kb.knowledge_base_id }),
+    positiveText: t('knowledgeBases.deleteDialog.confirm'),
+    negativeText: t('knowledgeBases.deleteDialog.cancel'),
+    onPositiveClick: async () => {
+      try {
+        await knowledgeBasesService.delete(kb.knowledge_base_id)
+        message.success(t('knowledgeBases.deleteDialog.deleted'))
+        await loadKnowledgeBases()
+      } catch (e) {
+        message.error(e.message)
+      }
+    },
+  })
+}
+
 onMounted(loadKnowledgeBases)
 </script>
 
@@ -183,7 +212,7 @@ onMounted(loadKnowledgeBases)
         :loading="loading"
         :pagination="false"
         :row-key="(row) => row.knowledge_base_id"
-        :scroll-x="1100"
+        :scroll-x="canDelete ? 1180 : 1100"
         size="small"
       />
     </div>

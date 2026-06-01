@@ -61,6 +61,13 @@ export default {
       enableSuccess: '已启用 {name}',
       actionFailed: '操作失败',
     },
+    permissions: {
+      view_user_list: '查看用户',
+      create_knowledge_bases: '创建知识库',
+      delete_documents: '删除文档',
+      delete_knowledge_bases: '删除知识库',
+      disable_users: '禁用用户',
+    },
   },
   logout: {
     title: '退出登录',
@@ -153,6 +160,7 @@ export default {
   },
   knowledgeBases: {
     create: '创建知识库',
+    delete: '删除',
     refresh: '刷新',
     updatedAt: '更新于 {time}',
     fields: {
@@ -167,6 +175,7 @@ export default {
       chunking: '切分参数',
       createdBy: '创建者',
       updatedAt: '更新',
+      actions: '操作',
     },
     modal: {
       title: '创建知识库',
@@ -174,6 +183,13 @@ export default {
       cancel: '取消',
       success: '知识库已创建',
       failed: '创建失败',
+    },
+    deleteDialog: {
+      title: '删除知识库',
+      content: '确认删除「{id}」？知识库中的所有文档必须已手动删除，否则无法删除。',
+      confirm: '删除',
+      cancel: '取消',
+      deleted: '知识库已删除',
     },
     rules: {
       idRequired: '请输入知识库 ID',

@@ -311,6 +311,24 @@ func (s *DocumentService) ListAvailableKnowledgeBases() []model.KnowledgeBase {
 }
 
 var ErrKnowledgeBaseExists = errors.New("knowledge base already exists")
+var ErrKnowledgeBaseNotEmpty = errors.New("knowledge base still has documents; delete all documents before deleting the knowledge base")
+
+func (s *DocumentService) DeleteKnowledgeBase(kbID string) error {
+	if _, err := s.store.GetKnowledgeBase(kbID); err != nil {
+		return err
+	}
+	docs, err := s.store.ListDocuments(kbID, "")
+	if err != nil {
+		return err
+	}
+	if len(docs) > 0 {
+		return ErrKnowledgeBaseNotEmpty
+	}
+	if err := s.vectorStore.DeleteKnowledgeBase(context.Background(), kbID); err != nil {
+		return err
+	}
+	return s.store.DeleteKnowledgeBase(kbID)
+}
 
 func validateKnowledgeBaseInput(kbID, analyzer string, chunkSize, chunkOverlap, minChunks int) error {
 	if kbID == "" {

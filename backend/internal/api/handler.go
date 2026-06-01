@@ -123,6 +123,11 @@ func (h *Handler) Routes() http.Handler {
 		h.withPermission("create_knowledge_bases"),
 		h.handleCreateKnowledgeBase,
 	)
+	apiGroup.DELETE(
+		"/knowledge-bases/:knowledge_base_id",
+		h.withPermission("delete_knowledge_bases"),
+		h.handleDeleteKnowledgeBase,
+	)
 	apiGroup.GET("/knowledge-bases/available", h.handleListAvailableKnowledgeBases)
 	apiGroup.POST("/knowledge-bases/query", h.handleQuery)
 
@@ -542,6 +547,19 @@ func (h *Handler) handleCreateKnowledgeBase(c *gin.Context) {
 		return
 	}
 	writeData(c, 201, kb)
+}
+
+func (h *Handler) handleDeleteKnowledgeBase(c *gin.Context) {
+	kbID := c.Param("knowledge_base_id")
+	if err := h.documentService.DeleteKnowledgeBase(kbID); err != nil {
+		if errors.Is(err, service.ErrKnowledgeBaseNotEmpty) {
+			writeError(c, 409, "conflict", err.Error(), nil)
+			return
+		}
+		writeError(c, 400, "bad_request", err.Error(), nil)
+		return
+	}
+	c.Status(204)
 }
 
 func (h *Handler) handleListAvailableKnowledgeBases(c *gin.Context) {

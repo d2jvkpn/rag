@@ -294,7 +294,7 @@ func buildPermissionMap(accounts []repository.AccountSeed) map[string][]string {
 		perms := make([]string, 0, len(acc.Permissions))
 		for _, p := range acc.Permissions {
 			switch p {
-			case "view_user_list", "delete_documents", "disable_users", "create_knowledge_bases":
+			case "view_user_list", "delete_documents", "disable_users", "create_knowledge_bases", "delete_knowledge_bases":
 				if _, ok := seen[p]; ok {
 					continue
 				}

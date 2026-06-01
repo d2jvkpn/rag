@@ -186,6 +186,16 @@ func (s *JSONStore) ListKnowledgeBases() []model.KnowledgeBase {
 	return items
 }
 
+func (s *JSONStore) DeleteKnowledgeBase(knowledgeBaseID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.data.KnowledgeBases[knowledgeBaseID]; !ok {
+		return ErrNotFound
+	}
+	delete(s.data.KnowledgeBases, knowledgeBaseID)
+	return s.persistLocked()
+}
+
 func (s *JSONStore) FindUserByUsername(username string) (model.User, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

@@ -7,4 +7,7 @@ export const knowledgeBasesService = {
   create(payload) {
     return http.post('/api/knowledge-bases', payload)
   },
+  delete(knowledgeBaseId) {
+    return http.delete(`/api/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}`)
+  },
 }
