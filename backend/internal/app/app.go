@@ -31,6 +31,7 @@ func New(v *viper.Viper) (*App, error) {
 		err             error
 		accounts        []repository.AccountSeed
 		store           repository.Store
+		syncResult      repository.AccountSyncResult
 		opts            []func(*service.DocumentService)
 		documentService *service.DocumentService
 		blacklist       service.TokenBlacklist
@@ -43,9 +44,15 @@ func New(v *viper.Viper) (*App, error) {
 		return nil, err
 	}
 
-	if store, err = initStore(v, accounts); err != nil {
+	if store, syncResult, err = initStore(v, accounts); err != nil {
 		return nil, err
 	}
+	infra.L.Info("accounts synced",
+		zap.Strings("existing", syncResult.Existing),
+		zap.Strings("created", syncResult.Created),
+		zap.Strings("enabled", syncResult.Enabled),
+		zap.Strings("disabled", syncResult.Disabled),
+	)
 
 	if opts, err = buildServiceOpts(v); err != nil {
 		return nil, err
@@ -126,7 +133,7 @@ func readAccounts(v *viper.Viper) (accounts []repository.AccountSeed, err error)
 	return accounts, nil
 }
 
-func initStore(v *viper.Viper, accounts []repository.AccountSeed) (repository.Store, error) {
+func initStore(v *viper.Viper, accounts []repository.AccountSeed) (repository.Store, repository.AccountSyncResult, error) {
 	var str string
 
 	if str = v.GetString("database.dsn"); str != "" {
@@ -142,6 +149,7 @@ func initStore(v *viper.Viper, accounts []repository.AccountSeed) (repository.St
 
 	return repository.NewJSONStore(str, accounts)
 }
+
 
 func initBlacklist(v *viper.Viper) (blacklist service.TokenBlacklist, err error) {
 	var (

@@ -34,10 +34,10 @@ func (s *PostgresStore) Close() error {
 	return sqlDB.Close()
 }
 
-func NewPostgresStore(dsn string, accounts []AccountSeed) (*PostgresStore, error) {
+func NewPostgresStore(dsn string, accounts []AccountSeed) (*PostgresStore, AccountSyncResult, error) {
 	sqlDB, err := sql.Open("postgres", postgresDSNWithConnectTimeout(dsn))
 	if err != nil {
-		return nil, err
+		return nil, AccountSyncResult{}, err
 	}
 
 	sqlDB.SetMaxOpenConns(10)
@@ -45,7 +45,7 @@ func NewPostgresStore(dsn string, accounts []AccountSeed) (*PostgresStore, error
 	sqlDB.SetConnMaxLifetime(30 * time.Minute)
 
 	if err := runMigrations(sqlDB); err != nil {
-		return nil, err
+		return nil, AccountSyncResult{}, err
 	}
 
 	db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{
@@ -53,14 +53,15 @@ func NewPostgresStore(dsn string, accounts []AccountSeed) (*PostgresStore, error
 		Logger:                gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	if err != nil {
-		return nil, err
+		return nil, AccountSyncResult{}, err
 	}
 
 	store := &PostgresStore{db: db}
-	if err := store.ensureAccounts(accounts); err != nil {
-		return nil, err
+	result, err := store.syncAccounts(accounts)
+	if err != nil {
+		return nil, AccountSyncResult{}, err
 	}
-	return store, nil
+	return store, result, nil
 }
 
 func postgresDSNWithConnectTimeout(dsn string) string {
@@ -99,31 +100,67 @@ func runMigrations(sqlDB *sql.DB) error {
 	return nil
 }
 
-func (s *PostgresStore) ensureAccounts(accounts []AccountSeed) error {
+func (s *PostgresStore) syncAccounts(accounts []AccountSeed) (AccountSyncResult, error) {
+	var result AccountSyncResult
+
+	accountSet := make(map[string]struct{}, len(accounts))
 	for _, acc := range accounts {
-		var count int64
-		if err := s.db.Model(&userRow{}).
-			Where("username = ?", acc.Username).
-			Count(&count).Error; err != nil {
-			return err
-		}
-		if count > 0 {
+		accountSet[acc.Username] = struct{}{}
+	}
+
+	now := time.Now().UTC()
+
+	// Disable users absent from accounts config.
+	var allUsers []userRow
+	if err := s.db.Find(&allUsers).Error; err != nil {
+		return result, err
+	}
+	for _, row := range allUsers {
+		if _, ok := accountSet[row.Username]; ok {
 			continue
 		}
-		now := time.Now().UTC()
-		row := userRow{
-			UserID:       uuid.Must(uuid.NewV7()).String(),
-			Username:     acc.Username,
-			PasswordHash: resolvePasswordHash(acc.Password),
-			Status:       "active",
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		}
-		if err := s.db.Create(&row).Error; err != nil {
-			return err
+		if row.Status != "disabled" {
+			row.Status = "disabled"
+			row.UpdatedAt = now
+			if err := s.db.Save(&row).Error; err != nil {
+				return result, err
+			}
+			result.Disabled = append(result.Disabled, row.Username)
 		}
 	}
-	return nil
+
+	// Create or re-enable accounts present in config.
+	for _, acc := range accounts {
+		var existing userRow
+		err := s.db.Where("username = ?", acc.Username).First(&existing).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			row := userRow{
+				UserID:       uuid.Must(uuid.NewV7()).String(),
+				Username:     acc.Username,
+				PasswordHash: resolvePasswordHash(acc.Password),
+				Status:       "active",
+				CreatedAt:    now,
+				UpdatedAt:    now,
+			}
+			if err := s.db.Create(&row).Error; err != nil {
+				return result, err
+			}
+			result.Created = append(result.Created, acc.Username)
+		} else if err != nil {
+			return result, err
+		} else if existing.Status == "disabled" {
+			existing.Status = "active"
+			existing.UpdatedAt = now
+			if err := s.db.Save(&existing).Error; err != nil {
+				return result, err
+			}
+			result.Enabled = append(result.Enabled, acc.Username)
+		} else {
+			result.Existing = append(result.Existing, acc.Username)
+		}
+	}
+
+	return result, nil
 }
 
 func (s *PostgresStore) FindUserByUsername(username string) (model.User, error) {

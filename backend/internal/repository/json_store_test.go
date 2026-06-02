@@ -35,7 +35,7 @@ func TestJSONStoreBackfillsKnowledgeBasesFromDocuments(t *testing.T) {
 		t.Fatalf("write state: %v", err)
 	}
 
-	store, err := NewJSONStore(path, nil)
+	store, _, err := NewJSONStore(path, nil)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestJSONStoreListDocumentsPage(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "state.json")
-	store, err := NewJSONStore(path, nil)
+	store, _, err := NewJSONStore(path, nil)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestJSONStoreListChunksPage(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "state.json")
-	store, err := NewJSONStore(path, nil)
+	store, _, err := NewJSONStore(path, nil)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

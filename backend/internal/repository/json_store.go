@@ -23,6 +23,14 @@ type AccountSeed struct {
 	Permissions []string `mapstructure:"permissions"` // config-only permissions; never persisted
 }
 
+// AccountSyncResult reports what syncAccounts did during startup.
+type AccountSyncResult struct {
+	Existing []string // already active, no change
+	Created  []string
+	Enabled  []string // re-activated (were disabled, now back in accounts)
+	Disabled []string
+}
+
 var ErrNotFound = errors.New("not found")
 
 type State struct {
@@ -42,7 +50,7 @@ func (s *JSONStore) Close() error {
 	return nil
 }
 
-func NewJSONStore(path string, accounts []AccountSeed) (*JSONStore, error) {
+func NewJSONStore(path string, accounts []AccountSeed) (*JSONStore, AccountSyncResult, error) {
 	store := &JSONStore{
 		path: path,
 		data: State{
@@ -54,12 +62,12 @@ func NewJSONStore(path string, accounts []AccountSeed) (*JSONStore, error) {
 	}
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, err
+		return nil, AccountSyncResult{}, err
 	}
 
 	if raw, err := os.ReadFile(path); err == nil && len(raw) > 0 {
 		if err := json.Unmarshal(raw, &store.data); err != nil {
-			return nil, err
+			return nil, AccountSyncResult{}, err
 		}
 		if store.data.Users == nil {
 			store.data.Users = map[string]model.User{}
@@ -74,40 +82,79 @@ func NewJSONStore(path string, accounts []AccountSeed) (*JSONStore, error) {
 			store.data.Chunks = map[string][]model.DocumentChunk{}
 		}
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, err
+		return nil, AccountSyncResult{}, err
 	}
 
-	changed := false
+	result, err := store.syncAccounts(accounts)
+	if err != nil {
+		return nil, result, err
+	}
+	return store, result, nil
+}
+
+func (s *JSONStore) syncAccounts(accounts []AccountSeed) (AccountSyncResult, error) {
+	var result AccountSyncResult
+
+	accountSet := make(map[string]struct{}, len(accounts))
 	for _, acc := range accounts {
-		exists := false
-		for _, u := range store.data.Users {
-			if u.Username == acc.Username {
-				exists = true
-				break
-			}
-		}
-		if exists {
+		accountSet[acc.Username] = struct{}{}
+	}
+
+	now := time.Now().UTC()
+	changed := false
+
+	// Disable users absent from accounts config.
+	for id, u := range s.data.Users {
+		if _, ok := accountSet[u.Username]; ok {
 			continue
 		}
-		now := time.Now().UTC()
-		user := model.User{
-			UserID:       uuid.Must(uuid.NewV7()).String(),
-			Username:     acc.Username,
-			PasswordHash: resolvePasswordHash(acc.Password),
-			Status:       "active",
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		}
-		store.data.Users[user.UserID] = user
-		changed = true
-	}
-	if changed {
-		if err := store.persistLocked(); err != nil {
-			return nil, err
+		if u.Status != "disabled" {
+			u.Status = "disabled"
+			u.UpdatedAt = now
+			s.data.Users[id] = u
+			changed = true
+			result.Disabled = append(result.Disabled, u.Username)
 		}
 	}
 
-	return store, nil
+	// Build username → user for quick lookup.
+	byUsername := make(map[string]model.User, len(s.data.Users))
+	for _, u := range s.data.Users {
+		byUsername[u.Username] = u
+	}
+
+	// Create or re-enable accounts present in config.
+	for _, acc := range accounts {
+		existing, ok := byUsername[acc.Username]
+		if !ok {
+			user := model.User{
+				UserID:       uuid.Must(uuid.NewV7()).String(),
+				Username:     acc.Username,
+				PasswordHash: resolvePasswordHash(acc.Password),
+				Status:       "active",
+				CreatedAt:    now,
+				UpdatedAt:    now,
+			}
+			s.data.Users[user.UserID] = user
+			changed = true
+			result.Created = append(result.Created, acc.Username)
+		} else if existing.Status == "disabled" {
+			existing.Status = "active"
+			existing.UpdatedAt = now
+			s.data.Users[existing.UserID] = existing
+			changed = true
+			result.Enabled = append(result.Enabled, acc.Username)
+		} else {
+			result.Existing = append(result.Existing, acc.Username)
+		}
+	}
+
+	if changed {
+		if err := s.persistLocked(); err != nil {
+			return result, err
+		}
+	}
+	return result, nil
 }
 
 func (s *JSONStore) EnsureKnowledgeBasesFromDocuments(dim int, embedderModel string) error {
