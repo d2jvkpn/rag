@@ -20,21 +20,25 @@ type VectorRecord struct {
 	ChunkIndex      int
 	Text            string
 	Embedding       []float32
+	Tags            []string
+	FileSHA256      string
 }
 
 // SearchResult is a single hit returned by semantic search.
 type SearchResult struct {
-	ChunkID         string  `json:"chunk_id"`
-	DocumentID      string  `json:"document_id"`
-	KnowledgeBaseID string  `json:"knowledge_base_id"`
-	Filename        string  `json:"filename"`
-	SourceType      string  `json:"source_type"`
-	SectionTitle    string  `json:"section_title"`
-	PageStart       int     `json:"page_start"`
-	PageEnd         int     `json:"page_end"`
-	ChunkIndex      int     `json:"chunk_index"`
-	Text            string  `json:"text"`
-	Score           float32 `json:"score"`
+	ChunkID         string   `json:"chunk_id"`
+	DocumentID      string   `json:"document_id"`
+	KnowledgeBaseID string   `json:"knowledge_base_id"`
+	Filename        string   `json:"filename"`
+	SourceType      string   `json:"source_type"`
+	SectionTitle    string   `json:"section_title"`
+	PageStart       int      `json:"page_start"`
+	PageEnd         int      `json:"page_end"`
+	ChunkIndex      int      `json:"chunk_index"`
+	Text            string   `json:"text"`
+	Score           float32  `json:"score"`
+	Tags            []string `json:"tags,omitempty"`
+	FileSHA256      string   `json:"file_sha256,omitempty"`
 }
 
 // SearchMode selects which retrieval method to use.
@@ -123,6 +127,8 @@ func BuildRecords(
 			ChunkIndex:      c.ChunkIndex,
 			Text:            c.Text,
 			Embedding:       embeddings[i],
+			Tags:            doc.Tags,
+			FileSHA256:      doc.SHA256,
 		})
 	}
 	return records

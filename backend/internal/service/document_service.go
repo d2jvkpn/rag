@@ -212,12 +212,18 @@ func (s *DocumentService) CreateDocument(
 	}
 
 	sum := sha256.Sum256(content)
+	cleanedTags, err := cleanTags(tags)
+	if err != nil {
+		_ = os.RemoveAll(dir)
+		return model.Document{}, err
+	}
+
 	document := model.Document{
 		DocumentID:      documentID,
 		KnowledgeBaseID: knowledgeBaseID,
 		Filename:        filename,
 		Title:           strings.TrimSpace(title),
-		Tags:            cleanTags(tags),
+		Tags:            cleanedTags,
 		SourceType:      sourceType,
 		StoragePath:     storagePath,
 		SHA256:          hex.EncodeToString(sum[:]),
@@ -374,7 +380,7 @@ func (s *DocumentService) ListDocumentsPage(
 	return s.store.ListDocumentsPage(knowledgeBaseID, tag, status, page, pageSize)
 }
 
-func (s *DocumentService) ListDocumentTags(knowledgeBaseID string) []model.DocumentTagCount {
+func (s *DocumentService) ListDocumentTags(knowledgeBaseID string) ([]model.DocumentTagCount, error) {
 	return s.store.ListDocumentTags(knowledgeBaseID)
 }
 
@@ -1058,13 +1064,27 @@ func sanitizeFilename(name string) string {
 	return name
 }
 
-func cleanTags(tags []string) []string {
+func cleanTags(tags []string) ([]string, error) {
+	const maxTagRunes = 64
+	const maxTagCount = 20
+	seen := make(map[string]struct{})
 	out := make([]string, 0, len(tags))
 	for _, tag := range tags {
-		tag = strings.TrimSpace(tag)
-		if tag != "" {
-			out = append(out, tag)
+		tag = strings.ToLower(strings.TrimSpace(tag))
+		if tag == "" {
+			continue
 		}
+		if len([]rune(tag)) > maxTagRunes {
+			return nil, fmt.Errorf("tag %q exceeds maximum length of %d characters", tag, maxTagRunes)
+		}
+		if _, dup := seen[tag]; dup {
+			continue
+		}
+		if len(out) >= maxTagCount {
+			return nil, fmt.Errorf("too many tags: maximum is %d", maxTagCount)
+		}
+		seen[tag] = struct{}{}
+		out = append(out, tag)
 	}
-	return out
+	return out, nil
 }

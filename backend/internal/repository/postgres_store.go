@@ -379,7 +379,7 @@ func (s *PostgresStore) documentsQuery(q *gorm.DB, knowledgeBaseID, tag, status 
 	return q
 }
 
-func (s *PostgresStore) ListDocumentTags(knowledgeBaseID string) []model.DocumentTagCount {
+func (s *PostgresStore) ListDocumentTags(knowledgeBaseID string) ([]model.DocumentTagCount, error) {
 	type row struct {
 		Tag   string `gorm:"column:tag"`
 		Count int    `gorm:"column:count"`
@@ -393,13 +393,15 @@ func (s *PostgresStore) ListDocumentTags(knowledgeBaseID string) []model.Documen
 		GROUP BY tag
 		ORDER BY count DESC, tag ASC
 	`
-	s.db.Raw(sql, knowledgeBaseID).Scan(&rows)
+	if err := s.db.Raw(sql, knowledgeBaseID).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
 
 	items := make([]model.DocumentTagCount, len(rows))
 	for i, r := range rows {
 		items[i] = model.DocumentTagCount{Tag: r.Tag, Count: r.Count}
 	}
-	return items
+	return items, nil
 }
 
 func (s *PostgresStore) DeleteDocument(

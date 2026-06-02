@@ -43,7 +43,7 @@ func TestDocumentLifecycle(t *testing.T) {
 			Permissions: []string{"view_user_list", "delete_documents", "disable_users"},
 		},
 	}
-	store, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
+	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestCreateKnowledgeBaseEndpoint(t *testing.T) {
 		{Username: "admin", Password: "admin123", Permissions: []string{"create_knowledge_bases"}},
 		{Username: "user1", Password: "user123"},
 	}
-	store, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
+	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}
@@ -229,7 +229,7 @@ func TestAuthRequired(t *testing.T) {
 	v := testConfig(tmpDir)
 
 	accounts := []repository.AccountSeed{{Username: "admin", Password: "admin123"}}
-	store, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
+	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}
@@ -325,7 +325,7 @@ func TestUserListRequiresPermission(t *testing.T) {
 		{Username: "user1", Password: "user123"},
 	}
 
-	store, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
+	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}
@@ -366,7 +366,7 @@ func TestDocumentTagsEndpoint(t *testing.T) {
 	v := testConfig(tmpDir)
 	accounts := []repository.AccountSeed{{Username: "admin", Password: "admin123"}}
 
-	store, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
+	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}
@@ -448,7 +448,7 @@ func TestDisableUserBlocksFurtherRequests(t *testing.T) {
 		{Username: "user1", Password: "user123"},
 	}
 
-	store, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
+	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}
@@ -508,7 +508,7 @@ func TestDeleteDocumentPermissionOverridesOwnership(t *testing.T) {
 		{Username: "user1", Password: "user123"},
 	}
 
-	store, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
+	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}

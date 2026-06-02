@@ -515,6 +515,7 @@ onMounted(loadKnowledgeBases)
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <n-text style="font-size:13px;font-weight:600">{{ idx + 1 }}/{{ results.length }}. {{ item.filename }}</n-text>
                 <n-tag size="tiny">{{ t(`sourceType.${item.source_type}`) || item.source_type }}</n-tag>
+                <n-tag v-for="tag in item.tags" :key="tag" size="tiny" :bordered="false">{{ tag }}</n-tag>
                 <n-text v-if="item.section_title" depth="3" style="font-size:12px">{{ item.section_title }}</n-text>
                 <n-text v-if="item.page_start" depth="3" style="font-size:12px">
                   p{{ item.page_start }}<span v-if="item.page_end && item.page_end !== item.page_start">–{{ item.page_end }}</span>

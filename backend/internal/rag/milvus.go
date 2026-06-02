@@ -24,6 +24,8 @@ var searchOutputFields = []string{
 	"page_end",
 	"chunk_index",
 	"text",
+	"tags",
+	"file_sha256",
 }
 
 // Milvus implements VectorStore using the official Milvus gRPC client v2.
@@ -115,6 +117,8 @@ func (m *Milvus) Upsert(ctx context.Context, records []VectorRecord) error {
 	chunkIdxs := make([]int32, len(records))
 	texts := make([]string, len(records))
 	embeddings := make([][]float32, len(records))
+	tagsValues := make([][]string, len(records))
+	fileSHA256s := make([]string, len(records))
 
 	for i, r := range records {
 		ids[i] = r.ID
@@ -129,6 +133,12 @@ func (m *Milvus) Upsert(ctx context.Context, records []VectorRecord) error {
 		chunkIdxs[i] = int32(r.ChunkIndex)
 		texts[i] = r.Text
 		embeddings[i] = r.Embedding
+		if r.Tags != nil {
+			tagsValues[i] = r.Tags
+		} else {
+			tagsValues[i] = []string{}
+		}
+		fileSHA256s[i] = r.FileSHA256
 	}
 
 	_, err := m.client.Upsert(ctx, milvusclient.NewColumnBasedInsertOption(collection,
@@ -144,6 +154,8 @@ func (m *Milvus) Upsert(ctx context.Context, records []VectorRecord) error {
 		column.NewColumnInt32("chunk_index", chunkIdxs),
 		column.NewColumnVarChar("text", texts),
 		column.NewColumnFloatVector("embedding", dim, embeddings),
+		column.NewColumnVarCharArray("tags", tagsValues),
+		column.NewColumnVarChar("file_sha256", fileSHA256s),
 	))
 	return err
 }
@@ -333,6 +345,8 @@ func parseResults(rs milvusclient.ResultSet) []SearchResult {
 			ChunkIndex:      colInt(rs, "chunk_index", i),
 			Text:            colStr(rs, "text", i),
 			Score:           score,
+			Tags:            colStrArray(rs, "tags", i),
+			FileSHA256:      colStr(rs, "file_sha256", i),
 		})
 	}
 	return results
@@ -354,6 +368,22 @@ func colInt(rs milvusclient.ResultSet, field string, i int) int {
 	}
 	v, _ := col.GetAsInt64(i)
 	return int(v)
+}
+
+func colStrArray(rs milvusclient.ResultSet, field string, i int) []string {
+	col := rs.GetColumn(field)
+	if col == nil {
+		return nil
+	}
+	arr, ok := col.(*column.ColumnVarCharArray)
+	if !ok {
+		return nil
+	}
+	data := arr.Data()
+	if i >= len(data) {
+		return nil
+	}
+	return data[i]
 }
 
 func (m *Milvus) ensureDatabase(ctx context.Context, db string) error {
@@ -380,19 +410,24 @@ func (m *Milvus) ensureCollection(ctx context.Context, cfg CollectionConfig) err
 		if err != nil {
 			return fmt.Errorf("milvus describe_collection %q: %w", name, err)
 		}
-		hasSparse := false
+		hasSparse, hasTags, hasFileSHA256 := false, false, false
 		existingAnalyzer := ""
 		for _, f := range col.Schema.Fields {
-			if f.Name == "sparse" {
+			switch f.Name {
+			case "sparse":
 				hasSparse = true
-			}
-			if f.Name == "text" {
+			case "tags":
+				hasTags = true
+			case "file_sha256":
+				hasFileSHA256 = true
+			case "text":
 				if p, ok := f.TypeParams["analyzer_params"]; ok {
 					existingAnalyzer = p
 				}
 			}
 		}
-		schemaOK := hasSparse && (existingAnalyzer == "" || analyzerType(existingAnalyzer) == analyzer)
+		schemaOK := hasSparse && hasTags && hasFileSHA256 &&
+			(existingAnalyzer == "" || analyzerType(existingAnalyzer) == analyzer)
 		if schemaOK {
 			task, err := m.client.LoadCollection(ctx, milvusclient.NewLoadCollectionOption(name))
 			if err != nil {
@@ -440,6 +475,14 @@ func (m *Milvus) ensureCollection(ctx context.Context, cfg CollectionConfig) err
 		WithField(entity.NewField().WithName("page_start").WithDataType(entity.FieldTypeInt32)).
 		WithField(entity.NewField().WithName("page_end").WithDataType(entity.FieldTypeInt32)).
 		WithField(entity.NewField().WithName("chunk_index").WithDataType(entity.FieldTypeInt32)).
+		WithField(entity.NewField().WithName("file_sha256").
+			WithDataType(entity.FieldTypeVarChar).
+			WithMaxLength(64)).
+		WithField(entity.NewField().WithName("tags").
+			WithDataType(entity.FieldTypeArray).
+			WithElementType(entity.FieldTypeVarChar).
+			WithMaxCapacity(20).
+			WithMaxLength(256)).
 		WithField(textField).
 		WithField(entity.NewField().WithName("embedding").
 			WithDataType(entity.FieldTypeFloatVector).

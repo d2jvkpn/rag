@@ -33,7 +33,7 @@ func TestCreateDocumentDuplicateDoesNotLeaveFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 	v := testConfig(tmpDir)
 
-	store, err := repository.NewJSONStore(
+	store, _, err := repository.NewJSONStore(
 		v.GetString("app.state_path"),
 		[]repository.AccountSeed{{Username: "admin", Password: "admin123"}},
 	)
@@ -99,7 +99,7 @@ func TestCreateDocumentWithoutHumanReviewAutoApprovesAndIndexes(t *testing.T) {
 	tmpDir := t.TempDir()
 	v := testConfig(tmpDir)
 
-	store, err := repository.NewJSONStore(
+	store, _, err := repository.NewJSONStore(
 		v.GetString("app.state_path"),
 		[]repository.AccountSeed{{Username: "admin", Password: "admin123"}},
 	)
@@ -179,7 +179,7 @@ func TestCreateKnowledgeBaseUsesEmbedderConfig(t *testing.T) {
 	v := testConfig(tmpDir)
 	v.Set("embedder.dim", 768)
 	v.Set("embedder.model", "text-embedding-v4")
-	store, err := repository.NewJSONStore(
+	store, _, err := repository.NewJSONStore(
 		v.GetString("app.state_path"),
 		[]repository.AccountSeed{{Username: "admin", Password: "admin123"}},
 	)
@@ -222,7 +222,7 @@ func TestNewDocumentServiceHydratesKnowledgeBasesIntoVectorStore(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	v := testConfig(tmpDir)
-	store, err := repository.NewJSONStore(
+	store, _, err := repository.NewJSONStore(
 		v.GetString("app.state_path"),
 		[]repository.AccountSeed{{Username: "admin", Password: "admin123"}},
 	)

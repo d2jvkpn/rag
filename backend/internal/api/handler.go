@@ -376,7 +376,11 @@ func (h *Handler) handleGetDocument(c *gin.Context) {
 
 func (h *Handler) handleListDocumentTags(c *gin.Context) {
 	kb := strings.TrimSpace(c.Query("knowledge_base_id"))
-	items := h.documentService.ListDocumentTags(kb)
+	items, err := h.documentService.ListDocumentTags(kb)
+	if err != nil {
+		h.writeStoreError(c, err)
+		return
+	}
 	writeData(c, 200, map[string]any{"items": items, "total": len(items)})
 }
 

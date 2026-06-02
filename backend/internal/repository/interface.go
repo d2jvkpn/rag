@@ -23,7 +23,7 @@ type DocumentStore interface {
 	GetDocument(documentID string) (model.Document, error)
 	ListDocuments(knowledgeBaseID, tag string) ([]model.Document, error)
 	ListDocumentsPage(knowledgeBaseID, tag, status string, page, pageSize int) (model.DocumentPage, error)
-	ListDocumentTags(knowledgeBaseID string) []model.DocumentTagCount
+	ListDocumentTags(knowledgeBaseID string) ([]model.DocumentTagCount, error)
 	DeleteDocument(documentID string) (model.Document, []model.DocumentChunk, error)
 }
 

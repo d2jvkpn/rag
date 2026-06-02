@@ -166,9 +166,11 @@ Collection schema：
 
 - `embedding`：dense float 向量（dim 来自创建知识库时的服务端 `embedder.dim`），HNSW 索引使用 `COSINE` metric，dense search 显式传 `metric_type=COSINE`
 - `sparse`：BM25 稀疏向量，由 Milvus 内置 BM25 function 从 `text` 字段自动生成
+- `tags`：文档标签数组（Array\<VarChar(256)\>，max\_capacity=20）
+- `file_sha256`：文档原文 SHA-256（VarChar(64)）
 - 其余元数据字段（`chunk_id`、`document_id`、`knowledge_base_id`、`text` 等）
 
-创建知识库时后端会同步创建或加载对应 collection。`ensureCollection` 检查 schema，发现 `sparse` 缺失或 `analyzer` 不匹配时 **drop + recreate**，数据丢失，需重新入库。dense index metric 从旧版本 `L2` 改为 `COSINE` 后，既有 collection 需要重建索引或重建 collection 后重新入库。完整 schema 见 [数据模型](./data-model.md)。
+创建知识库时后端会同步创建或加载对应 collection。`ensureCollection` 检查 schema，发现 `sparse`、`tags`、`file_sha256` 缺失或 `analyzer` 不匹配时 **drop + recreate**，数据丢失，需重新入库。dense index metric 从旧版本 `L2` 改为 `COSINE` 后，既有 collection 需要重建索引或重建 collection 后重新入库。完整 schema 见 [数据模型](./data-model.md)。
 
 ## 前端架构
 

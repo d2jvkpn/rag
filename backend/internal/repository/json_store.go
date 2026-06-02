@@ -356,7 +356,7 @@ func sortDocumentsByCreatedDesc(documents []model.Document) {
 	})
 }
 
-func (s *JSONStore) ListDocumentTags(knowledgeBaseID string) []model.DocumentTagCount {
+func (s *JSONStore) ListDocumentTags(knowledgeBaseID string) ([]model.DocumentTagCount, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -383,7 +383,7 @@ func (s *JSONStore) ListDocumentTags(knowledgeBaseID string) []model.DocumentTag
 		}
 		return items[i].Count > items[j].Count
 	})
-	return items
+	return items, nil
 }
 
 func containsTag(tags []string, want string) bool {
