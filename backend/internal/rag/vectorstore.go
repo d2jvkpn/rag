@@ -8,7 +8,6 @@ import (
 
 // VectorRecord is what gets written to the vector store for a single chunk.
 type VectorRecord struct {
-	ID              string
 	KnowledgeBaseID string
 	DocumentID      string
 	ChunkID         string
@@ -115,7 +114,6 @@ func BuildRecords(
 			break
 		}
 		records = append(records, VectorRecord{
-			ID:              c.ChunkID,
 			KnowledgeBaseID: doc.KnowledgeBaseID,
 			DocumentID:      doc.DocumentID,
 			ChunkID:         c.ChunkID,

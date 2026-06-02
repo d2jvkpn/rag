@@ -13,19 +13,23 @@ import (
 	"github.com/milvus-io/milvus/client/v2/milvusclient"
 )
 
+// searchOutputFields lists the Milvus fields returned on every search.
+// caller use without a second lookup.
 var searchOutputFields = []string{
-	"document_id",
-	"chunk_id",
-	"knowledge_base_id",
-	"filename",
-	"source_type",
-	"section_title",
-	"page_start",
-	"page_end",
-	"chunk_index",
-	"text",
-	"tags",
-	"file_sha256",
+	"document_id",      // parent document UUID
+	"filename",         // original upload filename
+	"file_sha256",      // SHA-256 of the source file
+	"knowledge_base_id", // collection the chunk belongs to
+
+	"source_type",      // file type: pdf / docx / pptx / markdown
+	"chunk_id",         // uuidv7 identifying this chunk
+	"chunk_index",      // position of this chunk within the document
+	"section_title",    // heading under which the chunk falls
+	"page_start",       // first page number of the chunk (1-based)
+	"page_end",         // last page number of the chunk (inclusive)
+	"tags",             // user-supplied labels (array, max 20)
+
+	"text", // raw chunk content used for display and BM25
 }
 
 // Milvus implements VectorStore using the official Milvus gRPC client v2.
@@ -105,23 +109,23 @@ func (m *Milvus) Upsert(ctx context.Context, records []VectorRecord) error {
 	}
 	dim := len(records[0].Embedding)
 
-	ids := make([]string, len(records))
 	kbIDs := make([]string, len(records))
 	docIDs := make([]string, len(records))
 	chunkIDs := make([]string, len(records))
+	chunkIdxs := make([]int32, len(records))
 	filenames := make([]string, len(records))
+
 	sourceTypes := make([]string, len(records))
 	sectionTitles := make([]string, len(records))
 	pageStarts := make([]int32, len(records))
 	pageEnds := make([]int32, len(records))
-	chunkIdxs := make([]int32, len(records))
-	texts := make([]string, len(records))
-	embeddings := make([][]float32, len(records))
 	tagsValues := make([][]string, len(records))
 	fileSHA256s := make([]string, len(records))
 
+	texts := make([]string, len(records))
+	embeddings := make([][]float32, len(records))
+
 	for i, r := range records {
-		ids[i] = r.ID
 		kbIDs[i] = r.KnowledgeBaseID
 		docIDs[i] = r.DocumentID
 		chunkIDs[i] = r.ChunkID
@@ -142,20 +146,20 @@ func (m *Milvus) Upsert(ctx context.Context, records []VectorRecord) error {
 	}
 
 	_, err := m.client.Upsert(ctx, milvusclient.NewColumnBasedInsertOption(collection,
-		column.NewColumnVarChar("id", ids),
 		column.NewColumnVarChar("knowledge_base_id", kbIDs),
 		column.NewColumnVarChar("document_id", docIDs),
-		column.NewColumnVarChar("chunk_id", chunkIDs),
 		column.NewColumnVarChar("filename", filenames),
+		column.NewColumnVarChar("chunk_id", chunkIDs),
+		column.NewColumnInt32("chunk_index", chunkIdxs),
 		column.NewColumnVarChar("source_type", sourceTypes),
 		column.NewColumnVarChar("section_title", sectionTitles),
 		column.NewColumnInt32("page_start", pageStarts),
 		column.NewColumnInt32("page_end", pageEnds),
-		column.NewColumnInt32("chunk_index", chunkIdxs),
-		column.NewColumnVarChar("text", texts),
-		column.NewColumnFloatVector("embedding", dim, embeddings),
 		column.NewColumnVarCharArray("tags", tagsValues),
 		column.NewColumnVarChar("file_sha256", fileSHA256s),
+
+		column.NewColumnVarChar("text", texts),
+		column.NewColumnFloatVector("embedding", dim, embeddings),
 	))
 	return err
 }
@@ -343,10 +347,11 @@ func parseResults(rs milvusclient.ResultSet) []SearchResult {
 			PageStart:       colInt(rs, "page_start", i),
 			PageEnd:         colInt(rs, "page_end", i),
 			ChunkIndex:      colInt(rs, "chunk_index", i),
-			Text:            colStr(rs, "text", i),
-			Score:           score,
 			Tags:            colStrArray(rs, "tags", i),
 			FileSHA256:      colStr(rs, "file_sha256", i),
+
+			Text:            colStr(rs, "text", i),
+			Score:           score,
 		})
 	}
 	return results
@@ -450,7 +455,7 @@ func (m *Milvus) ensureCollection(ctx context.Context, cfg CollectionConfig) err
 
 	schema := entity.NewSchema().
 		WithName(name).
-		WithField(entity.NewField().WithName("id").
+		WithField(entity.NewField().WithName("chunk_id").
 			WithDataType(entity.FieldTypeVarChar).
 			WithIsPrimaryKey(true).
 			WithMaxLength(64)).
@@ -458,9 +463,6 @@ func (m *Milvus) ensureCollection(ctx context.Context, cfg CollectionConfig) err
 			WithDataType(entity.FieldTypeVarChar).
 			WithMaxLength(64)).
 		WithField(entity.NewField().WithName("document_id").
-			WithDataType(entity.FieldTypeVarChar).
-			WithMaxLength(64)).
-		WithField(entity.NewField().WithName("chunk_id").
 			WithDataType(entity.FieldTypeVarChar).
 			WithMaxLength(64)).
 		WithField(entity.NewField().WithName("filename").
