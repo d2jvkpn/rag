@@ -17,10 +17,19 @@ function resolvePublicPath(path) {
   return new URL(path, new URL(basePath, window.location.origin)).toString()
 }
 
+function resolveBase(value) {
+  if (!value) return ''
+  try {
+    return new URL(value, window.location.origin).toString().replace(/\/$/, '')
+  } catch {
+    return value
+  }
+}
+
 function normalizeConfig(raw) {
   return {
-    apiBase: raw.api_base ?? raw.apiBase ?? '',
-    staticBase: raw.static_base ?? raw.staticBase ?? '',
+    apiBase: resolveBase(raw.api_base ?? raw.apiBase ?? ''),
+    staticBase: resolveBase(raw.static_base ?? raw.staticBase ?? ''),
     requestTimeoutMs: raw.request_timeout_ms ?? raw.requestTimeoutMs ?? 15000,
     pollIntervalMs: raw.poll_interval_ms ?? raw.pollIntervalMs ?? 3000,
   }
