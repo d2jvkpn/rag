@@ -435,7 +435,6 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
         "document_id": "...",
         "knowledge_base_id": "public",
         "filename": "report.pdf",
-        "source_type": "pdf",
         "section_title": "...",
         "page_start": 3,
         "page_end": 4,

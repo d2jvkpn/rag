@@ -386,10 +386,4 @@ export default {
     done: 'Done',
     delete: 'Delete',
   },
-  sourceType: {
-    pdf: 'pdf',
-    docx: 'docx',
-    pptx: 'pptx',
-    markdown: 'md',
-  },
 }

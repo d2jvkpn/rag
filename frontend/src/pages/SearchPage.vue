@@ -143,7 +143,7 @@ function selectedDocumentSnapshots() {
     return {
       document_id: id,
       filename: doc?.label || '',
-      source_type: doc?.sourceType || '',
+      file_type: doc?.fileType || '',
       uploader_name: doc?.uploaderName || '',
     }
   })
@@ -178,7 +178,7 @@ function buildSearchSnapshot(query, items, aiAnswer) {
         chunk_id: item.chunk_id,
         chunk_index: item.chunk_index,
         filename: item.filename,
-        source_type: item.source_type,
+        file_type: item.file_type,
         section_title: item.section_title || '',
         page_start: item.page_start || 0,
         page_end: item.page_end || 0,
@@ -308,7 +308,7 @@ async function loadDocuments(kbId) {
       .map(d => ({
         label: d.filename,
         value: d.document_id,
-        sourceType: d.source_type,
+        fileType: d.file_type,
         uploaderName: d.uploader_name,
       }))
   } catch { /* non-critical */ } finally {
@@ -514,7 +514,7 @@ onMounted(loadKnowledgeBases)
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <n-text style="font-size:13px;font-weight:600">{{ idx + 1 }}/{{ results.length }}. {{ item.filename }}</n-text>
-                <n-tag size="tiny">{{ t(`sourceType.${item.source_type}`) || item.source_type }}</n-tag>
+                <n-tag size="tiny">{{ item.file_type }}</n-tag>
                 <n-tag v-for="tag in item.tags" :key="tag" size="tiny" :bordered="false">{{ tag }}</n-tag>
                 <n-text v-if="item.section_title" depth="3" style="font-size:12px">{{ item.section_title }}</n-text>
                 <n-text v-if="item.page_start" depth="3" style="font-size:12px">
@@ -591,7 +591,7 @@ onMounted(loadKnowledgeBases)
                 <n-text style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" :title="doc.label">
                   {{ doc.label }}
                 </n-text>
-                <n-tag size="tiny" style="flex-shrink:0">{{ t(`sourceType.${doc.sourceType}`) || doc.sourceType }}</n-tag>
+                <n-tag size="tiny" style="flex-shrink:0">{{ doc.fileType }}</n-tag>
                 <n-text v-if="doc.uploaderName" depth="3" style="font-size:11px;flex-shrink:0;max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
                   {{ doc.uploaderName }}
                 </n-text>

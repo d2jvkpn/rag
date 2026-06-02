@@ -185,7 +185,7 @@ func (s *DocumentService) CreateDocument(
 		return model.Document{}, errors.New("file is required")
 	}
 
-	sourceType, err := detectSourceType(header.Filename)
+	fileType, err := detectFileType(header.Filename)
 	if err != nil {
 		return model.Document{}, err
 	}
@@ -224,7 +224,7 @@ func (s *DocumentService) CreateDocument(
 		Filename:        filename,
 		Title:           strings.TrimSpace(title),
 		Tags:            cleanedTags,
-		SourceType:      sourceType,
+		FileType:        fileType,
 		StoragePath:     storagePath,
 		SHA256:          hex.EncodeToString(sum[:]),
 		Status:          "uploaded",
@@ -774,7 +774,7 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 
 	infra.L.Info("processing document",
 		zap.String("document_id", document.DocumentID),
-		zap.String("source_type", document.SourceType),
+		zap.String("file_type", document.FileType),
 		zap.Bool("rechunk", rechunk),
 	)
 
@@ -783,13 +783,13 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 		document.DocumentID,
 		document.CreatedAt,
 	)
-	parsed, err := parser.Parse(document.StoragePath, document.SourceType, mediaDir)
+	parsed, err := parser.Parse(document.StoragePath, document.FileType, mediaDir)
 	if err != nil {
 		infra.L.Warn("parse failed",
 			zap.String("document_id", document.DocumentID),
 			zap.String("filename", document.Filename),
 			zap.String("storage_path", document.StoragePath),
-			zap.String("source_type", document.SourceType),
+			zap.String("file_type", document.FileType),
 			zap.Error(err),
 		)
 		s.failDocument(document, "parse", err)
@@ -1020,7 +1020,7 @@ func (s *DocumentService) failDocument(document model.Document, stage string, re
 		zap.String("document_id", document.DocumentID),
 		zap.String("filename", document.Filename),
 		zap.String("storage_path", document.StoragePath),
-		zap.String("source_type", document.SourceType),
+		zap.String("file_type", document.FileType),
 		zap.String("stage", stage),
 		zap.Error(reason),
 	)
@@ -1040,10 +1040,10 @@ func (s *DocumentService) failDocument(document model.Document, stage string, re
 	}
 }
 
-func detectSourceType(filename string) (string, error) {
+func detectFileType(filename string) (string, error) {
 	switch strings.ToLower(filepath.Ext(filename)) {
 	case ".md", ".markdown":
-		return "markdown", nil
+		return "md", nil
 	case ".docx":
 		return "docx", nil
 	case ".pptx":

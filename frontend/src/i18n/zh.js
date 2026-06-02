@@ -386,10 +386,4 @@ export default {
     done: '完成',
     delete: '删除',
   },
-  sourceType: {
-    pdf: 'pdf',
-    docx: 'docx',
-    pptx: 'pptx',
-    markdown: 'md',
-  },
 }

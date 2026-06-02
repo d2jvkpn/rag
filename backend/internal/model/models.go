@@ -36,7 +36,7 @@ type Document struct {
 	Filename          string     `json:"filename"`
 	Title             string     `json:"title,omitempty"`
 	Tags              []string   `json:"tags,omitempty"`
-	SourceType        string     `json:"source_type"`
+	FileType          string     `json:"file_type"`
 	StoragePath       string     `json:"storage_path"`
 	ChunkSnapshotPath string     `json:"chunk_snapshot_path,omitempty"`
 	SHA256            string     `json:"sha256"`

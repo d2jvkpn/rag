@@ -143,7 +143,7 @@ onUnmounted(() => clearTimeout(pollTimer))
               </n-descriptions-item>
               <n-descriptions-item :label="t('documentDetail.fields.knowledgeBase')">{{ doc.knowledge_base_id }}</n-descriptions-item>
               <n-descriptions-item :label="t('documentDetail.fields.filename')">{{ doc.filename }}</n-descriptions-item>
-              <n-descriptions-item :label="t('documentDetail.fields.type')">{{ t(`sourceType.${doc.source_type}`) || doc.source_type }}</n-descriptions-item>
+              <n-descriptions-item :label="t('documentDetail.fields.type')">{{ doc.file_type }}</n-descriptions-item>
               <n-descriptions-item label="SHA256">
                 <n-text code style="font-size:11px">{{ doc.sha256 }}</n-text>
               </n-descriptions-item>

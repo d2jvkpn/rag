@@ -10,34 +10,33 @@ import (
 type VectorRecord struct {
 	KnowledgeBaseID string
 	DocumentID      string
-	ChunkID         string
 	Filename        string
-	SourceType      string
+	ChunkID         string
+	ChunkIndex      int
 	SectionTitle    string
 	PageStart       int
 	PageEnd         int
-	ChunkIndex      int
-	Text            string
-	Embedding       []float32
 	Tags            []string
 	FileSHA256      string
+	Text            string
+	Embedding       []float32
 }
 
 // SearchResult is a single hit returned by semantic search.
 type SearchResult struct {
-	ChunkID         string   `json:"chunk_id"`
-	DocumentID      string   `json:"document_id"`
 	KnowledgeBaseID string   `json:"knowledge_base_id"`
+	DocumentID      string   `json:"document_id"`
 	Filename        string   `json:"filename"`
-	SourceType      string   `json:"source_type"`
+	ChunkID         string   `json:"chunk_id"`
+	ChunkIndex      int      `json:"chunk_index"`
 	SectionTitle    string   `json:"section_title"`
 	PageStart       int      `json:"page_start"`
 	PageEnd         int      `json:"page_end"`
-	ChunkIndex      int      `json:"chunk_index"`
-	Text            string   `json:"text"`
-	Score           float32  `json:"score"`
 	Tags            []string `json:"tags,omitempty"`
 	FileSHA256      string   `json:"file_sha256,omitempty"`
+	Text            string   `json:"text"`
+	Score           float32  `json:"score"`
+
 }
 
 // SearchMode selects which retrieval method to use.
@@ -116,17 +115,16 @@ func BuildRecords(
 		records = append(records, VectorRecord{
 			KnowledgeBaseID: doc.KnowledgeBaseID,
 			DocumentID:      doc.DocumentID,
-			ChunkID:         c.ChunkID,
 			Filename:        doc.Filename,
-			SourceType:      doc.SourceType,
+			ChunkID:         c.ChunkID,
+			ChunkIndex:      c.ChunkIndex,
 			SectionTitle:    c.SectionTitle,
 			PageStart:       c.PageStart,
 			PageEnd:         c.PageEnd,
-			ChunkIndex:      c.ChunkIndex,
-			Text:            c.Text,
-			Embedding:       embeddings[i],
 			Tags:            doc.Tags,
 			FileSHA256:      doc.SHA256,
+			Text:            c.Text,
+			Embedding:       embeddings[i],
 		})
 	}
 	return records

@@ -17,7 +17,7 @@
 - `filename`：原始上传文件名（经 sanitize 处理，空格替换为下划线）
 - `title`：文档标题，未填时为空字符串
 - `tags`：文档标签，`TEXT[]`，最多 20 个，每个最长 64 字符
-- `source_type`：文件类型，`pdf / docx / pptx / markdown`，由上传文件扩展名决定
+- `file_type`：文件类型，`pdf / docx / pptx / md`，由上传文件扩展名决定
 - `storage_path`：原始上传文件在 `backend/data` 下的本地路径
 - `chunk_snapshot_path`：当前生效的 chunk JSON 快照路径，为空表示尚未生成
 - `sha256`：原始文件的 SHA-256 哈希，与 `knowledge_base_id` 构成唯一约束，用于去重
@@ -163,7 +163,6 @@
 - `knowledge_base_id`：所属知识库，等于 collection 名
 - `document_id`：所属文档的 UUID，关联 `documents.document_id`
 - `filename`：原始文件名，来自 `documents.filename`，冗余存储避免跨库 join
-- `source_type`：文件类型，`pdf / docx / pptx / markdown`
 - `section_title`：chunk 所属章节标题
 - `page_start`：chunk 起始页（1-based）
 - `page_end`：chunk 结束页（inclusive）

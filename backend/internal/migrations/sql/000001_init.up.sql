@@ -31,7 +31,7 @@ CREATE TABLE documents (
   filename TEXT NOT NULL,
   title TEXT NOT NULL DEFAULT '',
   tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
-  source_type TEXT NOT NULL,
+  file_type TEXT NOT NULL,
   storage_path TEXT NOT NULL,
   chunk_snapshot_path TEXT NOT NULL DEFAULT '',
   sha256 TEXT NOT NULL,

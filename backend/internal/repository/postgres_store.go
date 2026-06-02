@@ -576,7 +576,7 @@ type documentRow struct {
 	Filename          string         `gorm:"column:filename"`
 	Title             string         `gorm:"column:title"`
 	Tags              pq.StringArray `gorm:"column:tags;type:text[]"`
-	SourceType        string         `gorm:"column:source_type"`
+	FileType          string         `gorm:"column:file_type"`
 	StoragePath       string         `gorm:"column:storage_path"`
 	ChunkSnapshotPath string         `gorm:"column:chunk_snapshot_path"`
 	SHA256            string         `gorm:"column:sha256"`
@@ -663,7 +663,7 @@ func documentFromRow(r documentRow) model.Document {
 		Filename:          r.Filename,
 		Title:             r.Title,
 		Tags:              tags,
-		SourceType:        r.SourceType,
+		FileType:          r.FileType,
 		StoragePath:       r.StoragePath,
 		ChunkSnapshotPath: r.ChunkSnapshotPath,
 		SHA256:            r.SHA256,
@@ -696,7 +696,7 @@ func documentToRow(d model.Document) documentRow {
 		Filename:          d.Filename,
 		Title:             d.Title,
 		Tags:              tags,
-		SourceType:        d.SourceType,
+		FileType:          d.FileType,
 		StoragePath:       d.StoragePath,
 		ChunkSnapshotPath: d.ChunkSnapshotPath,
 		SHA256:            d.SHA256,

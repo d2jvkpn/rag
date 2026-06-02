@@ -21,7 +21,6 @@ var searchOutputFields = []string{
 	"file_sha256",      // SHA-256 of the source file
 	"knowledge_base_id", // collection the chunk belongs to
 
-	"source_type",      // file type: pdf / docx / pptx / markdown
 	"chunk_id",         // uuidv7 identifying this chunk
 	"chunk_index",      // position of this chunk within the document
 	"section_title",    // heading under which the chunk falls
@@ -115,7 +114,6 @@ func (m *Milvus) Upsert(ctx context.Context, records []VectorRecord) error {
 	chunkIdxs := make([]int32, len(records))
 	filenames := make([]string, len(records))
 
-	sourceTypes := make([]string, len(records))
 	sectionTitles := make([]string, len(records))
 	pageStarts := make([]int32, len(records))
 	pageEnds := make([]int32, len(records))
@@ -130,7 +128,6 @@ func (m *Milvus) Upsert(ctx context.Context, records []VectorRecord) error {
 		docIDs[i] = r.DocumentID
 		chunkIDs[i] = r.ChunkID
 		filenames[i] = r.Filename
-		sourceTypes[i] = r.SourceType
 		sectionTitles[i] = r.SectionTitle
 		pageStarts[i] = int32(r.PageStart)
 		pageEnds[i] = int32(r.PageEnd)
@@ -151,7 +148,6 @@ func (m *Milvus) Upsert(ctx context.Context, records []VectorRecord) error {
 		column.NewColumnVarChar("filename", filenames),
 		column.NewColumnVarChar("chunk_id", chunkIDs),
 		column.NewColumnInt32("chunk_index", chunkIdxs),
-		column.NewColumnVarChar("source_type", sourceTypes),
 		column.NewColumnVarChar("section_title", sectionTitles),
 		column.NewColumnInt32("page_start", pageStarts),
 		column.NewColumnInt32("page_end", pageEnds),
@@ -342,7 +338,6 @@ func parseResults(rs milvusclient.ResultSet) []SearchResult {
 			DocumentID:      colStr(rs, "document_id", i),
 			KnowledgeBaseID: colStr(rs, "knowledge_base_id", i),
 			Filename:        colStr(rs, "filename", i),
-			SourceType:      colStr(rs, "source_type", i),
 			SectionTitle:    colStr(rs, "section_title", i),
 			PageStart:       colInt(rs, "page_start", i),
 			PageEnd:         colInt(rs, "page_end", i),
@@ -468,9 +463,6 @@ func (m *Milvus) ensureCollection(ctx context.Context, cfg CollectionConfig) err
 		WithField(entity.NewField().WithName("filename").
 			WithDataType(entity.FieldTypeVarChar).
 			WithMaxLength(512)).
-		WithField(entity.NewField().WithName("source_type").
-			WithDataType(entity.FieldTypeVarChar).
-			WithMaxLength(32)).
 		WithField(entity.NewField().WithName("section_title").
 			WithDataType(entity.FieldTypeVarChar).
 			WithMaxLength(512)).

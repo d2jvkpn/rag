@@ -191,9 +191,9 @@ const columns = computed(() => [
   },
   {
     title: t('documents.table.type'),
-    key: 'source_type',
+    key: 'file_type',
     width: 90,
-    render: (row) => h(NTag, { size: 'small', bordered: false }, { default: () => t(`sourceType.${row.source_type}`) || row.source_type }),
+    render: (row) => h(NTag, { size: 'small', bordered: false }, { default: () => row.file_type }),
   },
   {
     title: t('documents.table.knowledgeBase'),
