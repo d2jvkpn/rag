@@ -31,3 +31,7 @@ build_image:
 	  --build-arg commit_time="$(commit_time)" \
 	  --build-arg version_pkg="$(version_pkg)" \
 	  -t q.local/rag:latest ./
+
+archive_image:
+	mkdir -p data
+	docker save q.local/rag:latest | gzip -c > data/q.local--rag--latest.tgz
