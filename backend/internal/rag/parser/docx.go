@@ -105,9 +105,9 @@ func extractDocxBlocks(
 			continue
 		}
 		if tableStartRe.MatchString(raw) {
-			rows := extractTableRows(raw, "w:p", "w:t", "w:tr", "w:tc")
+			rows, tableRefs := extractDocxTableRows(raw, rels, imageRels)
 			if len(rows) > 0 {
-				items = append(items, docItem{ob: ooxmlBlock{kind: "table", rows: rows}})
+				items = append(items, docItem{ob: ooxmlBlock{kind: "table", rows: rows, refs: tableRefs}})
 			}
 			continue
 		}
@@ -230,4 +230,66 @@ func buildDocxFallbackBlock(ooxmlItems []ooxmlBlock) []ParseBlock {
 		return nil
 	}
 	return []ParseBlock{{Text: text, Refs: allRefs}}
+}
+
+// extractDocxTableRows is the DOCX-specific table row extractor. Unlike the
+// generic extractTableRows it also handles <w:drawing> elements inside cells:
+// each paragraph in a cell is processed the same way extractDocxBlocks handles
+// standalone paragraphs, so image placeholders and their refs are preserved.
+func extractDocxTableRows(
+	content string,
+	rels, imageRels map[string]string,
+) ([][]string, []model.ResourceRef) {
+	rowRe := regexp.MustCompile(`(?s)<w:tr[\s>].*?</w:tr>`)
+	cellRe := regexp.MustCompile(`(?s)<w:tc[\s>].*?</w:tc>`)
+	paraRe := regexp.MustCompile(`(?s)<w:p[\s>].*?</w:p>`)
+
+	rowMatches := rowRe.FindAllString(content, -1)
+	if len(rowMatches) == 0 {
+		return nil, nil
+	}
+
+	var allRefs []model.ResourceRef
+	var rows [][]string
+	maxCols := 0
+
+	for _, row := range rowMatches {
+		cellMatches := cellRe.FindAllString(row, -1)
+		if len(cellMatches) == 0 {
+			continue
+		}
+		cells := make([]string, 0, len(cellMatches))
+		for _, cell := range cellMatches {
+			var parts []string
+			for _, para := range paraRe.FindAllString(cell, -1) {
+				text := extractParagraphText(para, "w:p", "w:t")
+				placeholder, refs := extractDocxParaRefs(para, rels, imageRels)
+				allRefs = append(allRefs, refs...)
+				if text == "" {
+					text = placeholder
+				} else if placeholder != "" {
+					text += "\n" + placeholder
+				}
+				if text != "" {
+					parts = append(parts, text)
+				}
+			}
+			cellText := strings.ReplaceAll(strings.Join(parts, "\n"), "\n", "<br>")
+			cellText = strings.TrimSpace(cellText)
+			cellText = strings.ReplaceAll(cellText, "|", `\|`)
+			cells = append(cells, cellText)
+		}
+		rows = append(rows, cells)
+		maxCols = max(maxCols, len(cells))
+	}
+
+	if len(rows) == 0 || maxCols == 0 {
+		return nil, nil
+	}
+	for i := range rows {
+		for len(rows[i]) < maxCols {
+			rows[i] = append(rows[i], "")
+		}
+	}
+	return rows, allRefs
 }

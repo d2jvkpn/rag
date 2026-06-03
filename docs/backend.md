@@ -248,7 +248,7 @@ chunk 快照约定：
 - `documents` 初始状态为 `uploaded`
 - 第一版不引入独立的 `document_resources` 表，图片、表格、链接引用先写入 `document_chunks.resource_refs`
 - 解析器会在正文中保留图片占位符：格式为 `[Image:ref_id]` 或 `[Image:ref_id label]`，`ref_id` 与对应 `resource_refs` 条目精确绑定；若 PPTX `p:cNvPr descr` 属性值为外部 URL，该 URL 存入 `ref.url`/`ref.is_external`，不作为 label；PPTX 备注以 `Notes: ...` 附加到幻灯片文本
-- `docx` / `pptx` 遇到原生表格时，会转成 Markdown 表格文本并写入 `document_chunks.text`；正文段落、标题、列表等其他元素仅提取纯文本，不转 Markdown 格式
+- `docx` / `pptx` 遇到原生表格时，会转成 Markdown 表格文本并写入 `document_chunks.text`；正文段落、标题、列表等其他元素仅提取纯文本，不转 Markdown 格式；`docx` 表格单元格中的图片同样生成 `[Image:ref_id label]` 占位符并写入 `resource_refs`
 - `docx` 中检测到 `w:pStyle` heading 样式（`Heading1`–N、`1`–`6`、`标题N`）时按标题边界拆分为结构化 blocks，每个 block 带 `SectionTitle`；无标题文档退回单 block
 - `docx` 中相邻且列数一致的连续表会按续表处理并合并；若后一张表首行与前一张表表头一致，会自动去掉重复表头
 - `pptx` 每张幻灯片作为独立 block，`SectionTitle` = "Slide N"，`PageStart` = 幻灯片编号
@@ -275,6 +275,7 @@ chunk 快照约定：
 3. **mergeSmallBlocks**：将相邻小 block 累积合并，直到合并后超过 `chunk_size` 才另起一组；合并后 `PageEnd` 取最后一个 block 的 `PageEnd`；DOCX/Markdown（`PageStart=0`）和 PPTX/PDF 均参与合并
 4. **BuildChunks**：逐 block 调用 `splitByLength`，每个 chunk 继承所在 block 的 `SectionTitle` / `PageStart` / `PageEnd`
 5. **末尾碎片合并**：所有 chunk 生成后，若最后一个 chunk 的文本长度 < `chunk_size / 2`，将其追加到倒数第二个 chunk；`PageEnd` 取两者较大值，`ResourceRefs` 合并
+   - **image ref 过滤**：每个 chunk 只继承其文本中实际包含 `[Image:<ref_id>` 占位符的 image ref；link 等其他类型 ref 仍全量继承（anchor text 无法精确定位到 segment）
 6. **min_chunks 合并**：全部 block 切分完成后，若总 chunk 数 ≤ `min_chunks`，将整篇合并为单一 chunk；此路径同样保留首 block 的 `PageStart` 和末 block 的 `PageEnd`
 
 **splitByLength 细节**

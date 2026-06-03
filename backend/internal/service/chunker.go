@@ -172,7 +172,7 @@ func BuildChunks(
 			c.PageEnd = block.PageEnd
 			c.Text = seg
 			c.NormalizedText = seg
-			c.ResourceRefs = blockRefs
+			c.ResourceRefs = refsForSegment(seg, blockRefs)
 			allChunks = append(allChunks, c)
 		}
 	}
@@ -403,4 +403,25 @@ func overlapTail(text string, overlap int) string {
 		}
 	}
 	return tail
+}
+
+// refsForSegment returns the subset of blockRefs that are relevant to seg.
+// Image refs are included only when their placeholder "[Image:<refID>" appears
+// in the segment text. All other ref types (links, etc.) are always included
+// because their anchor text cannot be reliably located within a segment.
+func refsForSegment(seg string, blockRefs []model.ResourceRef) []model.ResourceRef {
+	if len(blockRefs) == 0 {
+		return []model.ResourceRef{}
+	}
+	refs := make([]model.ResourceRef, 0, len(blockRefs))
+	for _, r := range blockRefs {
+		if r.RefType == "image" {
+			if strings.Contains(seg, "[Image:"+r.RefID) {
+				refs = append(refs, r)
+			}
+		} else {
+			refs = append(refs, r)
+		}
+	}
+	return refs
 }

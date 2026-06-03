@@ -626,6 +626,63 @@ func TestParseDocxExtractsImageToStoragePath(t *testing.T) {
 	}
 }
 
+func TestParseDocxImageInTableCell(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tableimg.docx")
+	files := map[string]string{
+		"word/document.xml": `<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">
+  <w:body>
+    <w:tbl>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>说明</w:t></w:r></w:p></w:tc>
+        <w:tc>
+          <w:p>
+            <w:r>
+              <w:drawing>
+                <wp:inline><wp:docPr id="1" name="fig1" descr="表中图片"/></wp:inline>
+              </w:drawing>
+            </w:r>
+          </w:p>
+        </w:tc>
+      </w:tr>
+    </w:tbl>
+  </w:body>
+</w:document>`,
+	}
+	if err := writeZipFixture(path, files); err != nil {
+		t.Fatalf("write docx fixture: %v", err)
+	}
+
+	got, err := Parse(path, "docx", "")
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	// The image ref must be present
+	var imgRef *model.ResourceRef
+	for bi := range got.Blocks {
+		for ri := range got.Blocks[bi].Refs {
+			r := &got.Blocks[bi].Refs[ri]
+			if r.RefType == "image" {
+				imgRef = r
+			}
+		}
+	}
+	if imgRef == nil {
+		t.Fatal("expected an image ref in table cell, got none")
+	}
+	if imgRef.Label != "表中图片" {
+		t.Errorf("unexpected label: %q", imgRef.Label)
+	}
+
+	// The placeholder must appear in the rendered table text
+	placeholder := "[Image:" + imgRef.RefID + " 表中图片]"
+	if !strings.Contains(got.Text, placeholder) {
+		t.Errorf("image placeholder %q not found in text:\n%s", placeholder, got.Text)
+	}
+}
+
 func writeZipFixture(path string, files map[string]string) error {
 	f, err := os.Create(path)
 	if err != nil {

@@ -20,6 +20,10 @@ frontend_run:
 frontend_build:
 	$(MAKE) -C frontend build
 
+run:
+	make frontend_build
+	make backend_run
+
 build_image:
 	docker build -f deploy/Containerfile \
 	  --no-cache \
