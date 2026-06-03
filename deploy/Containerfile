@@ -109,7 +109,7 @@ RUN if [ "$build_region" == "cn" ]; then \
     fi
 
 RUN pip3 install --upgrade pip && \
-    pip3 install -r scripts/requirements.txt
+    pip3 install -r scripts/parse_pdf.pip.txt
 
 ENV FRONEND_CONFIG=/app/target/ui/app.json
 
