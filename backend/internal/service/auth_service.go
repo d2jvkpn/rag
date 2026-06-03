@@ -90,13 +90,17 @@ func (s *AuthService) Login(username, password, totpCode string) (model.User, st
 	return user, token, nil
 }
 
-func (s *AuthService) SetupTOTP(userID string) (secret, qrURL string, err error) {
+func (s *AuthService) SetupTOTP(userID, origin string) (secret, qrURL string, err error) {
 	user, err := s.store.GetUser(userID)
 	if err != nil {
 		return "", "", err
 	}
+	issuer := "RAG"
+	if origin != "" {
+		issuer = "RAG@" + origin
+	}
 	key, err := totp.Generate(totp.GenerateOpts{
-		Issuer:      "RAG",
+		Issuer:      issuer,
 		AccountName: user.Username,
 	})
 	if err != nil {

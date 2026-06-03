@@ -8,6 +8,7 @@ import { useAuthStore } from '../stores/auth.js'
 import { getConfig } from '../config/app-config.js'
 import { authService } from '../services/auth.js'
 import { useI18n } from '../i18n/index.js'
+import TotpCodeInput from './TotpCodeInput.vue'
 import { LOCALES } from '../stores/locale.js'
 import { toDataURL } from 'qrcode'
 
@@ -296,25 +297,13 @@ async function confirmTOTPDisable() {
         </div>
         <n-text depth="3" style="font-size:12px;display:block;margin-bottom:4px">{{ t('totp.setupHint') }}</n-text>
         <n-text code style="font-size:13px;word-break:break-all;display:block;margin-bottom:16px">{{ totpSecret }}</n-text>
-        <n-input
-          v-model:value="totpCode"
-          placeholder="000000"
-          maxlength="6"
-          :allow-input="(v) => /^\d*$/.test(v)"
-          style="margin-bottom:8px"
-        />
+        <TotpCodeInput v-model="totpCode" style="margin-bottom:8px" />
         <n-text v-if="totpError" type="error" style="font-size:12px;display:block;margin-bottom:8px">{{ totpError }}</n-text>
       </div>
 
       <div v-else-if="totpStep === 'disable'">
         <n-text depth="3" style="display:block;margin-bottom:16px">{{ t('totp.disableHint') }}</n-text>
-        <n-input
-          v-model:value="totpCode"
-          placeholder="000000"
-          maxlength="6"
-          :allow-input="(v) => /^\d*$/.test(v)"
-          style="margin-bottom:8px"
-        />
+        <TotpCodeInput v-model="totpCode" style="margin-bottom:8px" />
         <n-text v-if="totpError" type="error" style="font-size:12px;display:block;margin-bottom:8px">{{ totpError }}</n-text>
       </div>
 

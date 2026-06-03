@@ -728,7 +728,16 @@ func (h *Handler) writeActionError(c *gin.Context, err error) {
 
 func (h *Handler) handleTOTPSetup(c *gin.Context) {
 	user := c.MustGet("current_user").(model.User)
-	secret, qrURL, err := h.authService.SetupTOTP(user.UserID)
+	origin := c.Request.Header.Get("Origin")
+	if origin == "" {
+		origin = c.Request.Host
+	} else {
+		// strip scheme (e.g. "https://example.com" → "example.com")
+		if i := strings.Index(origin, "://"); i >= 0 {
+			origin = origin[i+3:]
+		}
+	}
+	secret, qrURL, err := h.authService.SetupTOTP(user.UserID, origin)
 	if err != nil {
 		writeError(c, 500, "internal_error", err.Error(), nil)
 		return

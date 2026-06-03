@@ -5,6 +5,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
 import { getConfig } from '../config/app-config.js'
 import { useI18n } from '../i18n/index.js'
+import TotpCodeInput from '../components/TotpCodeInput.vue'
 import { LOCALES } from '../stores/locale.js'
 
 const router = useRouter()
@@ -90,12 +91,7 @@ async function submit() {
         </template>
         <template v-else>
           <n-form-item :label="t('login.totpCode')" path="totpCode">
-            <n-input
-              v-model:value="form.totpCode"
-              :placeholder="t('login.totpPlaceholder')"
-              maxlength="6"
-              :allow-input="(v) => /^\d*$/.test(v)"
-            />
+            <TotpCodeInput v-model="form.totpCode" />
           </n-form-item>
           <n-text depth="3" style="font-size:12px;display:block;margin-bottom:12px">
             {{ t('login.totpHint') }}
