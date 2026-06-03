@@ -221,3 +221,6 @@ Detailed documentation lives under [docs/](docs):
 ## Current Scope
 
 The current implementation targets the first complete RAG ingestion loop. OCR for scanned PDFs, advanced media understanding, and complex table recovery are outside the core path. Extractable PDFs, DOCX, PPTX, and Markdown are supported, with best-effort table extraction and Markdown table conversion where implemented.
+
+## TODO
+1. support document formats: html/url, epub/epub3, odt, odp
