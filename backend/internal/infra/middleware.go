@@ -1,16 +1,45 @@
 package infra
 
 import (
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
-func RequestLogger() gin.HandlerFunc {
+// RequestLogger logs each request. skipPaths are relative to basePath; entries
+// ending with "/" are treated as prefix matches (e.g. "/static/"), others as
+// exact matches (e.g. "/healthz").
+func RequestLogger(basePath string, skipPaths ...string) gin.HandlerFunc {
+	exact := make(map[string]struct{}, len(skipPaths))
+	var prefixes []string
+
+	base := strings.TrimRight(basePath, "/")
+	for _, p := range skipPaths {
+		full := base + p
+		if strings.HasSuffix(p, "/") {
+			prefixes = append(prefixes, full)
+		} else {
+			exact[full] = struct{}{}
+		}
+	}
+
 	log := L.WithOptions(zap.WithCaller(false))
 
 	return func(c *gin.Context) {
+		urlPath := c.Request.URL.Path
+		if _, ok := exact[urlPath]; ok {
+			c.Next()
+			return
+		}
+		for _, pfx := range prefixes {
+			if strings.HasPrefix(urlPath, pfx) {
+				c.Next()
+				return
+			}
+		}
+
 		start := time.Now()
 		c.Next()
 

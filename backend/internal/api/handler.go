@@ -38,9 +38,9 @@ func NewHandler(
 
 func (h *Handler) Routes() http.Handler {
 	router := gin.New()
-	router.Use(gin.Recovery(), infra.RequestLogger(), h.cors())
 
 	basePath := h.cfg.GetString("http.base_path")
+	router.Use(gin.Recovery(), infra.RequestLogger(basePath, "/healthz", "/version", "/static/"), h.cors())
 
 	webDir := ""
 	if _, err := os.Stat(filepath.Join("target", "ui", "index.html")); err == nil {
