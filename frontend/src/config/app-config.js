@@ -2,7 +2,7 @@ let config = null
 
 export async function loadConfig() {
   const configPath = resolvePublicPath('app.json')
-  const res = await fetch(configPath)
+  const res = await fetch(configPath, { cache: 'no-store' })
   if (!res.ok) throw new Error(`${configPath} 返回 ${res.status}`)
   config = normalizeConfig(await res.json())
 }

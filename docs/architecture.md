@@ -313,4 +313,4 @@ Loader 将 snake_case 字段规范化为 camelCase，兼容旧版 camelCase 配�
 | `embedder.dim` | — | 必填。Embedding 模型输出维度，UI 新建知识库时写入 collection schema |
 未配置 `database.dsn` 时使用 JSONStore；未配置 `redis.dsn` 时使用 GoroutineQueue 和 MemoryBlacklist；`embedder.dim` 必填；未配置 `embedder.base_url` / `embedder.api_key`、`milvus.addr` 时对应外部组件回落 Noop 实现。
 
-后端运行目录存在 `target/ui/index.html` 时自动托管前端 SPA：`/ui` 为前端入口，`/` 和 `/index.html` 重定向到 `/ui/index.html`；`/api`、`/healthz`、`/static` 保持后端路由，其中 `/static` 服务 `{app.data_dir}/static`。
+后端运行目录存在 `target/ui/index.html` 时自动托管前端 SPA：`/ui` 为前端入口，`/` 和 `/index.html` 重定向到 `/ui/index.html`；`/api`、`/healthz`、`/static` 保持后端路由，其中 `/static` 服务 `{app.data_dir}/static`。静态资源缓存策略：`index.html` 和 `app.json` 返回 `Cache-Control: no-store`；`assets/` 下带 hash 的 JS/CSS 返回 `Cache-Control: public, max-age=31536000, immutable`；其余文件走默认协商缓存（ETag/Last-Modified）。

@@ -43,8 +43,7 @@ func (h *Handler) Routes() http.Handler {
 	basePath := h.cfg.GetString("http.base_path")
 
 	webDir := ""
-	info, err := os.Stat(filepath.Join("target", "ui", "index.html"))
-	if err == nil && !info.IsDir() {
+	if _, err := os.Stat(filepath.Join("target", "ui", "index.html")); err == nil {
 		webDir = filepath.Join("target", "ui")
 	}
 
@@ -287,7 +286,7 @@ func (h *Handler) handleChangePassword(c *gin.Context) {
 
 func (h *Handler) handleCreateDocument(c *gin.Context) {
 	if err := c.Request.ParseMultipartForm(64 << 20); err != nil {
-		writeError(c, 400, "validation_error", "invalid multipart form", nil)
+		writeError(c, 400, "validation_error", "invalid multipart form: "+err.Error(), nil)
 		return
 	}
 

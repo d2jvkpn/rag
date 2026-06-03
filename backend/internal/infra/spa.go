@@ -27,11 +27,18 @@ func GinSPA(c *gin.Context, uiPath, webDir string) bool {
 	if relPath != "" {
 		assetPath := filepath.Join(webDir, filepath.FromSlash(relPath))
 		if info, err := os.Stat(assetPath); err == nil && !info.IsDir() {
+			switch {
+			case relPath == "app.json":
+				c.Header("Cache-Control", "no-store")
+			case strings.HasPrefix(relPath, "assets/"):
+				c.Header("Cache-Control", "public, max-age=31536000, immutable")
+			}
 			c.File(assetPath)
 			return true
 		}
 	}
 
+	c.Header("Cache-Control", "no-store")
 	c.File(filepath.Join(webDir, "index.html"))
 	return true
 }

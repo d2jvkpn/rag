@@ -149,7 +149,7 @@
 配置方式建议：
 
 - 在 `frontend/public/app.json` 中保存前端运行时配置
-- 浏览器加载应用后，通过 HTTP 请求读取 `/app.json`
+- 浏览器加载应用后，通过 HTTP 请求读取 `/app.json`（fetch 使用 `cache: 'no-store'`，服务端同样返回 `Cache-Control: no-store`，确保每次获取最新配置）
 - 前端在应用启动阶段加载配置，再初始化后续接口请求和页面渲染
 
 `app.json` 当前字段：
