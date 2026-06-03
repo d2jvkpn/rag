@@ -35,7 +35,7 @@ func TestCreateDocumentDuplicateDoesNotLeaveFiles(t *testing.T) {
 
 	store, _, err := repository.NewJSONStore(
 		v.GetString("app.state_path"),
-		[]repository.AccountSeed{{Username: "admin", Password: "admin123"}},
+		repository.InitAccount{Username: "admin", Password: "admin123"},
 	)
 	if err != nil {
 		t.Fatalf("init store: %v", err)
@@ -101,7 +101,7 @@ func TestCreateDocumentWithoutHumanReviewAutoApprovesAndIndexes(t *testing.T) {
 
 	store, _, err := repository.NewJSONStore(
 		v.GetString("app.state_path"),
-		[]repository.AccountSeed{{Username: "admin", Password: "admin123"}},
+		repository.InitAccount{Username: "admin", Password: "admin123"},
 	)
 	if err != nil {
 		t.Fatalf("init store: %v", err)
@@ -181,7 +181,7 @@ func TestCreateKnowledgeBaseUsesEmbedderConfig(t *testing.T) {
 	v.Set("embedder.model", "text-embedding-v4")
 	store, _, err := repository.NewJSONStore(
 		v.GetString("app.state_path"),
-		[]repository.AccountSeed{{Username: "admin", Password: "admin123"}},
+		repository.InitAccount{Username: "admin", Password: "admin123"},
 	)
 	if err != nil {
 		t.Fatalf("init store: %v", err)
@@ -224,7 +224,7 @@ func TestNewDocumentServiceHydratesKnowledgeBasesIntoVectorStore(t *testing.T) {
 	v := testConfig(tmpDir)
 	store, _, err := repository.NewJSONStore(
 		v.GetString("app.state_path"),
-		[]repository.AccountSeed{{Username: "admin", Password: "admin123"}},
+		repository.InitAccount{Username: "admin", Password: "admin123"},
 	)
 	if err != nil {
 		t.Fatalf("init store: %v", err)

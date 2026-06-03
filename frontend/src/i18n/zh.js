@@ -41,11 +41,13 @@ export default {
   },
   users: {
     refresh: '刷新',
+    createUser: '创建用户',
     pageSummary: '第 {page} / {pages} 页 · {start}–{end} / 共 {total} 条',
     updatedAt: '更新于 {time}',
     enabled: '已开启',
     disabled: '未开启',
     table: {
+      id: '用户 ID',
       username: '用户名',
       status: '状态',
       permissions: '权限',
@@ -57,6 +59,8 @@ export default {
     actions: {
       disable: '禁用',
       enable: '启用',
+      editPermissions: '权限',
+      resetPassword: '重置密码',
       cancel: '取消',
     },
     dialog: {
@@ -64,18 +68,33 @@ export default {
       disableContent: '确认禁用「{name}」？禁用后其现有登录态也会失效。',
       enableTitle: '启用用户',
       enableContent: '确认启用「{name}」？',
+      createTitle: '创建用户',
+      permissionsTitle: '编辑权限 — {name}',
+      resetPasswordTitle: '重置密码 — {name}',
+    },
+    form: {
+      username: '用户名',
+      password: '密码',
+      confirmPassword: '确认密码',
+    },
+    rules: {
+      usernameRequired: '请输入用户名',
+      passwordRequired: '请输入密码',
+      confirmRequired: '请再次输入密码',
+      passwordMismatch: '两次输入的密码不一致',
     },
     messages: {
       disableSuccess: '已禁用 {name}',
       enableSuccess: '已启用 {name}',
+      createSuccess: '用户「{name}」已创建',
+      permissionsSuccess: '权限已更新',
+      resetPasswordSuccess: '已重置 {name} 的密码',
       actionFailed: '操作失败',
     },
     permissions: {
-      view_user_list: '查看用户',
-      create_knowledge_bases: '创建知识库',
-      delete_documents: '删除文档',
-      delete_knowledge_bases: '删除知识库',
-      disable_users: '禁用用户',
+      manage_users: '用户',
+      manage_knowledge_bases: '知识库',
+      manage_documents: '文档',
     },
   },
   logout: {
@@ -183,7 +202,8 @@ export default {
       minChunks: '最少 Chunk',
       chunking: '切分参数',
       createdBy: '创建者',
-      updatedAt: '更新',
+      createdAt: '创建时间',
+      updatedAt: '更新时间',
       actions: '操作',
     },
     modal: {

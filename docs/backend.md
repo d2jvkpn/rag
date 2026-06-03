@@ -310,33 +310,26 @@ chunk 快照约定：
 - `Logout` 清除客户端 cookie（`maxAge=-1`）并将 JTI 写入 `TokenBlacklist`，后续请求在 `withAuth()` 中被拦截
 - 未配置 `redis.dsn` 时使用 `MemoryBlacklist`（进程级，重启后失效）；配置后自动切换为 `RedisBlacklist`（TTL = token 剩余有效期）
 
-**账户初始化：** `local.yaml` 的 `accounts` 列表在启动时按用户名检查，不存在则插入。`password` 支持明文（启动时自动 bcrypt hash）或已有 bcrypt hash（以 `$2a$`/`$2b$`/`$2y$` 开头，直接存入）。已存在的账户不做修改。
+**账户初始化：** 配置文件的 `init_account` 为单个引导账户，**仅在 `users` 表为空时执行一次**，之后配置变更不产生任何副作用。`password` 支持明文（启动时自动 bcrypt hash）或已有 bcrypt hash（以 `$2a$`/`$2b$`/`$2y$` 开头，直接存入）。该账户在 DB 中被显式赋予全部权限（`manage_users` / `manage_knowledge_bases` / `manage_documents`）。
 
-`accounts[].permissions` 是纯配置态能力，不写入 `users` 表，也不会在启动时回写数据库。当前仅支持：
+支持的权限（`repository.AllPermissions` 为唯一来源）：
 
-- `view_user_list`
-- `delete_documents`
-- `disable_users`
-- `create_knowledge_bases`
-- `delete_knowledge_bases`
+- `manage_users`：管理用户（查看、创建、启用/禁用、编辑权限、重置密码）
+- `manage_knowledge_bases`：创建、删除知识库
+- `manage_documents`：删除非本人上传的文档
 
-`users.status` 是运行态状态，当前使用：
+**权限判断逻辑**（零权限默认模型）：
 
-- `active`
-- `disabled`
+- `users.permissions` 为 `NULL` 或空数组 → 无任何权限
+- `users.permissions` 非空 → 仅持有列表中明确列出的权限
+- 权限校验由 `AuthService.HasPermission` 执行，`slices.Contains` 精确匹配
 
-权限和状态的关系：
-
-- 接口权限按当前登录用户的 `username` 到配置中查 `permissions`
-- 账号一旦变成 `disabled`，即使配置中仍有权限，也无法登录，已有 JWT 在后续请求中也会被拦截
+`users.status` 运行态状态：`active` / `disabled`。账号一旦变成 `disabled`，即使有权限也无法登录，已有 JWT 在后续请求中会被拦截。
 
 ```yaml
-accounts:
-  - username: admin
-    password: "changeme"          # 明文，启动时自动 hash
-  - username: ops
-    password: "$2a$10$Xyz..."     # 已有 hash，直接写入
-    permissions: ["view_user_list", "delete_documents"]
+init_account:
+  username: admin
+  password: "changeme"   # 明文，启动时自动 hash
 ```
 
 接口详见 [API 设计](./api.md)。

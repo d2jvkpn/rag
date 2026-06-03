@@ -86,7 +86,7 @@
 - `/documents/:documentId`
 - `/documents/:documentId/chunks`
 - `/search`：语义检索页（调用 `POST /api/knowledge-bases/query`）
-- `/users`（仅当当前用户具备 `view_user_list` 权限时可访问）
+- `/users`（仅当当前用户具备 `manage_users` 权限时可访问）
 - `/` 重定向到 `/documents`
 
 如果上传能力使用弹窗承载，则无需单独定义 `/upload` 页面路由。
@@ -159,7 +159,7 @@
 - `poll_interval_ms`：详情页轮询处理中文档的间隔，默认 3000
 
 > 上传流程统一进入人工审核；前端不再提供 `human_review` 开关，并在提交时固定发送 `human_review=true`。
-> 上传弹窗中，选择知识库后应立即清除对应的必填校验提示，并展示该 collection 参数。知识库由“知识库管理”页创建；页面对登录用户可见，创建按钮仅对具备 `create_knowledge_bases` 权限的用户显示。
+> 上传弹窗中，选择知识库后应立即清除对应的必填校验提示，并展示该 collection 参数。知识库由”知识库管理”页创建；页面对登录用户可见，创建/删除按钮仅对具备 `manage_knowledge_bases` 权限的用户显示。
 
 设计要求：
 
@@ -196,7 +196,7 @@
 - 登录成功后请求 `GET /api/me`
 - 前端不自行持久化 token
 - 所有 `/documents` 及其子路由都要求登录
-- `/users` 路由除登录外，还要求 `view_user_list` 权限
+- `/users` 路由除登录外，还要求 `manage_users` 权限
 - 路由守卫基于当前用户态判断是否允许访问受保护页面
 - 退出登录后清理前端用户态缓存
 

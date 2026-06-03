@@ -98,7 +98,7 @@ func (h *Handler) Routes() http.Handler {
 
 	apiGroup.DELETE(
 		"/documents/:document_id",
-		h.withDocumentOwnerOrPermission("delete_documents"),
+		h.withDocumentOwnerOrPermission("manage_documents"),
 		h.handleDeleteDocument,
 	)
 	apiGroup.GET("/documents/:document_id/chunks", h.handleGetChunks)
@@ -112,27 +112,23 @@ func (h *Handler) Routes() http.Handler {
 	documentOwner.POST("/:document_id/chunks/:chunk_id/restore", h.handleRestoreChunk)
 	documentOwner.POST("/:document_id/index", h.handleIndexDocument)
 
-	apiGroup.GET("/users", h.withPermission("view_user_list"), h.handleListUsers)
-	apiGroup.POST(
-		"/users/:user_id/disable",
-		h.withPermission("disable_users"),
-		h.handleDisableUser,
-	)
+	manageUsers := apiGroup.Group("/users", h.withPermission("manage_users"))
+	manageUsers.GET("", h.handleListUsers)
+	manageUsers.POST("", h.handleCreateUser)
+	manageUsers.POST("/:user_id/disable", h.handleDisableUser)
+	manageUsers.POST("/:user_id/enable", h.handleEnableUser)
+	manageUsers.PUT("/:user_id/permissions", h.handleSetUserPermissions)
+	manageUsers.POST("/:user_id/reset-password", h.handleResetUserPassword)
 
-	apiGroup.POST(
-		"/users/:user_id/enable",
-		h.withPermission("disable_users"),
-		h.handleEnableUser,
-	)
 	apiGroup.GET("/knowledge-bases", h.handleListKnowledgeBases)
 	apiGroup.POST(
 		"/knowledge-bases",
-		h.withPermission("create_knowledge_bases"),
+		h.withPermission("manage_knowledge_bases"),
 		h.handleCreateKnowledgeBase,
 	)
 	apiGroup.DELETE(
 		"/knowledge-bases/:knowledge_base_id",
-		h.withPermission("delete_knowledge_bases"),
+		h.withPermission("manage_knowledge_bases"),
 		h.handleDeleteKnowledgeBase,
 	)
 	apiGroup.GET("/knowledge-bases/available", h.handleListAvailableKnowledgeBases)
@@ -775,6 +771,85 @@ func (h *Handler) handleTOTPDisable(c *gin.Context) {
 		return
 	}
 	writeData(c, 200, map[string]any{"enabled": false})
+}
+
+func (h *Handler) handleCreateUser(c *gin.Context) {
+	var body struct {
+		Username    string   `json:"username"`
+		Password    string   `json:"password"`
+		Permissions []string `json:"permissions"`
+	}
+	if err := json.NewDecoder(c.Request.Body).Decode(&body); err != nil {
+		writeError(c, 400, "validation_error", "invalid request body", nil)
+		return
+	}
+	var errs []fieldError
+	if strings.TrimSpace(body.Username) == "" {
+		errs = append(errs, fieldError{Field: "username", Reason: "required"})
+	}
+	if strings.TrimSpace(body.Password) == "" {
+		errs = append(errs, fieldError{Field: "password", Reason: "required"})
+	}
+	if len(errs) > 0 {
+		writeError(c, 400, "validation_error", "missing required fields", errs)
+		return
+	}
+	if body.Permissions == nil {
+		body.Permissions = []string{}
+	}
+	user, err := h.authService.CreateUser(body.Username, body.Password, body.Permissions)
+	if err != nil {
+		if errors.Is(err, service.ErrUsernameExists) {
+			writeError(c, 409, "conflict", err.Error(), nil)
+			return
+		}
+		writeError(c, 500, "internal_error", err.Error(), nil)
+		return
+	}
+	writeData(c, 201, h.sanitizeUser(user))
+}
+
+func (h *Handler) handleSetUserPermissions(c *gin.Context) {
+	var body struct {
+		Permissions []string `json:"permissions"`
+	}
+	if err := json.NewDecoder(c.Request.Body).Decode(&body); err != nil {
+		writeError(c, 400, "validation_error", "invalid request body", nil)
+		return
+	}
+	if body.Permissions == nil {
+		body.Permissions = []string{}
+	}
+	if err := h.authService.SetUserPermissions(c.Param("user_id"), body.Permissions); err != nil {
+		h.writeActionError(c, err)
+		return
+	}
+	writeData(c, 200, map[string]any{"accepted": true})
+}
+
+func (h *Handler) handleResetUserPassword(c *gin.Context) {
+	actor := c.MustGet("current_user").(model.User)
+	var body struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(c.Request.Body).Decode(&body); err != nil {
+		writeError(c, 400, "validation_error", "invalid request body", nil)
+		return
+	}
+	if strings.TrimSpace(body.Password) == "" {
+		writeError(c, 400, "validation_error", "password is required",
+			[]fieldError{{Field: "password", Reason: "required"}})
+		return
+	}
+	if err := h.authService.SetUserPassword(actor, c.Param("user_id"), body.Password); err != nil {
+		if errors.Is(err, service.ErrCannotResetOwnPassword) {
+			writeError(c, 400, "validation_error", err.Error(), nil)
+			return
+		}
+		h.writeActionError(c, err)
+		return
+	}
+	writeData(c, 200, map[string]any{"accepted": true})
 }
 
 func (h *Handler) sanitizeUser(user model.User) map[string]any {

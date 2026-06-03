@@ -18,6 +18,9 @@ import (
 var ErrTOTPRequired = errors.New("totp_required")
 var ErrUserDisabled = errors.New("user_disabled")
 var ErrCannotChangeOwnStatus = errors.New("cannot change your own status")
+var ErrUsernameExists = errors.New("username already exists")
+var ErrCannotResetOwnPassword = errors.New("cannot reset your own password")
+
 
 type claims struct {
 	UserID string `json:"user_id"`
@@ -25,25 +28,22 @@ type claims struct {
 }
 
 type AuthService struct {
-	store       repository.UserStore
-	jwtSecret   []byte
-	tokenTTL    time.Duration
-	blacklist   TokenBlacklist
-	permsByUser map[string][]string
+	store     repository.UserStore
+	jwtSecret []byte
+	tokenTTL  time.Duration
+	blacklist TokenBlacklist
 }
 
 func NewAuthService(
 	store repository.UserStore,
 	jwtSecret string,
 	tokenTTL time.Duration,
-	accounts []repository.AccountSeed,
 	bl ...TokenBlacklist,
 ) *AuthService {
 	svc := &AuthService{
-		store:       store,
-		jwtSecret:   []byte(jwtSecret),
-		tokenTTL:    tokenTTL,
-		permsByUser: buildPermissionMap(accounts),
+		store:     store,
+		jwtSecret: []byte(jwtSecret),
+		tokenTTL:  tokenTTL,
 	}
 	if len(bl) > 0 && bl[0] != nil {
 		svc.blacklist = bl[0]
@@ -196,16 +196,17 @@ func (s *AuthService) Me(tokenStr string) (model.User, error) {
 	return user, nil
 }
 
+// Permissions returns the effective permission list for a user.
+// Both nil and empty slice mean no permissions (zero-default model).
 func (s *AuthService) Permissions(user model.User) []string {
-	perms := s.permsByUser[user.Username]
-	if len(perms) == 0 {
+	if len(user.Permissions) == 0 {
 		return []string{}
 	}
-	return append([]string(nil), perms...)
+	return append([]string(nil), user.Permissions...)
 }
 
 func (s *AuthService) HasPermission(user model.User, permission string) bool {
-	return slices.Contains(s.permsByUser[user.Username], permission)
+	return slices.Contains(user.Permissions, permission)
 }
 
 func (s *AuthService) ListUsers() []model.User {
@@ -224,6 +225,70 @@ func (s *AuthService) SetUserStatus(actor model.User, userID, status string) err
 		return nil
 	}
 	user.Status = status
+	user.UpdatedAt = time.Now().UTC()
+	return s.store.UpdateUser(user)
+}
+
+func (s *AuthService) CreateUser(username, password string, permissions []string) (model.User, error) {
+	if _, err := s.store.FindUserByUsername(username); err == nil {
+		return model.User{}, ErrUsernameExists
+	} else if !errors.Is(err, repository.ErrNotFound) {
+		return model.User{}, err
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return model.User{}, err
+	}
+	now := time.Now().UTC()
+	if permissions == nil {
+		permissions = []string{}
+	}
+	user := model.User{
+		UserID:       uuid.Must(uuid.NewV7()).String(),
+		Username:     username,
+		PasswordHash: string(hash),
+		Status:       "active",
+		Permissions:  permissions,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := s.store.CreateUser(user); err != nil {
+		return model.User{}, err
+	}
+	return user, nil
+}
+
+func (s *AuthService) SetUserPermissions(userID string, permissions []string) error {
+	for _, p := range permissions {
+		if !slices.Contains(repository.AllPermissions, p) {
+			return fmt.Errorf("unknown permission: %s", p)
+		}
+	}
+	user, err := s.store.GetUser(userID)
+	if err != nil {
+		return err
+	}
+	if permissions == nil {
+		permissions = []string{}
+	}
+	user.Permissions = permissions
+	user.UpdatedAt = time.Now().UTC()
+	return s.store.UpdateUser(user)
+}
+
+func (s *AuthService) SetUserPassword(actor model.User, userID, newPassword string) error {
+	if userID == actor.UserID {
+		return ErrCannotResetOwnPassword
+	}
+	user, err := s.store.GetUser(userID)
+	if err != nil {
+		return err
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	user.PasswordHash = string(hash)
 	user.UpdatedAt = time.Now().UTC()
 	return s.store.UpdateUser(user)
 }
@@ -288,25 +353,3 @@ func ensureUserActive(user model.User) error {
 	return fmt.Errorf("user status %q is not allowed", user.Status)
 }
 
-func buildPermissionMap(accounts []repository.AccountSeed) map[string][]string {
-	out := make(map[string][]string, len(accounts))
-	for _, acc := range accounts {
-		if acc.Username == "" {
-			continue
-		}
-		seen := make(map[string]struct{}, len(acc.Permissions))
-		perms := make([]string, 0, len(acc.Permissions))
-		for _, p := range acc.Permissions {
-			switch p {
-			case "view_user_list", "delete_documents", "disable_users", "create_knowledge_bases", "delete_knowledge_bases":
-				if _, ok := seen[p]; ok {
-					continue
-				}
-				seen[p] = struct{}{}
-				perms = append(perms, p)
-			}
-		}
-		out[acc.Username] = perms
-	}
-	return out
-}

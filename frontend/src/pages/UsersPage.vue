@@ -19,25 +19,137 @@ const currentPage = ref(1)
 const loading = ref(false)
 const error = ref('')
 const lastRefreshed = ref('')
-const canDisableUsers = computed(() => auth.user?.permissions?.includes('disable_users'))
+const canManageUsers = computed(() => auth.user?.permissions?.includes('manage_users'))
 const totalPages = computed(() => Math.max(1, Math.ceil(users.value.length / pageSize)))
 const displayPage = computed(() => Math.min(currentPage.value, totalPages.value))
 const pageStart = computed(() => users.value.length === 0 ? 0 : (displayPage.value - 1) * pageSize + 1)
 const pageEnd = computed(() => users.value.length === 0 ? 0 : Math.min(displayPage.value * pageSize, users.value.length))
 const pagedUsers = computed(() => users.value.slice(pageStart.value - 1, pageEnd.value))
 
+// --- permission tag styling ---
 const permissionTagType = {
-  view_user_list: 'default',
-  create_knowledge_bases: 'success',
-  delete_documents: 'warning',
-  delete_knowledge_bases: 'warning',
-  disable_users: 'error',
+  manage_users: 'error',
+  manage_knowledge_bases: 'success',
+  manage_documents: 'warning',
 }
+const allPermissions = ['manage_users', 'manage_knowledge_bases', 'manage_documents']
+
 function permissionType(p) {
-  return permissionTagType[p] ?? 'info'
+  return permissionTagType[p] ?? 'default'
 }
 
+function permissionLabel(p) {
+  const key = `users.permissions.${p}`
+  const translated = t(key)
+  return translated === key ? p : translated
+}
+
+// --- create user dialog ---
+const showCreateDialog = ref(false)
+const createForm = ref({ username: '', password: '', confirmPassword: '', permissions: [] })
+const createLoading = ref(false)
+
+function openCreateDialog() {
+  createForm.value = { username: '', password: '', confirmPassword: '', permissions: [] }
+  showCreateDialog.value = true
+}
+
+async function submitCreate() {
+  if (!createForm.value.username.trim()) {
+    message.error(t('users.rules.usernameRequired'))
+    return
+  }
+  if (!createForm.value.password.trim()) {
+    message.error(t('users.rules.passwordRequired'))
+    return
+  }
+  if (createForm.value.password !== createForm.value.confirmPassword) {
+    message.error(t('users.rules.passwordMismatch'))
+    return
+  }
+  createLoading.value = true
+  try {
+    await usersService.create({
+      username: createForm.value.username,
+      password: createForm.value.password,
+      permissions: createForm.value.permissions,
+    })
+    message.success(t('users.messages.createSuccess', { name: createForm.value.username }))
+    showCreateDialog.value = false
+    await loadUsers()
+  } catch (e) {
+    message.error(e.message || t('users.messages.actionFailed'))
+  } finally {
+    createLoading.value = false
+  }
+}
+
+// --- edit permissions dialog ---
+const showPermissionsDialog = ref(false)
+const permissionsTarget = ref(null)
+const permissionsSelected = ref([])
+const permissionsLoading = ref(false)
+
+function openPermissionsDialog(user) {
+  permissionsTarget.value = user
+  permissionsSelected.value = (user.permissions || []).filter(p => allPermissions.includes(p))
+  showPermissionsDialog.value = true
+}
+
+async function submitPermissions() {
+  permissionsLoading.value = true
+  try {
+    await usersService.setPermissions(permissionsTarget.value.user_id, permissionsSelected.value)
+    message.success(t('users.messages.permissionsSuccess'))
+    showPermissionsDialog.value = false
+    await loadUsers()
+  } catch (e) {
+    message.error(e.message || t('users.messages.actionFailed'))
+  } finally {
+    permissionsLoading.value = false
+  }
+}
+
+// --- reset password dialog ---
+const showResetPasswordDialog = ref(false)
+const resetPasswordTarget = ref(null)
+const resetPasswordForm = ref({ password: '', confirmPassword: '' })
+const resetPasswordLoading = ref(false)
+
+function openResetPasswordDialog(user) {
+  resetPasswordTarget.value = user
+  resetPasswordForm.value = { password: '', confirmPassword: '' }
+  showResetPasswordDialog.value = true
+}
+
+async function submitResetPassword() {
+  if (!resetPasswordForm.value.password.trim()) {
+    message.error(t('users.rules.passwordRequired'))
+    return
+  }
+  if (resetPasswordForm.value.password !== resetPasswordForm.value.confirmPassword) {
+    message.error(t('users.rules.passwordMismatch'))
+    return
+  }
+  resetPasswordLoading.value = true
+  try {
+    await usersService.resetPassword(resetPasswordTarget.value.user_id, resetPasswordForm.value.password)
+    message.success(t('users.messages.resetPasswordSuccess', { name: resetPasswordTarget.value.username }))
+    showResetPasswordDialog.value = false
+  } catch (e) {
+    message.error(e.message || t('users.messages.actionFailed'))
+  } finally {
+    resetPasswordLoading.value = false
+  }
+}
+
+// --- table columns ---
 const columns = computed(() => [
+  {
+    title: t('users.table.id'),
+    key: 'user_id',
+    render: (row) => h(NText, { depth: 3, style: 'font-size:12px;font-family:monospace' }, { default: () => row.user_id }),
+  },
   {
     title: t('users.table.username'),
     key: 'username',
@@ -59,7 +171,7 @@ const columns = computed(() => [
             size: 'small',
             bordered: false,
             type: permissionType(p),
-          }, { default: () => t(`users.permissions.${p}`, p) }),
+          }, { default: () => permissionLabel(p) }),
         ]))
       )
     },
@@ -83,9 +195,9 @@ const columns = computed(() => [
     title: t('users.table.actions'),
     key: 'actions',
     render: (row) => {
-      if (!canDisableUsers.value) return '—'
+      if (!canManageUsers.value) return '—'
       const isSelf = row.user_id === auth.user?.user_id
-      const action = row.status === 'disabled'
+      const toggleBtn = row.status === 'disabled'
         ? h(NButton, {
           size: 'small',
           type: 'primary',
@@ -101,7 +213,20 @@ const columns = computed(() => [
           onClick: () => handleToggleStatus(row, 'disabled'),
         }, { default: () => t('users.actions.disable') })
 
-      return h(NSpace, { size: 8 }, () => [action])
+      const permBtn = h(NButton, {
+        size: 'small',
+        secondary: true,
+        onClick: () => openPermissionsDialog(row),
+      }, { default: () => t('users.actions.editPermissions') })
+
+      const resetBtn = h(NButton, {
+        size: 'small',
+        secondary: true,
+        disabled: isSelf,
+        onClick: () => openResetPasswordDialog(row),
+      }, { default: () => t('users.actions.resetPassword') })
+
+      return h(NSpace, { size: 8 }, () => [toggleBtn, permBtn, resetBtn])
     },
   },
 ])
@@ -156,6 +281,9 @@ onMounted(loadUsers)
     <div class="page-body">
       <div class="toolbar">
         <n-button :loading="loading" @click="loadUsers">{{ t('users.refresh') }}</n-button>
+        <n-button v-if="canManageUsers" type="primary" @click="openCreateDialog">
+          {{ t('users.createUser') }}
+        </n-button>
         <n-text v-if="lastRefreshed" depth="3" style="font-size:12px">{{ lastRefreshed }}</n-text>
       </div>
 
@@ -180,4 +308,73 @@ onMounted(loadUsers)
       </div>
     </div>
   </div>
+
+  <!-- Create User Dialog -->
+  <n-modal v-model:show="showCreateDialog" preset="dialog" :title="t('users.dialog.createTitle')" style="width:420px">
+    <n-form style="margin-top:12px">
+      <n-form-item :label="t('users.form.username')">
+        <n-input v-model:value="createForm.username" :placeholder="t('users.form.username')" />
+      </n-form-item>
+      <n-form-item :label="t('users.form.password')">
+        <n-input v-model:value="createForm.password" type="password" show-password-on="click" :placeholder="t('users.form.password')" />
+      </n-form-item>
+      <n-form-item :label="t('users.form.confirmPassword')">
+        <n-input v-model:value="createForm.confirmPassword" type="password" show-password-on="click" :placeholder="t('users.form.confirmPassword')" />
+      </n-form-item>
+      <n-form-item :label="t('users.table.permissions')">
+        <n-checkbox-group v-model:value="createForm.permissions">
+          <n-space vertical>
+            <n-checkbox v-for="p in allPermissions" :key="p" :value="p">
+              <n-tag :type="permissionType(p)" size="small" :bordered="false">{{ permissionLabel(p) }}</n-tag>
+            </n-checkbox>
+          </n-space>
+        </n-checkbox-group>
+      </n-form-item>
+    </n-form>
+    <template #action>
+      <n-button @click="showCreateDialog = false">{{ t('users.actions.cancel') }}</n-button>
+      <n-button type="primary" :loading="createLoading" @click="submitCreate">{{ t('users.createUser') }}</n-button>
+    </template>
+  </n-modal>
+
+  <!-- Edit Permissions Dialog -->
+  <n-modal
+    v-model:show="showPermissionsDialog"
+    preset="dialog"
+    :title="permissionsTarget ? t('users.dialog.permissionsTitle', { name: permissionsTarget.username }) : ''"
+    style="width:380px"
+  >
+    <n-checkbox-group v-model:value="permissionsSelected" style="margin-top:12px">
+      <n-space vertical>
+        <n-checkbox v-for="p in allPermissions" :key="p" :value="p">
+          <n-tag :type="permissionType(p)" size="small" :bordered="false">{{ permissionLabel(p) }}</n-tag>
+        </n-checkbox>
+      </n-space>
+    </n-checkbox-group>
+    <template #action>
+      <n-button @click="showPermissionsDialog = false">{{ t('users.actions.cancel') }}</n-button>
+      <n-button type="primary" :loading="permissionsLoading" @click="submitPermissions">Save</n-button>
+    </template>
+  </n-modal>
+
+  <!-- Reset Password Dialog -->
+  <n-modal
+    v-model:show="showResetPasswordDialog"
+    preset="dialog"
+    :title="resetPasswordTarget ? t('users.dialog.resetPasswordTitle', { name: resetPasswordTarget.username }) : ''"
+    style="width:380px"
+  >
+    <n-form style="margin-top:12px">
+      <n-form-item :label="t('users.form.password')">
+        <n-input v-model:value="resetPasswordForm.password" type="password" show-password-on="click" :placeholder="t('users.form.password')" />
+      </n-form-item>
+      <n-form-item :label="t('users.form.confirmPassword')">
+        <n-input v-model:value="resetPasswordForm.confirmPassword" type="password" show-password-on="click" :placeholder="t('users.form.confirmPassword')" />
+      </n-form-item>
+    </n-form>
+    <template #action>
+      <n-button @click="showResetPasswordDialog = false">{{ t('users.actions.cancel') }}</n-button>
+      <n-button type="primary" :loading="resetPasswordLoading" @click="submitResetPassword">{{ t('users.actions.resetPassword') }}</n-button>
+    </template>
+  </n-modal>
 </template>

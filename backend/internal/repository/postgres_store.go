@@ -34,7 +34,7 @@ func (s *PostgresStore) Close() error {
 	return sqlDB.Close()
 }
 
-func NewPostgresStore(dsn string, accounts []AccountSeed) (*PostgresStore, AccountSyncResult, error) {
+func NewPostgresStore(dsn string, account InitAccount) (*PostgresStore, AccountSyncResult, error) {
 	sqlDB, err := sql.Open("postgres", postgresDSNWithConnectTimeout(dsn))
 	if err != nil {
 		return nil, AccountSyncResult{}, err
@@ -57,7 +57,7 @@ func NewPostgresStore(dsn string, accounts []AccountSeed) (*PostgresStore, Accou
 	}
 
 	store := &PostgresStore{db: db}
-	result, err := store.syncAccounts(accounts)
+	result, err := store.ensureInitAccount(account)
 	if err != nil {
 		return nil, AccountSyncResult{}, err
 	}
@@ -100,67 +100,33 @@ func runMigrations(sqlDB *sql.DB) error {
 	return nil
 }
 
-func (s *PostgresStore) syncAccounts(accounts []AccountSeed) (AccountSyncResult, error) {
-	var result AccountSyncResult
+func (s *PostgresStore) ensureInitAccount(account InitAccount) (AccountSyncResult, error) {
+	if account.Username == "" || account.Password == "" {
+		return AccountSyncResult{Action: "skipped"}, nil
+	}
 
-	accountSet := make(map[string]struct{}, len(accounts))
-	for _, acc := range accounts {
-		accountSet[acc.Username] = struct{}{}
+	var count int64
+	if err := s.db.Model(&userRow{}).Count(&count).Error; err != nil {
+		return AccountSyncResult{}, err
+	}
+	if count > 0 {
+		return AccountSyncResult{Action: "skipped"}, nil
 	}
 
 	now := time.Now().UTC()
-
-	// Disable users absent from accounts config.
-	var allUsers []userRow
-	if err := s.db.Find(&allUsers).Error; err != nil {
-		return result, err
+	row := userRow{
+		UserID:       uuid.Must(uuid.NewV7()).String(),
+		Username:     account.Username,
+		PasswordHash: resolvePasswordHash(account.Password),
+		Status:       "active",
+		Permissions:  pq.StringArray(AllPermissions),
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
-	for _, row := range allUsers {
-		if _, ok := accountSet[row.Username]; ok {
-			continue
-		}
-		if row.Status != "disabled" {
-			row.Status = "disabled"
-			row.UpdatedAt = now
-			if err := s.db.Save(&row).Error; err != nil {
-				return result, err
-			}
-			result.Disabled = append(result.Disabled, row.Username)
-		}
+	if err := s.db.Create(&row).Error; err != nil {
+		return AccountSyncResult{}, err
 	}
-
-	// Create or re-enable accounts present in config.
-	for _, acc := range accounts {
-		var existing userRow
-		err := s.db.Where("username = ?", acc.Username).First(&existing).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			row := userRow{
-				UserID:       uuid.Must(uuid.NewV7()).String(),
-				Username:     acc.Username,
-				PasswordHash: resolvePasswordHash(acc.Password),
-				Status:       "active",
-				CreatedAt:    now,
-				UpdatedAt:    now,
-			}
-			if err := s.db.Create(&row).Error; err != nil {
-				return result, err
-			}
-			result.Created = append(result.Created, acc.Username)
-		} else if err != nil {
-			return result, err
-		} else if existing.Status == "disabled" {
-			existing.Status = "active"
-			existing.UpdatedAt = now
-			if err := s.db.Save(&existing).Error; err != nil {
-				return result, err
-			}
-			result.Enabled = append(result.Enabled, acc.Username)
-		} else {
-			result.Existing = append(result.Existing, acc.Username)
-		}
-	}
-
-	return result, nil
+	return AccountSyncResult{Username: account.Username, Action: "created"}, nil
 }
 
 func (s *PostgresStore) FindUserByUsername(username string) (model.User, error) {
@@ -197,6 +163,16 @@ func (s *PostgresStore) ListUsers() []model.User {
 		users[i] = userFromRow(r)
 	}
 	return users
+}
+
+func (s *PostgresStore) CreateUser(user model.User) error {
+	var existing userRow
+	if err := s.db.Where("username = ?", user.Username).First(&existing).Error; err == nil {
+		return errors.New("username already exists")
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	return s.db.Create(userToRow(user)).Error
 }
 
 func (s *PostgresStore) CreateKnowledgeBase(kb model.KnowledgeBase) error {
@@ -540,15 +516,16 @@ func (s *PostgresStore) ListChunksPage(documentID string, page, pageSize int) (m
 // ---- row types ----
 
 type userRow struct {
-	UserID       string     `gorm:"column:user_id;primaryKey"`
-	CreatedAt    time.Time  `gorm:"column:created_at;autoCreateTime:false"`
-	UpdatedAt    time.Time  `gorm:"column:updated_at;autoUpdateTime:false"`
-	Username     string     `gorm:"column:username"`
-	PasswordHash string     `gorm:"column:password_hash"`
-	Status       string     `gorm:"column:status"`
-	LastLoginAt  *time.Time `gorm:"column:last_login_at"`
-	TOTPSecret   string     `gorm:"column:totp_secret"`
-	TOTPEnabled  bool       `gorm:"column:totp_enabled"`
+	UserID       string         `gorm:"column:user_id;primaryKey"`
+	CreatedAt    time.Time      `gorm:"column:created_at;autoCreateTime:false"`
+	UpdatedAt    time.Time      `gorm:"column:updated_at;autoUpdateTime:false"`
+	Username     string         `gorm:"column:username"`
+	PasswordHash string         `gorm:"column:password_hash"`
+	Status       string         `gorm:"column:status"`
+	LastLoginAt  *time.Time     `gorm:"column:last_login_at"`
+	TOTPSecret   string         `gorm:"column:totp_secret"`
+	TOTPEnabled  bool           `gorm:"column:totp_enabled"`
+	Permissions  pq.StringArray `gorm:"column:permissions;type:text[]"`
 }
 
 func (userRow) TableName() string { return "users" }
@@ -621,6 +598,10 @@ func (chunkRow) TableName() string { return "document_chunks" }
 // ---- conversions ----
 
 func userFromRow(r userRow) model.User {
+	var perms []string
+	if r.Permissions != nil {
+		perms = []string(r.Permissions)
+	}
 	return model.User{
 		UserID:       r.UserID,
 		CreatedAt:    r.CreatedAt,
@@ -631,10 +612,15 @@ func userFromRow(r userRow) model.User {
 		LastLoginAt:  r.LastLoginAt,
 		TOTPSecret:   r.TOTPSecret,
 		TOTPEnabled:  r.TOTPEnabled,
+		Permissions:  perms,
 	}
 }
 
 func userToRow(u model.User) userRow {
+	var perms pq.StringArray
+	if u.Permissions != nil {
+		perms = pq.StringArray(u.Permissions)
+	}
 	return userRow{
 		UserID:       u.UserID,
 		CreatedAt:    u.CreatedAt,
@@ -645,6 +631,7 @@ func userToRow(u model.User) userRow {
 		LastLoginAt:  u.LastLoginAt,
 		TOTPSecret:   u.TOTPSecret,
 		TOTPEnabled:  u.TOTPEnabled,
+		Permissions:  perms,
 	}
 }
 

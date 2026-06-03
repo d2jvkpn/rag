@@ -18,14 +18,16 @@ const creating = ref(false)
 const error = ref('')
 const lastRefreshed = ref('')
 const showCreate = ref(false)
+const showDetail = ref(false)
+const selectedKb = ref(null)
 const knowledgeBases = ref([])
 const formRef = ref(null)
 const defaultDim = ref(1536)
 const defaultModel = ref('')
 
 const form = ref(defaultForm())
-const canCreate = computed(() => auth.user?.permissions?.includes('create_knowledge_bases'))
-const canDelete = computed(() => auth.user?.permissions?.includes('delete_knowledge_bases'))
+const canCreate = computed(() => auth.user?.permissions?.includes('manage_knowledge_bases'))
+const canDelete = computed(() => auth.user?.permissions?.includes('manage_knowledge_bases'))
 
 const analyzerOptions = computed(() => [
   { label: 'chinese', value: 'chinese' },
@@ -60,7 +62,11 @@ const columns = computed(() => [
     title: t('knowledgeBases.fields.id'),
     key: 'knowledge_base_id',
     width: 180,
-    render: (row) => h(NEllipsis, { style: 'max-width:170px' }, { default: () => row.knowledge_base_id }),
+    render: (row) => h(
+      'a',
+      { style: 'cursor:pointer', onClick: () => openDetail(row) },
+      h(NEllipsis, { style: 'max-width:170px' }, { default: () => row.knowledge_base_id }),
+    ),
   },
   {
     title: t('knowledgeBases.fields.documents'),
@@ -101,10 +107,10 @@ const columns = computed(() => [
     render: (row) => row.created_by || '-',
   },
   {
-    title: t('knowledgeBases.fields.updatedAt'),
-    key: 'updated_at',
+    title: t('knowledgeBases.fields.createdAt'),
+    key: 'created_at',
     width: 120,
-    render: (row) => h('span', { title: rfc3339(row.updated_at), style: 'font-size:12px;color:#999' }, fromNow(row.updated_at)),
+    render: (row) => h('span', { title: rfc3339(row.created_at), style: 'font-size:12px;color:#999' }, fromNow(row.created_at)),
   },
   ...(canDelete.value ? [{
     title: t('knowledgeBases.fields.actions'),
@@ -131,6 +137,11 @@ function openCreateModal() {
   form.value = defaultForm()
   formRef.value?.restoreValidation()
   showCreate.value = true
+}
+
+function openDetail(kb) {
+  selectedKb.value = kb
+  showDetail.value = true
 }
 
 async function loadKnowledgeBases() {
@@ -212,11 +223,62 @@ onMounted(loadKnowledgeBases)
         :loading="loading"
         :pagination="false"
         :row-key="(row) => row.knowledge_base_id"
-        :scroll-x="canDelete ? 1180 : 1100"
+        :scroll-x="canDelete ? 1220 : 1140"
         size="small"
       />
     </div>
 
+    <!-- Detail modal -->
+    <n-modal
+      v-model:show="showDetail"
+      preset="card"
+      :title="selectedKb?.knowledge_base_id"
+      style="width:480px"
+    >
+      <n-descriptions
+        v-if="selectedKb"
+        label-placement="left"
+        :column="1"
+        label-style="width:140px;color:#999;font-size:13px"
+        content-style="font-size:13px"
+      >
+        <n-descriptions-item :label="t('knowledgeBases.fields.id')">
+          <n-text style="font-family:monospace">{{ selectedKb.knowledge_base_id }}</n-text>
+        </n-descriptions-item>
+        <n-descriptions-item :label="t('knowledgeBases.fields.documents')">
+          {{ selectedKb.document_count || 0 }}
+        </n-descriptions-item>
+        <n-descriptions-item :label="t('knowledgeBases.fields.dim')">
+          {{ selectedKb.dim }}
+        </n-descriptions-item>
+        <n-descriptions-item :label="t('knowledgeBases.fields.model')">
+          {{ selectedKb.model || '-' }}
+        </n-descriptions-item>
+        <n-descriptions-item :label="t('knowledgeBases.fields.analyzer')">
+          {{ selectedKb.analyzer || 'chinese' }}
+        </n-descriptions-item>
+        <n-descriptions-item :label="t('knowledgeBases.fields.chunkSize')">
+          {{ selectedKb.chunk_size }}
+        </n-descriptions-item>
+        <n-descriptions-item :label="t('knowledgeBases.fields.chunkOverlap')">
+          {{ selectedKb.chunk_overlap }}
+        </n-descriptions-item>
+        <n-descriptions-item :label="t('knowledgeBases.fields.minChunks')">
+          {{ selectedKb.min_chunks }}
+        </n-descriptions-item>
+        <n-descriptions-item :label="t('knowledgeBases.fields.createdBy')">
+          {{ selectedKb.created_by || '-' }}
+        </n-descriptions-item>
+        <n-descriptions-item :label="t('knowledgeBases.fields.createdAt')">
+          {{ rfc3339(selectedKb.created_at) }}
+        </n-descriptions-item>
+        <n-descriptions-item :label="t('knowledgeBases.fields.updatedAt')">
+          {{ rfc3339(selectedKb.updated_at) }}
+        </n-descriptions-item>
+      </n-descriptions>
+    </n-modal>
+
+    <!-- Create modal -->
     <n-modal v-model:show="showCreate" preset="card" :title="t('knowledgeBases.modal.title')" class="kb-modal" style="width:520px">
       <n-form ref="formRef" :model="form" :rules="rules" label-placement="left" label-width="128px">
         <n-form-item :label="t('knowledgeBases.fields.id')" path="knowledgeBaseId">

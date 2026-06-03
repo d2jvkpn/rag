@@ -125,12 +125,20 @@ data/documents/{yyyy}/{mm}/{dd}/{yyyy-mm-dd}_{document_id}/chunks-vN.json
 
 ## 账户初始化与权限
 
-- `accounts[]` 列表在启动时逐条检查：用户名不存在则插入
+- `init_account` 为单个初始 admin 账户，**仅在 `users` 表为空时生效**（一次性引导）
 - `password`：明文自动 bcrypt hash；`$2a$`/`$2b$`/`$2y$` 前缀视为已 hash，直接存入
-- `permissions[]`：纯配置态，不写入 `users` 表，每次从配置文件读取
-- 已存在的账户不被修改；`disabled` 用户在登录和每次鉴权请求时均被拦截
+- 该账户自动拥有全部权限（admin），无需显式列出
+- 未配置 `init_account.username` 或 `init_account.password`，或表中已有用户时，跳过且不报错
+- 系统已有用户后，`init_account` 配置不再产生任何副作用
 
-支持的权限：`view_user_list` / `delete_documents` / `disable_users` / `create_knowledge_bases` / `delete_knowledge_bases`
+支持的权限：`manage_users` / `manage_knowledge_bases` / `manage_documents`
+
+**权限判断逻辑**（`AuthService.HasPermission`）采用零权限默认模型：
+
+- `users.permissions` 为 `NULL` 或空数组 → 无任何权限
+- `users.permissions` 非空 → 仅持有列表中明确列出的权限
+
+`init_account` 创建的账户在 DB 中显式写入全部 3 项权限（不依赖 NULL 推断）。通过 `POST /api/users` 创建的用户初始权限由创建时指定的列表决定。权限列表由 `repository.AllPermissions` 统一维护，是 service 层校验与 store 层初始化的唯一来源。
 
 ## 文档所有权
 
@@ -138,7 +146,7 @@ data/documents/{yyyy}/{mm}/{dd}/{yyyy-mm-dd}_{document_id}/chunks-vN.json
 
 - `uploader_id != ""` 且与当前用户不符时返回 `403 forbidden`
 - `uploader_id` 为空（存量数据）跳过所有权检查
-- `DELETE /api/documents/:id`：文档上传者 **或** 持有 `delete_documents` 权限的用户均可执行
+- `DELETE /api/documents/:id`：文档上传者 **或** 持有 `manage_documents` 权限的用户均可执行
 - 所有用户均可读取所有文档（GET 接口无所有权限制）
 
 ## API 响应规范
@@ -294,15 +302,14 @@ Loader 将 snake_case 字段规范化为 camelCase，兼容旧版 camelCase 配�
 | `http.base_path` | `""` | 所有路由的 URL 前缀，如 `"/rag"` |
 | `http.jwt_secret` | — | JWT 签名密钥（必填） |
 | `http.jwt_token_ttl` | `8h` | Token 有效期，支持 `time.ParseDuration` 格式 |
-| `http.session_cookie` | `rag_session` | HttpOnly Cookie 名称 |
+| `http.session_cookie` | — | HttpOnly Cookie 名称（示例配置使用 `rag`，必填） |
 | `http.allow_origins` | `["*"]` | CORS 允许的 Origin 列表，不能为空 |
 | `app.data_dir` | `data` | 数据根目录（文档文件、快照、静态资源） |
 | `app.state_path` | — | JSONStore 文件路径，默认 `{data_dir}/app-state.json` |
 | `database.dsn` | — | PostgreSQL DSN，配置后切换为 PostgresStore |
 | `redis.dsn` | — | Redis DSN，配置后切换为 AsynqQueue 和 RedisBlacklist |
-| `accounts[].username` | — | 启动时自动创建的账户用户名 |
-| `accounts[].password` | — | 明文或 bcrypt hash（`$2a$`/`$2b$`/`$2y$` 前缀） |
-| `accounts[].permissions[]` | — | 配置态权限，不入库 |
+| `init_account.username` | — | 初始 admin 账户用户名；留空则跳过 |
+| `init_account.password` | — | 明文或 bcrypt hash（`$2a$`/`$2b$`/`$2y$` 前缀）；该账户自动拥有全部权限 |
 | `embedder.base_url` | — | OpenAI-compatible Embedding 端点 |
 | `embedder.api_key` | — | Embedding API Key |
 | `embedder.model` | `text-embedding-3-small` | Embedding 模型名 |

@@ -55,7 +55,7 @@
 - `normalized_text`：清洗后的中间文本，供人工审核参考
 - `status`：审核状态，`draft / approved / rejected`
 - `chunk_version`：所属的文档 chunk 版本号，对应 `documents.chunk_version`
-- `source`：chunk 来源，`auto / manual / mixed`
+- `source`：chunk 来源，`auto`（自动切分）/ `manual`（人工编辑后覆盖）
 - `is_current`：是否为当前展示和操作的版本
 - `embedding_model`：embedding 完成后写入的模型名；快照中也带，便于断电重建
 - `embedding`：仅模型层和快照中携带（`[]float32`），数据库不存（向量在 Milvus）
@@ -122,10 +122,11 @@
 - `user_id`：用户唯一标识，uuidv7 主键
 - `username`：登录用户名，唯一约束
 - `password_hash`：bcrypt（`golang.org/x/crypto/bcrypt`，`DefaultCost`）
-- `status`：运行时状态，`active / disabled`；配置 `accounts[].permissions` 不进入此表
+- `status`：运行时状态，`active / disabled`
 - `last_login_at`：最近一次登录时间，从未登录时为 null
 - `totp_secret`：TOTP 密钥，未启用时为空
 - `totp_enabled`：`true` 时登录需附加 6 位动态码
+- `permissions`：`TEXT[]`，零权限默认模型：`NULL` 和空数组均表示无任何权限；非空时仅持有列表中明确列出的权限。合法值：`manage_users` / `manage_knowledge_bases` / `manage_documents`
 
 建议约束：
 
@@ -151,7 +152,7 @@
 - `chunk_size`：切分目标 token 数
 - `chunk_overlap`：相邻 chunk 重叠 token 数
 - `min_chunks`：文档切分后允许的最少 chunk 数，低于此值时触发告警或拒绝入库
-- `created_by`：创建该知识库的用户 ID，关联 `users.user_id`，可为空
+- `created_by`：创建该知识库的用户名（username），非外键，冗余存储便于展示，可为空
 
 ## Milvus Schema
 

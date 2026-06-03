@@ -22,7 +22,7 @@ const routes = [
       { path: 'documents/:documentId/chunks', component: DocumentChunksPage },
       { path: 'search', component: SearchPage },
       { path: 'knowledge-bases', component: KnowledgeBasesPage },
-      { path: 'users', component: UsersPage, meta: { requiresPermission: 'view_user_list' } },
+      { path: 'users', component: UsersPage, meta: { requiresPermission: 'manage_users' } },
     ],
   },
 ]

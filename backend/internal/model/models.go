@@ -12,6 +12,8 @@ type User struct {
 	LastLoginAt  *time.Time `json:"last_login_at,omitempty"`
 	TOTPSecret   string     `json:"totp_secret,omitempty"` // base32-encoded TOTP seed; omitted when TOTP is not enabled
 	TOTPEnabled  bool       `json:"totp_enabled"`
+	// nil = derive permissions from config; non-nil (including empty) = DB-driven
+	Permissions  []string   `json:"permissions"`
 }
 
 type KnowledgeBase struct {

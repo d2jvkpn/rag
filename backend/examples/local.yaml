@@ -5,15 +5,9 @@ app:
   # If omitted, the service falls back to {app.data_dir}/app-state.json.
   state_path: "data/app-state.json"
 
-accounts:
-- username: "admin"
+init_account:
+  username: "admin"
   password: "admin123"
-  permissions:
-  - view_user_list
-  - delete_documents
-  - disable_users
-  - create_knowledge_bases
-  - delete_knowledge_bases
 
 http:
   base_path: ""

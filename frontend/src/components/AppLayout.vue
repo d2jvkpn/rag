@@ -66,7 +66,7 @@ const menuOptions = computed(() => {
     { label: t('nav.search'), key: 'search', icon: icon(SearchOutline) },
   ]
   items.push({ label: t('nav.knowledgeBases'), key: 'knowledge-bases', icon: icon(DocumentOutline) })
-  if (auth.user?.permissions?.includes('view_user_list')) {
+  if (auth.user?.permissions?.includes('manage_users')) {
     items.push({ label: t('nav.users'), key: 'users', icon: icon(PeopleOutline) })
   }
   return items

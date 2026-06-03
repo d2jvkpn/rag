@@ -153,7 +153,7 @@
 
 - 获取当前登录用户信息
 - 响应包含 `totp_enabled` 字段，表示当前用户是否已开启两步验证
-- 响应包含 `permissions` 字段；该字段来自配置文件 `accounts[].permissions`，不从数据库读取
+- 响应包含 `permissions` 字段，值为 DB 中存储的权限列表（`NULL` 或空数组均表示无权限）
 
 ### `POST /api/login`（TOTP 两步验证）
 
@@ -243,7 +243,7 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 `DELETE /api/documents/:id` 允许两类用户执行：
 
 - 文档上传者本人
-- 配置权限中包含 `delete_documents` 的用户
+- 持有 `manage_documents` 权限的用户
 
 ### `GET /api/documents`
 
@@ -279,13 +279,21 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 ### `GET /api/users`
 
 - 返回全部账户列表
-- 需要权限 `view_user_list`
-- 返回字段包含数据库中的 `status`，以及按用户名从配置补出的 `permissions`
+- 需要权限 `manage_users`
+- 返回字段包含 `status`、`permissions`（DB 中存储的列表）
+
+### `POST /api/users`
+
+- 创建新用户
+- 需要权限 `manage_users`
+- 请求体：`{ "username": "...", "password": "...", "permissions": [...] }`
+- `permissions` 为合法权限字符串数组（可为空数组），存入 DB
+- 用户名已存在时返回 `409 conflict`
 
 ### `POST /api/users/:user_id/disable`
 
 - 将目标用户状态设为 `disabled`
-- 需要权限 `disable_users`
+- 需要权限 `manage_users`
 - 被禁用用户后续登录返回 `403 forbidden`
 - 已登录但被禁用的用户，在后续请求鉴权阶段返回 `403 forbidden`
 - 不允许禁用自己
@@ -293,8 +301,23 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 ### `POST /api/users/:user_id/enable`
 
 - 将目标用户状态设为 `active`
-- 需要权限 `disable_users`
+- 需要权限 `manage_users`
 - 不允许操作自己的状态
+
+### `PUT /api/users/:user_id/permissions`
+
+- 更新目标用户的权限列表
+- 需要权限 `manage_users`
+- 请求体：`{ "permissions": ["manage_users", "manage_knowledge_bases", ...] }`
+- 合法值：`manage_users` / `manage_knowledge_bases` / `manage_documents`
+- 传入非法权限字符串返回 `400 validation_error`
+
+### `POST /api/users/:user_id/reset-password`
+
+- 管理员重置目标用户密码
+- 需要权限 `manage_users`
+- 请求体：`{ "password": "..." }`
+- 不允许重置自己的密码
 
 ## Chunk 审核接口
 
@@ -374,7 +397,7 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 ### `POST /api/knowledge-bases`
 
 - 创建知识库，并同步创建对应 Milvus collection
-- 需要登录且拥有 `create_knowledge_bases` 权限
+- 需要登录且拥有 `manage_knowledge_bases` 权限
 - `knowledge_base_id` 仅允许字母、数字、下划线、连字符，最长 63 位
 - `analyzer` 可选 `chinese` / `english` / `standard`
 - `dim` 和 `model` 不由请求指定，分别使用服务端 `embedder.dim` 与 `embedder.model`
@@ -396,7 +419,7 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 ### `DELETE /api/knowledge-bases/:knowledge_base_id`
 
 - 删除知识库，并同步删除对应 Milvus collection
-- 需要登录且拥有 `delete_knowledge_bases` 权限
+- 需要登录且拥有 `manage_knowledge_bases` 权限
 - 知识库下仍有文档时返回 `409 conflict`，需先删除所有文档
 - 知识库不存在返回 `404 not_found`
 - 删除成功返回 `204 No Content`

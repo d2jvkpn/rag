@@ -2,9 +2,16 @@ package repository
 
 import "github.com/d2jvkpn/rag/backend/internal/model"
 
+// AllPermissions is the canonical list of every permission the system supports.
+// Used to seed the init account and to validate permission strings in the service layer.
+var AllPermissions = []string{
+	"manage_users", "manage_knowledge_bases", "manage_documents",
+}
+
 type UserStore interface {
 	FindUserByUsername(username string) (model.User, error)
 	GetUser(userID string) (model.User, error)
+	CreateUser(user model.User) error
 	UpdateUser(user model.User) error
 	ListUsers() []model.User
 }

@@ -23,7 +23,7 @@ func testConfig(tmpDir string) *viper.Viper {
 	v := viper.New()
 	v.Set("app.data_dir", filepath.Join(tmpDir, "data"))
 	v.Set("app.state_path", filepath.Join(tmpDir, "data", "app-state.json"))
-	v.Set("http.session_cookie", "rag_session")
+	v.Set("http.session_cookie", "rag")
 	v.Set("admin.username", "admin")
 	v.Set("admin.password", "admin123")
 	v.Set("embedder.dim", 1536)
@@ -36,14 +36,8 @@ func TestDocumentLifecycle(t *testing.T) {
 	tmpDir := t.TempDir()
 	v := testConfig(tmpDir)
 
-	accounts := []repository.AccountSeed{
-		{
-			Username:    "admin",
-			Password:    "admin123",
-			Permissions: []string{"view_user_list", "delete_documents", "disable_users"},
-		},
-	}
-	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
+	initAccount := repository.InitAccount{Username: "admin", Password: "admin123"}
+	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), initAccount)
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}
@@ -55,7 +49,7 @@ func TestDocumentLifecycle(t *testing.T) {
 	defer documentService.Close()
 	createKnowledgeBaseForAPITest(t, documentService, "kb-1")
 
-	authService := service.NewAuthService(store, "test-secret", time.Hour, accounts)
+	authService := service.NewAuthService(store, "test-secret", time.Hour)
 	handler := NewHandler(v, authService, documentService).Routes()
 
 	sessionCookie := loginForTest(t, handler, "admin", "admin123")
@@ -167,11 +161,8 @@ func TestCreateKnowledgeBaseEndpoint(t *testing.T) {
 	tmpDir := t.TempDir()
 	v := testConfig(tmpDir)
 	v.Set("embedder.model", "text-embedding-v4")
-	accounts := []repository.AccountSeed{
-		{Username: "admin", Password: "admin123", Permissions: []string{"create_knowledge_bases"}},
-		{Username: "user1", Password: "user123"},
-	}
-	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
+	initAccount := repository.InitAccount{Username: "admin", Password: "admin123"}
+	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), initAccount)
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}
@@ -181,7 +172,10 @@ func TestCreateKnowledgeBaseEndpoint(t *testing.T) {
 	}
 	defer documentService.Close()
 
-	authService := service.NewAuthService(store, "test-secret", time.Hour, accounts)
+	authService := service.NewAuthService(store, "test-secret", time.Hour)
+	if _, err := authService.CreateUser("user1", "user123", []string{}); err != nil {
+		t.Fatalf("create user1: %v", err)
+	}
 	handler := NewHandler(v, authService, documentService).Routes()
 	adminCookie := loginForTest(t, handler, "admin", "admin123")
 	userCookie := loginForTest(t, handler, "user1", "user123")
@@ -228,8 +222,8 @@ func TestAuthRequired(t *testing.T) {
 	tmpDir := t.TempDir()
 	v := testConfig(tmpDir)
 
-	accounts := []repository.AccountSeed{{Username: "admin", Password: "admin123"}}
-	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
+	initAccount := repository.InitAccount{Username: "admin", Password: "admin123"}
+	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), initAccount)
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}
@@ -240,7 +234,7 @@ func TestAuthRequired(t *testing.T) {
 	defer documentService.Close()
 	createKnowledgeBaseForAPITest(t, documentService, "kb-1")
 
-	authService := service.NewAuthService(store, "test-secret", time.Hour, accounts)
+	authService := service.NewAuthService(store, "test-secret", time.Hour)
 	handler := NewHandler(v, authService, documentService).Routes()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/documents", nil)
@@ -320,12 +314,9 @@ func TestUserListRequiresPermission(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	v := testConfig(tmpDir)
-	accounts := []repository.AccountSeed{
-		{Username: "admin", Password: "admin123", Permissions: []string{"view_user_list"}},
-		{Username: "user1", Password: "user123"},
-	}
+	initAccount := repository.InitAccount{Username: "admin", Password: "admin123"}
 
-	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
+	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), initAccount)
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}
@@ -336,7 +327,10 @@ func TestUserListRequiresPermission(t *testing.T) {
 	defer documentService.Close()
 	createKnowledgeBaseForAPITest(t, documentService, "kb-1")
 
-	authService := service.NewAuthService(store, "test-secret", time.Hour, accounts)
+	authService := service.NewAuthService(store, "test-secret", time.Hour)
+	if _, err := authService.CreateUser("user1", "user123", []string{}); err != nil {
+		t.Fatalf("create user1: %v", err)
+	}
 	handler := NewHandler(v, authService, documentService).Routes()
 
 	adminCookie := loginForTest(t, handler, "admin", "admin123")
@@ -364,9 +358,9 @@ func TestDocumentTagsEndpoint(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	v := testConfig(tmpDir)
-	accounts := []repository.AccountSeed{{Username: "admin", Password: "admin123"}}
+	initAccount := repository.InitAccount{Username: "admin", Password: "admin123"}
 
-	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
+	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), initAccount)
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}
@@ -378,7 +372,7 @@ func TestDocumentTagsEndpoint(t *testing.T) {
 	createKnowledgeBaseForAPITest(t, documentService, "kb-1")
 	createKnowledgeBaseForAPITest(t, documentService, "kb-2")
 
-	authService := service.NewAuthService(store, "test-secret", time.Hour, accounts)
+	authService := service.NewAuthService(store, "test-secret", time.Hour)
 	handler := NewHandler(v, authService, documentService).Routes()
 	sessionCookie := loginForTest(t, handler, "admin", "admin123")
 
@@ -439,16 +433,9 @@ func TestDisableUserBlocksFurtherRequests(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	v := testConfig(tmpDir)
-	accounts := []repository.AccountSeed{
-		{
-			Username:    "admin",
-			Password:    "admin123",
-			Permissions: []string{"disable_users", "view_user_list"},
-		},
-		{Username: "user1", Password: "user123"},
-	}
+	initAccount := repository.InitAccount{Username: "admin", Password: "admin123"}
 
-	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
+	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), initAccount)
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}
@@ -459,7 +446,10 @@ func TestDisableUserBlocksFurtherRequests(t *testing.T) {
 	defer documentService.Close()
 	createKnowledgeBaseForAPITest(t, documentService, "kb-1")
 
-	authService := service.NewAuthService(store, "test-secret", time.Hour, accounts)
+	authService := service.NewAuthService(store, "test-secret", time.Hour)
+	if _, err := authService.CreateUser("user1", "user123", []string{}); err != nil {
+		t.Fatalf("create user1: %v", err)
+	}
 	handler := NewHandler(v, authService, documentService).Routes()
 
 	adminCookie := loginForTest(t, handler, "admin", "admin123")
@@ -503,12 +493,9 @@ func TestDeleteDocumentPermissionOverridesOwnership(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	v := testConfig(tmpDir)
-	accounts := []repository.AccountSeed{
-		{Username: "admin", Password: "admin123", Permissions: []string{"delete_documents"}},
-		{Username: "user1", Password: "user123"},
-	}
+	initAccount := repository.InitAccount{Username: "admin", Password: "admin123"}
 
-	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), accounts)
+	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), initAccount)
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}
@@ -519,7 +506,10 @@ func TestDeleteDocumentPermissionOverridesOwnership(t *testing.T) {
 	defer documentService.Close()
 	createKnowledgeBaseForAPITest(t, documentService, "kb-1")
 
-	authService := service.NewAuthService(store, "test-secret", time.Hour, accounts)
+	authService := service.NewAuthService(store, "test-secret", time.Hour)
+	if _, err := authService.CreateUser("user1", "user123", []string{}); err != nil {
+		t.Fatalf("create user1: %v", err)
+	}
 	handler := NewHandler(v, authService, documentService).Routes()
 
 	userCookie := loginForTest(t, handler, "user1", "user123")

@@ -16,19 +16,17 @@ import (
 	"github.com/d2jvkpn/rag/backend/internal/model"
 )
 
-// AccountSeed describes an account to ensure exists on startup.
-type AccountSeed struct {
-	Username    string   `mapstructure:"username"`
-	Password    string   `mapstructure:"password"`    // plaintext or bcrypt hash (detected automatically)
-	Permissions []string `mapstructure:"permissions"` // config-only permissions; never persisted
+// InitAccount is the single bootstrap admin account configured at deployment.
+// It is treated as having all permissions. Leave Username empty to skip.
+type InitAccount struct {
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"` // plaintext or bcrypt hash (detected automatically)
 }
 
-// AccountSyncResult reports what syncAccounts did during startup.
+// AccountSyncResult reports what ensureInitAccount did during startup.
 type AccountSyncResult struct {
-	Existing []string // already active, no change
-	Created  []string
-	Enabled  []string // re-activated (were disabled, now back in accounts)
-	Disabled []string
+	Username string
+	Action   string // created | enabled | existing | skipped
 }
 
 var ErrNotFound = errors.New("not found")
@@ -50,7 +48,7 @@ func (s *JSONStore) Close() error {
 	return nil
 }
 
-func NewJSONStore(path string, accounts []AccountSeed) (*JSONStore, AccountSyncResult, error) {
+func NewJSONStore(path string, account InitAccount) (*JSONStore, AccountSyncResult, error) {
 	store := &JSONStore{
 		path: path,
 		data: State{
@@ -85,76 +83,33 @@ func NewJSONStore(path string, accounts []AccountSeed) (*JSONStore, AccountSyncR
 		return nil, AccountSyncResult{}, err
 	}
 
-	result, err := store.syncAccounts(accounts)
+	result, err := store.ensureInitAccount(account)
 	if err != nil {
 		return nil, result, err
 	}
 	return store, result, nil
 }
 
-func (s *JSONStore) syncAccounts(accounts []AccountSeed) (AccountSyncResult, error) {
-	var result AccountSyncResult
-
-	accountSet := make(map[string]struct{}, len(accounts))
-	for _, acc := range accounts {
-		accountSet[acc.Username] = struct{}{}
+func (s *JSONStore) ensureInitAccount(account InitAccount) (AccountSyncResult, error) {
+	if account.Username == "" || account.Password == "" || len(s.data.Users) > 0 {
+		return AccountSyncResult{Action: "skipped"}, nil
 	}
 
 	now := time.Now().UTC()
-	changed := false
-
-	// Disable users absent from accounts config.
-	for id, u := range s.data.Users {
-		if _, ok := accountSet[u.Username]; ok {
-			continue
-		}
-		if u.Status != "disabled" {
-			u.Status = "disabled"
-			u.UpdatedAt = now
-			s.data.Users[id] = u
-			changed = true
-			result.Disabled = append(result.Disabled, u.Username)
-		}
+	user := model.User{
+		UserID:       uuid.Must(uuid.NewV7()).String(),
+		Username:     account.Username,
+		PasswordHash: resolvePasswordHash(account.Password),
+		Status:       "active",
+		Permissions:  append([]string(nil), AllPermissions...),
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
-
-	// Build username → user for quick lookup.
-	byUsername := make(map[string]model.User, len(s.data.Users))
-	for _, u := range s.data.Users {
-		byUsername[u.Username] = u
+	s.data.Users[user.UserID] = user
+	if err := s.persistLocked(); err != nil {
+		return AccountSyncResult{}, err
 	}
-
-	// Create or re-enable accounts present in config.
-	for _, acc := range accounts {
-		existing, ok := byUsername[acc.Username]
-		if !ok {
-			user := model.User{
-				UserID:       uuid.Must(uuid.NewV7()).String(),
-				Username:     acc.Username,
-				PasswordHash: resolvePasswordHash(acc.Password),
-				Status:       "active",
-				CreatedAt:    now,
-				UpdatedAt:    now,
-			}
-			s.data.Users[user.UserID] = user
-			changed = true
-			result.Created = append(result.Created, acc.Username)
-		} else if existing.Status == "disabled" {
-			existing.Status = "active"
-			existing.UpdatedAt = now
-			s.data.Users[existing.UserID] = existing
-			changed = true
-			result.Enabled = append(result.Enabled, acc.Username)
-		} else {
-			result.Existing = append(result.Existing, acc.Username)
-		}
-	}
-
-	if changed {
-		if err := s.persistLocked(); err != nil {
-			return result, err
-		}
-	}
-	return result, nil
+	return AccountSyncResult{Username: account.Username, Action: "created"}, nil
 }
 
 func (s *JSONStore) EnsureKnowledgeBasesFromDocuments(dim int, embedderModel string) error {
@@ -252,6 +207,18 @@ func (s *JSONStore) FindUserByUsername(username string) (model.User, error) {
 		}
 	}
 	return model.User{}, ErrNotFound
+}
+
+func (s *JSONStore) CreateUser(user model.User) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, u := range s.data.Users {
+		if u.Username == user.Username {
+			return errors.New("username already exists")
+		}
+	}
+	s.data.Users[user.UserID] = user
+	return s.persistLocked()
 }
 
 func (s *JSONStore) UpdateUser(user model.User) error {

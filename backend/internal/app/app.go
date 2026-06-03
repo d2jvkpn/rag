@@ -29,7 +29,7 @@ type App struct {
 func New(v *viper.Viper) (*App, error) {
 	var (
 		err             error
-		accounts        []repository.AccountSeed
+		initAccount     repository.InitAccount
 		store           repository.Store
 		syncResult      repository.AccountSyncResult
 		opts            []func(*service.DocumentService)
@@ -40,18 +40,16 @@ func New(v *viper.Viper) (*App, error) {
 		handler         *api.Handler
 	)
 
-	if accounts, err = readAccounts(v); err != nil {
+	if initAccount, err = readInitAccount(v); err != nil {
 		return nil, err
 	}
 
-	if store, syncResult, err = initStore(v, accounts); err != nil {
+	if store, syncResult, err = initStore(v, initAccount); err != nil {
 		return nil, err
 	}
-	infra.L.Info("accounts synced",
-		zap.Strings("existing", syncResult.Existing),
-		zap.Strings("created", syncResult.Created),
-		zap.Strings("enabled", syncResult.Enabled),
-		zap.Strings("disabled", syncResult.Disabled),
+	infra.L.Info("init_account",
+		zap.String("username", syncResult.Username),
+		zap.String("action", syncResult.Action),
 	)
 
 	if opts, err = buildServiceOpts(v); err != nil {
@@ -76,7 +74,6 @@ func New(v *viper.Viper) (*App, error) {
 		store,
 		v.GetString("http.jwt_secret"),
 		tokenTTL,
-		accounts,
 		blacklist,
 	)
 	handler = api.NewHandler(v, authService, documentService)
@@ -116,29 +113,20 @@ func (a *App) Shutdown(ctx context.Context) (err error) {
 	return err
 }
 
-func readAccounts(v *viper.Viper) (accounts []repository.AccountSeed, err error) {
-	var raw []repository.AccountSeed
-
-	if err = v.UnmarshalKey("accounts", &raw); err != nil {
-		return nil, err
+func readInitAccount(v *viper.Viper) (repository.InitAccount, error) {
+	var account repository.InitAccount
+	if err := v.UnmarshalKey("init_account", &account); err != nil {
+		return repository.InitAccount{}, err
 	}
-
-	accounts = make([]repository.AccountSeed, 0, len(raw))
-	for _, v := range raw {
-		if v.Username != "" && v.Password != "" {
-			accounts = append(accounts, v)
-		}
-	}
-
-	return accounts, nil
+	return account, nil
 }
 
-func initStore(v *viper.Viper, accounts []repository.AccountSeed) (repository.Store, repository.AccountSyncResult, error) {
+func initStore(v *viper.Viper, account repository.InitAccount) (repository.Store, repository.AccountSyncResult, error) {
 	var str string
 
 	if str = v.GetString("database.dsn"); str != "" {
 		infra.L.Info("store: postgres")
-		return repository.NewPostgresStore(str, accounts)
+		return repository.NewPostgresStore(str, account)
 	}
 
 	str = v.GetString("app.state_path")
@@ -147,7 +135,7 @@ func initStore(v *viper.Viper, accounts []repository.AccountSeed) (repository.St
 	}
 	infra.L.Info("store: json file", zap.String("path", str))
 
-	return repository.NewJSONStore(str, accounts)
+	return repository.NewJSONStore(str, account)
 }
 
 
