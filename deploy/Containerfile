@@ -93,7 +93,8 @@ RUN addgroup -g "$PGID" appuser && \
     mkdir -p /app/configs /app/data /app/logs /app/target
 
 COPY --from=frontend-build /app/target/dist /app/target/ui
-RUN sed -i 's/:3061/:3060/' /app/target/ui/app.json
+#RUN sed -i 's/:3061/:3060/' /app/target/ui/app.json
+RUN mv /app/target/ui/app.ui.json /app/target/ui/app.json
 COPY --from=backend-build /app/target/server /app/target/
 
 COPY backend/examples/local.yaml /app/configs/local.yaml
