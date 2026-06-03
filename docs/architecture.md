@@ -172,6 +172,89 @@ Collection schema：
 
 创建知识库时后端会同步创建或加载对应 collection。`ensureCollection` 检查 schema，发现 `sparse`、`tags`、`file_sha256` 缺失或 `analyzer` 不匹配时 **drop + recreate**，数据丢失，需重新入库。dense index metric 从旧版本 `L2` 改为 `COSINE` 后，既有 collection 需要重建索引或重建 collection 后重新入库。完整 schema 见 [数据模型](./data-model.md)。
 
+## 后端模块结构
+
+```
+backend/
+├── cmd/server/          # 启动入口，flag 解析，调用 app.Run()
+├── configs/             # 本地运行配置（local.yaml，不入库）
+├── examples/            # 示例配置文件
+├── scripts/             # 辅助脚本（如 PDF 解析 Python 脚本）
+├── tests/               # 集成测试
+└── internal/
+    ├── app/             # 应用初始化与依赖装配（wiring）
+    │   ├── app.go       # 组装 Store/Queue/Service/Router，启动 HTTP Server
+    │   └── config.go    # viper 配置结构体
+    ├── api/             # HTTP handler 层
+    │   ├── handler.go   # 所有路由注册与 handler 实现
+    │   ├── response.go  # 统一响应工具函数
+    │   └── cors.go      # CORS 中间件
+    ├── service/         # 业务逻辑层
+    │   ├── document_service.go  # 文档上传、处理、审核、索引全流程
+    │   ├── auth_service.go      # 登录、JWT、TOTP
+    │   ├── chunker.go           # 文本切分逻辑
+    │   └── blacklist.go         # JWT 黑名单（Memory / Redis）
+    ├── repository/      # 持久化层
+    │   ├── interface.go         # UserStore / KnowledgeBaseStore / DocumentStore / ChunkStore / Store
+    │   ├── json_store.go        # JSONStore 实现
+    │   └── postgres_store.go    # PostgresStore 实现（gorm + lib/pq）
+    ├── queue/           # 异步任务队列
+    │   ├── queue.go             # TaskQueue 接口
+    │   ├── goroutine.go         # GoroutineQueue（进程内 channel）
+    │   └── asynq.go             # AsynqQueue（Redis + hibiken/asynq）
+    ├── rag/             # RAG 核心组件
+    │   ├── parser/      # 文件解析器（PDF / DOCX / PPTX / Markdown / 媒体）
+    │   ├── embedder.go          # Embedder 接口
+    │   ├── openai_embed.go      # OpenAI-compatible Embedding 实现
+    │   ├── vectorstore.go       # VectorStore 接口
+    │   ├── milvus.go            # Milvus VectorStore 实现
+    │   └── llm.go               # LLM 接口（预留）
+    ├── model/           # 数据模型定义（DB + 业务结构体）
+    │   └── models.go
+    ├── infra/           # 基础设施工具
+    │   ├── logger.go            # zap + lumberjack 日志初始化
+    │   ├── middleware.go        # gin 通用中间件（请求日志等）
+    │   ├── spa.go               # SPA 静态文件托管
+    │   └── version.go           # 构建版本信息
+    └── migrations/      # PostgreSQL 数据库迁移文件
+```
+
+## 前端模块结构
+
+```
+frontend/src/
+├── main.js              # 应用入口，loadConfig() 后挂载 Vue
+├── App.vue              # 根组件
+├── router/index.js      # 路由定义（vue-router）
+├── pages/               # 页面级组件
+│   ├── LoginPage.vue
+│   ├── KnowledgeBasesPage.vue
+│   ├── DocumentsPage.vue
+│   ├── DocumentDetailPage.vue
+│   ├── DocumentChunksPage.vue
+│   ├── SearchPage.vue
+│   └── UsersPage.vue
+├── components/
+│   └── AppLayout.vue    # 全局布局（导航栏、侧边栏）
+├── services/            # HTTP 请求封装（对应后端各资源端点）
+│   ├── http.js          # axios 实例 + 拦截器
+│   ├── auth.js
+│   ├── documents.js
+│   ├── chunks.js
+│   ├── knowledge-bases.js
+│   ├── search.js
+│   └── users.js
+├── stores/              # Pinia 状态管理
+│   ├── auth.js          # 当前用户 / 登录态
+│   ├── locale.js        # 语言切换
+│   └── document-filters.js  # 文档列表筛选条件
+├── config/app-config.js # 运行时配置加载（GET /app.json）
+├── utils/
+│   ├── status.js        # 文档状态 → 文案 / tag type（唯一来源）
+│   └── format.js        # 通用格式化工具
+└── i18n/                # 国际化文案（zh.js / en.js）
+```
+
 ## 前端架构
 
 ### 配置加载
