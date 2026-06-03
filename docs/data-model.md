@@ -57,8 +57,6 @@
 - `chunk_version`：所属的文档 chunk 版本号，对应 `documents.chunk_version`
 - `source`：chunk 来源，`auto / manual / mixed`
 - `is_current`：是否为当前展示和操作的版本
-- `review_comment`：人工审核时填写的意见，未审核时为空
-- `filename`：冗余存储的文件名（来自 `documents.filename`），避免跨表 join
 - `embedding_model`：embedding 完成后写入的模型名；快照中也带，便于断电重建
 - `embedding`：仅模型层和快照中携带（`[]float32`），数据库不存（向量在 Milvus）
 - `resource_refs`：chunk 关联的图片、表格、链接等结构化引用信息，`jsonb`

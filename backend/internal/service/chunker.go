@@ -81,7 +81,7 @@ func isSentenceEnd(r rune) bool {
 }
 
 func newChunk(
-	documentID, filename string,
+	documentID string,
 	chunkVersion int,
 	status string,
 	now time.Time,
@@ -95,7 +95,6 @@ func newChunk(
 		Status:       status,
 		Source:       "auto",
 		IsCurrent:    true,
-		Filename:     filename,
 	}
 }
 
@@ -138,7 +137,7 @@ func mergeSmallBlocks(blocks []parser.ParseBlock, chunkSize int) []parser.ParseB
 // is returned as a single chunk. If the last chunk is shorter than chunkSize/2
 // tokens it is merged into the preceding chunk to avoid trailing fragments.
 func BuildChunks(
-	documentID, filename string,
+	documentID string,
 	blocks []parser.ParseBlock,
 	chunkVersion, chunkSize, overlap, minChunks int,
 	approved bool,
@@ -166,7 +165,7 @@ func BuildChunks(
 			if seg == "" {
 				continue
 			}
-			c := newChunk(documentID, filename, chunkVersion, status, now)
+			c := newChunk(documentID, chunkVersion, status, now)
 			c.ChunkIndex = len(allChunks)
 			c.SectionTitle = block.SectionTitle
 			c.PageStart = block.PageStart
@@ -215,7 +214,7 @@ func BuildChunks(
 		if fullText == "" {
 			return nil
 		}
-		c := newChunk(documentID, filename, chunkVersion, status, now)
+		c := newChunk(documentID, chunkVersion, status, now)
 		c.Text = fullText
 		c.NormalizedText = fullText
 		c.ResourceRefs = allRefs

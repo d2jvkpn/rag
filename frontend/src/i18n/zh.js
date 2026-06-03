@@ -292,7 +292,6 @@ export default {
       embeddingModel: 'Embedding 模型',
       createdAt: '创建时间',
       updatedAt: '更新时间',
-      reviewComment: '审核备注',
       yes: '是',
       no: '否',
     },

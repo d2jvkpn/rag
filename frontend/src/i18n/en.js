@@ -292,7 +292,6 @@ export default {
       embeddingModel: 'Embedding Model',
       createdAt: 'Created At',
       updatedAt: 'Updated At',
-      reviewComment: 'Review Comment',
       yes: 'Yes',
       no: 'No',
     },

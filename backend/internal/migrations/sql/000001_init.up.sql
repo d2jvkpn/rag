@@ -68,8 +68,6 @@ CREATE TABLE document_chunks (
   chunk_version INTEGER NOT NULL,
   source TEXT NOT NULL,
   is_current BOOLEAN NOT NULL DEFAULT TRUE,
-  review_comment TEXT NOT NULL DEFAULT '',
-  filename TEXT NOT NULL,
   embedding_model TEXT NOT NULL DEFAULT '',
   resource_refs JSONB NOT NULL DEFAULT '[]'::jsonb
 );

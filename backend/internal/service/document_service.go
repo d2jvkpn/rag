@@ -428,6 +428,9 @@ func (s *DocumentService) ApproveChunks(documentID string) error {
 	if err != nil {
 		return err
 	}
+	if document.Status != "review_pending" {
+		return fmt.Errorf("document is not in review_pending state (current: %s)", document.Status)
+	}
 	chunks, err := s.store.GetChunks(documentID)
 	if err != nil {
 		return err
@@ -463,6 +466,13 @@ func (s *DocumentService) EditChunk(documentID, chunkID, text string) error {
 	if text == "" {
 		return errors.New("chunk text cannot be empty")
 	}
+	document, err := s.store.GetDocument(documentID)
+	if err != nil {
+		return err
+	}
+	if document.Status == "indexed" {
+		return errors.New("cannot edit chunks of an indexed document")
+	}
 	chunk, err := s.store.GetChunk(chunkID)
 	if err != nil {
 		return err
@@ -482,6 +492,13 @@ func (s *DocumentService) EditChunk(documentID, chunkID, text string) error {
 }
 
 func (s *DocumentService) RejectChunk(documentID, chunkID string) error {
+	document, err := s.store.GetDocument(documentID)
+	if err != nil {
+		return err
+	}
+	if document.Status == "indexed" {
+		return errors.New("cannot reject chunks of an indexed document")
+	}
 	chunk, err := s.store.GetChunk(chunkID)
 	if err != nil {
 		return err
@@ -497,6 +514,13 @@ func (s *DocumentService) RejectChunk(documentID, chunkID string) error {
 }
 
 func (s *DocumentService) RestoreChunk(documentID, chunkID string) error {
+	document, err := s.store.GetDocument(documentID)
+	if err != nil {
+		return err
+	}
+	if document.Status == "indexed" {
+		return errors.New("cannot restore chunks of an indexed document")
+	}
 	chunk, err := s.store.GetChunk(chunkID)
 	if err != nil {
 		return err
@@ -517,6 +541,14 @@ func (s *DocumentService) RestoreChunk(documentID, chunkID string) error {
 func (s *DocumentService) MergeChunks(documentID string, chunkIDs []string) error {
 	if len(chunkIDs) < 2 {
 		return errors.New("merge requires at least 2 chunk IDs")
+	}
+
+	document, err := s.store.GetDocument(documentID)
+	if err != nil {
+		return err
+	}
+	if document.Status == "indexed" {
+		return errors.New("cannot merge chunks of an indexed document")
 	}
 
 	chunks, err := s.store.GetChunks(documentID)
@@ -570,7 +602,6 @@ func (s *DocumentService) MergeChunks(documentID string, chunkIDs []string) erro
 		ChunkVersion:   selected[0].ChunkVersion,
 		Source:         "manual",
 		IsCurrent:      true,
-		Filename:       selected[0].Filename,
 		ResourceRefs:   []model.ResourceRef{},
 	}
 
@@ -836,7 +867,6 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 	cfgHash := chunkConfigHash(colCfg.ChunkSize, colCfg.ChunkOverlap, colCfg.MinChunks)
 	chunks := BuildChunks(
 		document.DocumentID,
-		document.Filename,
 		blocks,
 		chunkVersion,
 		colCfg.ChunkSize,
@@ -910,7 +940,8 @@ func (s *DocumentService) writeSnapshot(
 		DocumentID:      document.DocumentID,
 		KnowledgeBaseID: document.KnowledgeBaseID,
 		ChunkVersion:    chunkVersion,
-		SourceSHA256:    document.SHA256,
+		Filename:        document.Filename,
+		FileSHA256:      document.SHA256,
 		ChunkConfigHash: cfgHash,
 		CreatedAt:       time.Now().UTC(),
 		Chunks:          chunks,

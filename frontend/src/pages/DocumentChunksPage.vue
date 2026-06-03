@@ -480,7 +480,7 @@ onMounted(loadAll)
                       {{ t('chunks.detailsAndRefs', { n: selectedResourceRefs.length }) }}
                     </n-button>
                     <template v-if="!editing">
-                      <n-button v-if="selectedChunk.status !== 'rejected'" size="small" type="primary" secondary @click="startEdit">{{ t('chunks.edit') }}</n-button>
+                      <n-button v-if="doc?.status !== 'indexed' && selectedChunk.status !== 'rejected'" size="small" type="primary" secondary @click="startEdit">{{ t('chunks.edit') }}</n-button>
                     </template>
                     <template v-else>
                       <n-button size="small" type="primary" :loading="saving" @click="saveEdit">{{ t('chunks.save') }}</n-button>
@@ -525,7 +525,7 @@ onMounted(loadAll)
               <div class="chunk-meta-item chunk-meta-item--wide"><span class="chunk-meta-item__label">{{ t('chunks.meta.documentId') }}</span><n-text code style="font-size:11px;word-break:break-all">{{ selectedChunk.document_id }}</n-text></div>
               <div class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.version') }}</span><n-text>v{{ selectedChunk.chunk_version }}</n-text></div>
               <div class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.source') }}</span><n-text>{{ selectedChunk.source || '—' }}</n-text></div>
-              <div v-if="selectedChunk.filename" class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.meta.filename') }}</span><n-text>{{ selectedChunk.filename }}</n-text></div>
+              <div v-if="doc?.filename" class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.meta.filename') }}</span><n-text>{{ doc.filename }}</n-text></div>
               <div class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.meta.chunkIndex') }}</span><n-text>#{{ selectedChunk.chunk_index + 1 }}</n-text></div>
               <div v-if="selectedChunk.section_title" class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.meta.sectionTitle') }}</span><n-text>{{ selectedChunk.section_title }}</n-text></div>
               <div v-if="selectedChunk.page_start" class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.page') }}</span><n-text>{{ selectedChunk.page_start }}{{ selectedChunk.page_end && selectedChunk.page_end !== selectedChunk.page_start ? '–' + selectedChunk.page_end : '' }}</n-text></div>
@@ -533,7 +533,6 @@ onMounted(loadAll)
               <div v-if="selectedChunk.embedding_model" class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.meta.embeddingModel') }}</span><n-text>{{ selectedChunk.embedding_model }}</n-text></div>
               <div class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.meta.createdAt') }}</span><n-text :title="rfc3339(selectedChunk.created_at)">{{ formatDate(selectedChunk.created_at) }}</n-text></div>
               <div class="chunk-meta-item"><span class="chunk-meta-item__label">{{ t('chunks.meta.updatedAt') }}</span><n-text :title="rfc3339(selectedChunk.updated_at)">{{ formatDate(selectedChunk.updated_at) }}</n-text></div>
-              <div v-if="selectedChunk.review_comment" class="chunk-meta-item chunk-meta-item--wide"><span class="chunk-meta-item__label">{{ t('chunks.meta.reviewComment') }}</span><n-text depth="3" style="display:block;font-size:12px;white-space:pre-wrap">{{ selectedChunk.review_comment }}</n-text></div>
             </div>
           </section>
 

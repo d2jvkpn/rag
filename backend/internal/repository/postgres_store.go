@@ -612,8 +612,6 @@ type chunkRow struct {
 	ChunkVersion   int             `gorm:"column:chunk_version"`
 	Source         string          `gorm:"column:source"`
 	IsCurrent      bool            `gorm:"column:is_current"`
-	ReviewComment  string          `gorm:"column:review_comment"`
-	Filename       string          `gorm:"column:filename"`
 	EmbeddingModel string          `gorm:"column:embedding_model"`
 	ResourceRefs   json.RawMessage `gorm:"column:resource_refs;type:jsonb"`
 }
@@ -769,8 +767,6 @@ func chunkFromRow(r chunkRow) model.DocumentChunk {
 		ChunkVersion:   r.ChunkVersion,
 		Source:         r.Source,
 		IsCurrent:      r.IsCurrent,
-		ReviewComment:  r.ReviewComment,
-		Filename:       r.Filename,
 		EmbeddingModel: r.EmbeddingModel,
 		ResourceRefs:   refs,
 	}
@@ -796,8 +792,6 @@ func chunkToRow(c model.DocumentChunk) chunkRow {
 		ChunkVersion:   c.ChunkVersion,
 		Source:         c.Source,
 		IsCurrent:      c.IsCurrent,
-		ReviewComment:  c.ReviewComment,
-		Filename:       c.Filename,
 		EmbeddingModel: c.EmbeddingModel,
 		ResourceRefs:   refs,
 	}

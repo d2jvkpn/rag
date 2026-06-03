@@ -11,7 +11,6 @@ func TestBuildChunksShortDocument(t *testing.T) {
 	blocks := []parser.ParseBlock{{Text: "hello world"}}
 	chunks := BuildChunks(
 		"doc-1",
-		"sample.md",
 		blocks,
 		1,
 		DefaultChunkSize,
@@ -32,7 +31,6 @@ func TestBuildChunksLongDocument(t *testing.T) {
 	blocks := []parser.ParseBlock{{Text: text}}
 	chunks := BuildChunks(
 		"doc-1",
-		"sample.md",
 		blocks,
 		1,
 		DefaultChunkSize,
@@ -52,7 +50,6 @@ func TestBuildChunksSectionMetadata(t *testing.T) {
 	}
 	chunks := BuildChunks(
 		"doc-1",
-		"sample.md",
 		blocks,
 		1,
 		DefaultChunkSize,
@@ -89,7 +86,6 @@ func TestBuildChunksMinChunksMerge(t *testing.T) {
 	}
 	chunks := BuildChunks(
 		"doc-1",
-		"sample.md",
 		blocks,
 		1,
 		DefaultChunkSize,
@@ -187,7 +183,7 @@ func TestBuildChunksMergesShortTail(t *testing.T) {
 		{Text: block1, PageStart: 1, PageEnd: 1},
 		{Text: block2, PageStart: 2, PageEnd: 2},
 	}
-	chunks := BuildChunks("doc-1", "sample.md", blocks, 1, chunkSize, chunkSize/10, 1, false)
+	chunks := BuildChunks("doc-1", blocks, 1, chunkSize, chunkSize/10, 1, false)
 	if len(chunks) != 1 {
 		t.Fatalf("expected tail merged into 1 chunk, got %d", len(chunks))
 	}
