@@ -58,16 +58,12 @@ import yaml
 from openai import OpenAI
 from pymilvus import (
     AnnSearchRequest,
-    Collection,
+    MilvusClient,
     MilvusException,
     RRFRanker,
-    connections,
-    db,
-    utility,
 )
 
 DEFAULT_CONFIG_PATH = "configs/local.yaml"
-DEFAULT_ALIAS = "milvus_search"
 
 # Mirrors searchOutputFields in internal/rag/milvus.go
 SEARCH_OUTPUT_FIELDS = [
@@ -95,11 +91,33 @@ class Settings:
     embedding_model: str
     embedding_dim: int
     embedding_batch_size: int
-    alias: str = DEFAULT_ALIAS
+
+def _jsonable(v: Any) -> Any:
+    """Convert pymilvus/protobuf/numpy-like values into plain JSON types."""
+    if isinstance(v, (str, int, float, bool, type(None))):
+        return v
+    if isinstance(v, bytes):
+        return v.decode("utf-8", errors="replace")
+    if hasattr(v, "item") and callable(v.item):  # numpy scalar etc.
+        try:
+            return _jsonable(v.item())
+        except Exception:
+            pass
+    if isinstance(v, dict) or hasattr(v, "items"):
+        try:
+            return {str(k): _jsonable(val) for k, val in v.items()}
+        except Exception:
+            pass
+    if hasattr(v, "__iter__"):
+        try:
+            return [_jsonable(x) for x in v]
+        except Exception:
+            pass
+    return str(v)
 
 
 def jprint(obj: Any) -> None:
-    sys.stdout.buffer.write(orjson.dumps(obj, option=orjson.OPT_INDENT_2))
+    sys.stdout.buffer.write(orjson.dumps(_jsonable(obj), option=orjson.OPT_INDENT_2))
     sys.stdout.buffer.write(b"\n")
 
 
@@ -159,24 +177,18 @@ class EmbeddingClient:
 class MilvusStore:
     def __init__(self, settings: Settings):
         self.settings = settings
-        self._connect()
-
-    def _connect(self) -> None:
         kwargs: dict[str, Any] = {
-            "alias": self.settings.alias,
             "uri": self.settings.milvus_uri,
             "db_name": self.settings.milvus_db_name,
         }
         if self.settings.milvus_token:
             kwargs["token"] = self.settings.milvus_token
-        connections.connect(**kwargs)
+        self.client = MilvusClient(**kwargs)
 
-    def _collection(self, kb_id: str) -> Collection:
-        if not utility.has_collection(kb_id, using=self.settings.alias):
+    def _ensure_loaded(self, kb_id: str) -> None:
+        if not self.client.has_collection(kb_id):
             raise MilvusException(code=800, message=f"knowledge base (collection) not found: {kb_id!r}")
-        c = Collection(kb_id, using=self.settings.alias)
-        c.load()
-        return c
+        self.client.load_collection(kb_id)
 
     @staticmethod
     def _build_filter(
@@ -208,10 +220,8 @@ class MilvusStore:
     def _hits_from_search(raw: Any) -> list[dict[str, Any]]:
         hits = []
         for hit in raw[0]:
-            item: dict[str, Any] = {"score": float(hit.score)}
-            if hit.entity is not None:
-                for key, val in hit.entity.fields.items():
-                    item[key] = val
+            item: dict[str, Any] = {"score": float(hit["distance"])}
+            item.update(hit.get("entity", {}))
             hits.append(item)
         return hits
 
@@ -225,18 +235,19 @@ class MilvusStore:
         filenames: list[str] | None = None,
         ef: int | None = None,
     ) -> list[dict[str, Any]]:
-        c = self._collection(kb_id)
+        self._ensure_loaded(kb_id)
         expr = self._build_filter(doc_ids, tags, filenames)
-        params: dict[str, Any] = {"metric_type": "COSINE", "params": {}}
+        search_params: dict[str, Any] = {"metric_type": "COSINE", "params": {}}
         if ef and ef > 0:
-            params["params"]["ef"] = ef
+            search_params["params"]["ef"] = ef
 
-        raw = c.search(
+        raw = self.client.search(
+            collection_name=kb_id,
             data=[vector],
             anns_field="embedding",
-            param=params,
+            search_params=search_params,
             limit=top_k,
-            expr=expr,
+            filter=expr or "",
             output_fields=SEARCH_OUTPUT_FIELDS,
         )
         return self._hits_from_search(raw)
@@ -251,18 +262,19 @@ class MilvusStore:
         filenames: list[str] | None = None,
         drop_ratio: float | None = None,
     ) -> list[dict[str, Any]]:
-        c = self._collection(kb_id)
+        self._ensure_loaded(kb_id)
         expr = self._build_filter(doc_ids, tags, filenames)
-        params: dict[str, Any] = {"metric_type": "BM25", "params": {}}
+        search_params: dict[str, Any] = {"metric_type": "BM25", "params": {}}
         if drop_ratio and drop_ratio > 0:
-            params["params"]["drop_ratio_search"] = drop_ratio
+            search_params["params"]["drop_ratio_search"] = drop_ratio
 
-        raw = c.search(
+        raw = self.client.search(
+            collection_name=kb_id,
             data=[query],
             anns_field="sparse",
-            param=params,
+            search_params=search_params,
             limit=top_k,
-            expr=expr,
+            filter=expr or "",
             output_fields=SEARCH_OUTPUT_FIELDS,
         )
         return self._hits_from_search(raw)
@@ -280,7 +292,7 @@ class MilvusStore:
         drop_ratio: float | None = None,
         rrfk: int = 60,
     ) -> list[dict[str, Any]]:
-        c = self._collection(kb_id)
+        self._ensure_loaded(kb_id)
         expr = self._build_filter(doc_ids, tags, filenames)
 
         dense_params: dict[str, Any] = {"metric_type": "COSINE", "params": {}}
@@ -305,31 +317,33 @@ class MilvusStore:
             expr=expr,
         )
 
-        raw = c.hybrid_search(
+        raw = self.client.hybrid_search(
+            collection_name=kb_id,
             reqs=[dense_req, bm25_req],
-            rerank=RRFRanker(k=rrfk),
+            ranker=RRFRanker(k=rrfk),
             limit=top_k,
             output_fields=SEARCH_OUTPUT_FIELDS,
         )
         return self._hits_from_search(raw)
 
     def stats(self, kb_id: str) -> dict[str, Any]:
-        if not utility.has_collection(kb_id, using=self.settings.alias):
+        if not self.client.has_collection(kb_id):
             return {"exists": False, "knowledge_base_id": kb_id}
-        c = Collection(kb_id, using=self.settings.alias)
-        c.load()
-        indexes = [
-            {
-                "field": idx.field_name,
-                "index_type": idx.params.get("index_type", ""),
-                "metric_type": idx.params.get("metric_type", ""),
-            }
-            for idx in c.indexes
-        ]
+        self.client.load_collection(kb_id)
+        collection_stats = self.client.get_collection_stats(kb_id)
+        index_names = self.client.list_indexes(kb_id)
+        indexes = []
+        for idx_name in index_names:
+            idx_info = self.client.describe_index(kb_id, idx_name)
+            indexes.append({
+                "field": idx_info.get("field_name", idx_name),
+                "index_type": idx_info.get("index_type", ""),
+                "metric_type": idx_info.get("metric_type", ""),
+            })
         return {
             "exists": True,
             "knowledge_base_id": kb_id,
-            "num_entities": c.num_entities,
+            "num_entities": int(collection_stats.get("row_count", 0)),
             "indexes": indexes,
         }
 

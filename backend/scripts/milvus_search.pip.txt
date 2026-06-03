@@ -1,0 +1,5 @@
+# langchain-text-splitters
+pyyaml
+orjson
+pymilvus==3.0.0
+openai==2.40.0
