@@ -92,9 +92,9 @@ RUN addgroup -g "$PGID" appuser && \
     adduser -D -H -u "$PUID" -G appuser -h /app -s /sbin/nologin appuser && \
     mkdir -p /app/configs /app/data /app/logs /app/target
 
+COPY --from=backend-build /app/target /app/target
 COPY --from=frontend-build /app/target/dist /app/target/ui
 #RUN sed -i 's/:3061/:3060/' /app/target/ui/app.json
-COPY --from=backend-build /app/target/server /app/target/
 
 COPY backend/examples/local.yaml /app/configs/local.yaml
 COPY backend/scripts /app/scripts
