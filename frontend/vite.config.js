@@ -2,8 +2,7 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { execSync } from 'child_process'
 
-// const outDir = process.env.OUT_DIR || 'target/dist'
-const outDir = 'target/dist'
+const outDir = process.env.OUT_DIR || 'target/dist'
 const basePath = normalizeBasePath(process.env.BASE_PATH || '/')
 
 function normalizeBasePath(path) {

@@ -1,9 +1,8 @@
-.PHONY: build_ui run
+.PHONY: run build
 
 run:
 	npm run dev -- --host=0.0.0.0 --port=3062
 
 build:
-	BASE_PATH="/ui" npm run build
-	rm -rf ../backend/target/ui
-	cp -r target/dist ../backend/target/ui
+	BASE_PATH="/ui" OUT_DIR="../backend/target/ui" \
+	npm run build
