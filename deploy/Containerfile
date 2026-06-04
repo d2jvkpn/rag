@@ -94,7 +94,6 @@ RUN addgroup -g "$PGID" appuser && \
 
 COPY --from=frontend-build /app/target/dist /app/target/ui
 #RUN sed -i 's/:3061/:3060/' /app/target/ui/app.json
-RUN mv /app/target/ui/app.ui.json /app/target/ui/app.json
 COPY --from=backend-build /app/target/server /app/target/
 
 COPY backend/examples/local.yaml /app/configs/local.yaml
@@ -112,7 +111,7 @@ RUN if [ "$build_region" == "cn" ]; then \
 RUN pip3 install --upgrade pip && \
     pip3 install -r scripts/parse_pdf.pip.txt
 
-ENV FRONEND_CONFIG=/app/target/ui/app.json
+ENV FRONTEND_CONFIG=/app/target/ui/app.json
 
 EXPOSE 3060
 ENV http_proxy="" https_proxy="" no_proxy=""

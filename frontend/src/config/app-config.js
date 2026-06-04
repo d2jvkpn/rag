@@ -1,7 +1,7 @@
 let config = null
 
 export async function loadConfig() {
-  const configPath = resolvePublicPath('app.json')
+  const configPath = resolvePublicPath(__CONFIG_FILE__)
   const res = await fetch(configPath, { cache: 'no-store' })
   if (!res.ok) throw new Error(`${configPath} 返回 ${res.status}`)
   config = normalizeConfig(await res.json())
@@ -28,8 +28,8 @@ function resolveBase(value) {
 
 function normalizeConfig(raw) {
   return {
-    apiBase: resolveBase(raw.api_base ?? raw.apiBase ?? ''),
-    staticBase: resolveBase(raw.static_base ?? raw.staticBase ?? ''),
+    apiBase: resolveBase(raw.api_base_url ?? raw.apiBase ?? ''),
+    staticBase: resolveBase(raw.static_base_url ?? raw.staticBase ?? ''),
     requestTimeoutMs: raw.request_timeout_ms ?? raw.requestTimeoutMs ?? 15000,
     pollIntervalMs: raw.poll_interval_ms ?? raw.pollIntervalMs ?? 3000,
   }

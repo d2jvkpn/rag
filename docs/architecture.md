@@ -256,7 +256,7 @@ frontend/src/
 │   ├── auth.js          # 当前用户 / 登录态
 │   ├── locale.js        # 语言切换
 │   └── document-filters.js  # 文档列表筛选条件
-├── config/app-config.js # 运行时配置加载（GET /app.json）
+├── config/app-config.js # 运行时配置加载（GET /{CONFIG}，默认 app.json）
 ├── utils/
 │   ├── status.js        # 文档状态 → 文案 / tag type（唯一来源）
 │   └── format.js        # 通用格式化工具
@@ -267,17 +267,18 @@ frontend/src/
 
 ### 配置加载
 
-`main.js` 在 `mount()` 前调用 `loadConfig()`（GET `/app.json`），失败则显示致命错误，不继续渲染。所有 service 模块在每次请求时调用 `getConfig()`，不缓存 base URL。
+`main.js` 在 `mount()` 前调用 `loadConfig()`，失败则显示致命错误，不继续渲染。加载的文件名由构建时 `CONFIG` 环境变量决定（默认 `app.json`，本地开发为 `app.local.json`）。所有 service 模块在每次请求时调用 `getConfig()`，不缓存 base URL。
 
-运行时配置字段（`frontend/public/app.json`）：
+运行时配置字段（`frontend/public/app.json` / `app.local.json`）：
 
 | 字段 | 说明 |
 |---|---|
-| `api_base` | 后端 API 基础地址 |
-| `static_base` | 后端静态资源基础地址 |
+| `api_base_url` | 后端 API 基础地址 |
+| `static_base_url` | 后端静态资源基础地址 |
+| `request_timeout_ms` | 请求超时，默认 15000 |
 | `poll_interval_ms` | 文档详情页轮询间隔，默认 3000 |
 
-Loader 将 snake_case 字段规范化为 camelCase，兼容旧版 camelCase 配置。
+Loader 将 snake_case 字段规范化为 camelCase。
 
 ### 状态轮询
 

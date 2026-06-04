@@ -1,6 +1,0 @@
-{
-  "api_base": "/",
-  "static_base": "/static",
-  "request_timeout_ms": 60000,
-  "poll_interval_ms": 3000
-}

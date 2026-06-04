@@ -4,6 +4,7 @@ import { execSync } from 'child_process'
 
 const outDir = process.env.OUT_DIR || 'target/dist'
 const basePath = normalizeBasePath(process.env.BASE_PATH || '/')
+const configFile = process.env.CONFIG || 'app.json'
 
 function normalizeBasePath(path) {
   if (path === './' || path === '') return path || '/'
@@ -29,6 +30,7 @@ export default defineConfig({
     __GIT_BRANCH__: JSON.stringify(gitBranch),
     __GIT_COMMIT__: JSON.stringify(gitCommit),
     __COMMIT_TIME__: JSON.stringify(commitTime),
+    __CONFIG_FILE__: JSON.stringify(configFile),
   },
   build: {
     outDir: outDir,

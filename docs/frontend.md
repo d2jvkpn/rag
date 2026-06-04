@@ -144,18 +144,20 @@
 
 ## 前端配置加载方式
 
-前端第一版不使用 `.env` 配置文件，不依赖构建时注入配置。
+前端不使用 `.env` 配置文件。配置通过运行时 JSON 文件加载，文件名由构建时环境变量 `CONFIG` 决定，默认为 `app.json`。
 
-配置方式建议：
+配置方式：
 
-- 在 `frontend/public/app.json` 中保存前端运行时配置
-- 浏览器加载应用后，通过 HTTP 请求读取 `/app.json`（fetch 使用 `cache: 'no-store'`，服务端同样返回 `Cache-Control: no-store`，确保每次获取最新配置）
+- 生产：`frontend/public/app.json`，构建后随静态资源部署
+- 本地开发：`frontend/public/app.local.json`，`make frontend_run`（`CONFIG=app.local.json npm run dev`）自动使用
+- 浏览器加载应用后，通过 HTTP 请求读取对应文件（fetch 使用 `cache: 'no-store'`，确保每次获取最新配置）
 - 前端在应用启动阶段加载配置，再初始化后续接口请求和页面渲染
 
-`app.json` 当前字段：
+配置文件当前字段：
 
-- `api_base`：后端 API 基础地址
-- `static_base`：后端静态资源基础地址
+- `api_base_url`：后端 API 基础地址
+- `static_base_url`：后端静态资源基础地址
+- `request_timeout_ms`：请求超时，默认 15000
 - `poll_interval_ms`：详情页轮询处理中文档的间隔，默认 3000
 
 > 上传流程统一进入人工审核；前端不再提供 `human_review` 开关，并在提交时固定发送 `human_review=true`。
@@ -163,7 +165,7 @@
 
 设计要求：
 
-- `app.json` 作为公开静态资源提供，不要放敏感信息
+- 配置文件作为公开静态资源提供，不要放敏感信息
 - 前端代码中不要硬编码环境差异配置
 - 配置读取失败时，应显示明确错误，而不是静默降级
 - `services/http.js` 等请求模块应依赖运行时加载后的配置
