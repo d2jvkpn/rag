@@ -1,6 +1,10 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI coding assistants when working with code in this repository.
+
+## Architecture
+
+See `docs/architecture.md` (request path, auth, ownership, Milvus, config) and `docs/design.md` (document lifecycle, component wiring, conventions). Key conventions: knowledge_base_id scoping, Noop fallback pattern, search modes (dense/bm25/hybrid), parser/chunker interfaces, migration rules, and test isolation (`t.TempDir` + `JSONStore`, no external deps).
 
 ## Commands
 
@@ -13,7 +17,7 @@ go build ./...                          # compile check
 go test ./...                           # all tests
 go test ./internal/api/...              # single package
 go test -run TestDocumentLifecycle ./internal/api/  # single test
-go run cmd/server/main.go               # dev server (JSONStore, configs/local.yaml)
+go run cmd/server/main.go               # dev server (defaults to configs/local.yaml)
 go run cmd/server/main.go --addr :9000  # override port
 ```
 
@@ -25,10 +29,6 @@ All commands run from `frontend/`.
 npm run dev    # dev server
 npm run build  # production build → frontend/target/dist/
 ```
-
-## Architecture
-
-See `docs/architecture.md` for request path, auth, ownership, Milvus, frontend structure, and config reference. See `docs/design.md` for document lifecycle, conventions, and component wiring.
 
 ## Documentation Sync
 
@@ -47,19 +47,6 @@ Any change that affects system behavior, API contracts, configuration, or archit
 
 Do not add placeholder text or "TODO: document later" — write the actual description at the time of the change.
 
-See `docs/design.md` for key conventions: knowledge_base_id scoping, query filter behavior, component wiring (Noop pattern), search modes, parser/chunker interfaces, migration rules, frontend constraints, test isolation, and observability patterns.
-
-## Tooling Checks
-
-Before answering questions like "why does X fail to install" or "why isn't X working", verify the actual state first:
-
-```bash
-which <tool>
-<tool> --version
-```
-
-Do not give troubleshooting steps before confirming whether the tool is present.
-
 ## Commits & PRs
 
 Never create a commit unless the user explicitly asks for one.
@@ -70,8 +57,8 @@ Always write commit messages in English.
 
 ### Preferred prefixes
 
-- `feat: add openclaw proxy handler`
-- `fix: handle upstream timeout response`
+- `feat: add pptx table extraction`
+- `fix: chunker overlap tail alignment`
 - `docs: update backend decisions`
 
 ### AI attribution
@@ -80,6 +67,12 @@ Every AI-assisted commit must include:
 
 ```
 Assisted-by: <agent_name>:<model_version>
+```
+
+Example:
+
+```
+Assisted-by: codewhale:deepseek-v4-pro
 ```
 
 - Do not add `Signed-off-by` on behalf of the author.
