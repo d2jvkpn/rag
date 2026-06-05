@@ -24,8 +24,6 @@ func testConfig(tmpDir string) *viper.Viper {
 	v.Set("app.data_dir", filepath.Join(tmpDir, "data"))
 	v.Set("app.state_path", filepath.Join(tmpDir, "data", "app-state.json"))
 	v.Set("http.session_cookie", "rag")
-	v.Set("admin.username", "admin")
-	v.Set("admin.password", "admin123")
 	v.Set("embedder.dim", 1536)
 	return v
 }

@@ -27,8 +27,6 @@ func LoadConfig(path string) (config *viper.Viper) {
 	config.SetDefault("http.session_cookie", "rag")
 	config.SetDefault("http.allow_origins", []string{"*"})
 
-	config.SetDefault("admin.username", "admin")
-	config.SetDefault("admin.password", "admin123")
 	config.SetDefault("embedder.model", "text-embedding-v3")
 	config.SetDefault("embedder.batch_size", 10)
 	config.SetDefault("milvus.api_key", "")

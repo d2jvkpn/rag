@@ -120,6 +120,7 @@
 - `not_found`
 - `conflict`
 - `unsupported_file_type`
+- `route_not_found`
 - `processing_failed`
 - `internal_error`
 
@@ -366,6 +367,7 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 ### `GET /api/knowledge-bases/available`
 
 - 返回可用于上传和检索的知识库列表及其 collection 参数
+- 与 `GET /api/knowledge-bases` 返回数据完全相同，推荐直接使用 `GET /api/knowledge-bases`
 
 响应：
 

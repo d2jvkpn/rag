@@ -27,7 +27,7 @@
 - `retry_count`：自动重试次数
 - `page_count`：文档总页数，解析完成后写入
 - `chunk_count`：当前版本的 chunk 数量，切分完成后写入
-- `chunk_version`：当前 chunk 版本号，每次重新切分时递增
+- `chunk_version`：当前 chunk 版本号，每次重新切分时递增。初始为 0（未处理），首次 chunk 后为 1
 - `chunk_config_hash`：切分参数和切分策略配置的哈希，用于判断快照是否可复用
 - `started_at`：当前处理任务的开始时间，nullable
 - `finished_at`：当前处理任务的结束时间，nullable

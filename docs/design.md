@@ -24,7 +24,7 @@ uploaded
 
 状态转换规则：
 
-- **human_review=false**：切分完成后自动将所有 draft chunk 标记为 approved，跳过 `review_pending`，直接进入 embedding
+- **human_review=false**：切分完成后自动将所有 draft chunk 标记为 approved，跳过 `review_pending`，直接进入 embedding。注意此时 `approved` 为内部瞬时状态，外部可观测状态序列为 `uploaded → processing → indexed`。
 - **approve**：自动触发 indexing，没有独立的手动 index 步骤
 - **indexed**：文档不可再修改。rechunk 请求被阻止；如需重新处理，只能删除后重新上传
 - **failed**：可通过 `POST /api/documents/:id/index` 重试，无需重新上传文件
@@ -70,7 +70,7 @@ uploaded
 
 **Embedder**：`batch_size` 默认 10，DashScope 兼容端点不支持更大批次，不要调大。
 
-**VectorStore** 接口方法：`ValidateKnowledgeBase`、`ListKnowledgeBases`、`Upsert`、`DeleteByDocument`、`Search(ctx, SearchRequest)`。
+**VectorStore** 接口方法：`ValidateKnowledgeBase`、`CreateKnowledgeBase`、`DeleteKnowledgeBase`、`Upsert`、`DeleteByDocument`、`Search(ctx, SearchRequest)`。
 
 **TaskQueue**：`GoroutineQueue` 是单 worker goroutine；生产环境建议配置 `AsynqQueue` 以支持进程重启后任务恢复。
 
@@ -86,7 +86,7 @@ uploaded
 
 `SearchRequest` 调参字段：`EF`（HNSW 搜索精度）、`DropRatio`（BM25 稀疏向量剪枝比例）、`RRFK`（Hybrid RRF k 值）。Dense 向量索引和查询均使用 Milvus `COSINE` metric。
 
-dense / hybrid 模式未配置 Embedder 时返回 500；BM25 模式无此限制，可在 Noop Embedder 下使用。
+dense / hybrid 模式未配置 Embedder 时返回 500（NoopEmbedder 返回空向量，Query 检测后返回 `"embedder returned no vector for query"` 错误）；BM25 模式无此限制，可在 Noop Embedder 下使用。
 
 ## 解析与切分接口
 

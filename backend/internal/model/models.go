@@ -38,7 +38,7 @@ type Document struct {
 	Filename          string     `json:"filename"`                      // sanitized original filename
 	Title             string     `json:"title,omitempty"`               // human-readable display title; defaults to Filename when empty
 	Tags              []string   `json:"tags,omitempty"`                // user-supplied labels for filtering
-	FileType          string     `json:"file_type"`                     // detected from extension: pdf | docx | pptx | markdown
+	FileType          string     `json:"file_type"`                     // detected from extension: pdf | docx | pptx | md
 	StoragePath       string     `json:"storage_path"`                  // absolute path to the uploaded file on disk
 	ChunkSnapshotPath string     `json:"chunk_snapshot_path,omitempty"` // path to the post-index chunk JSON snapshot; empty until first index run
 	SHA256            string     `json:"sha256"`                        // hex SHA-256 of the uploaded file; used for deduplication

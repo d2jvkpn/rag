@@ -211,11 +211,10 @@ chunk 状态（draft / approved / rejected）与文档生命周期完整定义�
 
 建议流程：
 
-1. 标记旧版本为 `reindexing`
-2. 删除旧 chunk 和旧向量
-3. 重新走解析、切块流程
-4. 先进入 `review_pending`
-5. 审核通过后再做 embedding、写入流程
+1. 删除旧 chunk 和旧向量
+2. 重新走解析、切块流程
+3. 先进入 `review_pending`
+4. 审核通过后再做 embedding、写入流程
 
 ## 检索时的配套约束
 
