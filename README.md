@@ -17,7 +17,7 @@ A full-stack system for building searchable knowledge bases from `pdf`, `docx`, 
 cd frontend && npm install
 
 # PDF parser
-cd backend && pip install -r scripts/requirements.txt
+cd backend && pip install -r scripts/parse_pdf.pip.txt
 ```
 
 ### Run locally
