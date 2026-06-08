@@ -123,6 +123,8 @@ data/documents/{yyyy}/{mm}/{dd}/{yyyy-mm-dd}_{document_id}/chunks-vN.json
 3. 前端展示验证码输入框，第二次提交附上 `totp_code`
 4. 验证通过后正常登录并设置 Cookie
 
+验证码输入框（`TotpCodeInput`）在补全第 6 位（手动输入或粘贴）时触发 `complete` 事件，登录、开启、关闭 TOTP 三处均监听该事件并自动提交，无需额外点击确认按钮。
+
 ## 账户初始化与权限
 
 - `init_account` 为单个初始 admin 账户，**仅在 `users` 表为空时生效**（一次性引导）
