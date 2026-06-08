@@ -3,7 +3,7 @@
 相关文档：
 
 - [总览](./README.md)
-- [前端业务设计](./frontend-business.md)
+- [UX 设计](./ux.md)
 - [后端架构与技术方案](./backend.md)
 - [API 设计](./api.md)
 

@@ -10,7 +10,7 @@
 - [后端架构与技术方案](./backend.md)
 - [API 设计](./api.md)
 - [数据模型](./data-model.md)
-- [前端业务设计](./frontend-business.md)
+- [UX 设计](./ux.md)
 - [前端技术方案](./frontend.md)
 - [实施计划](./plans/phase-1.md)
 

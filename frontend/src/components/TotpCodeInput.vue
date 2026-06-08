@@ -21,7 +21,7 @@
 import { ref, watch } from 'vue'
 
 const props = defineProps({ modelValue: { type: String, default: '' } })
-const emit = defineEmits(['update:modelValue', 'blur'])
+const emit = defineEmits(['update:modelValue', 'blur', 'complete'])
 
 const inputs = ref([])
 const digits = ref(Array(6).fill(''))
@@ -29,6 +29,7 @@ const digits = ref(Array(6).fill(''))
 watch(() => props.modelValue, (val) => {
   const chars = (val || '').split('')
   digits.value = Array(6).fill('').map((_, i) => chars[i] || '')
+  if (!val && inputs.value[0]) inputs.value[0].focus()
 }, { immediate: true })
 
 function sync() {
@@ -39,7 +40,11 @@ function onInput(e, idx) {
   const ch = e.target.value.replace(/\D/g, '').slice(-1)
   digits.value[idx] = ch
   sync()
-  if (ch && idx < 5) inputs.value[idx + 1].focus()
+  if (ch && idx < 5) {
+    inputs.value[idx + 1].focus()
+  } else if (ch && idx === 5) {
+    emit('complete')
+  }
 }
 
 function onKeydown(e, idx) {
@@ -71,6 +76,7 @@ function onPaste(e) {
   sync()
   const next = Math.min(text.length, 5)
   inputs.value[next].focus()
+  if (text.length === 6) emit('complete')
 }
 </script>
 

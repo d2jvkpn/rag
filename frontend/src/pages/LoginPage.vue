@@ -91,7 +91,7 @@ async function submit() {
         </template>
         <template v-else>
           <n-form-item :label="t('login.totpCode')" path="totpCode">
-            <TotpCodeInput v-model="form.totpCode" />
+            <TotpCodeInput v-model="form.totpCode" @complete="submit" />
           </n-form-item>
           <n-text depth="3" style="font-size:12px;display:block;margin-bottom:12px">
             {{ t('login.totpHint') }}

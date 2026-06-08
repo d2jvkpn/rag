@@ -46,6 +46,6 @@ Detailed documentation lives under [docs/](docs):
 - [Backend](docs/backend.md)
 - [API](docs/api.md)
 - [Data model](docs/data-model.md)
-- [Frontend](docs/frontend.md) / [Frontend business](docs/frontend-business.md)
+- [Frontend](docs/frontend.md) / [Frontend UX](docs/ux.md)
 
 Development commands and conventions are in [CLAUDE.md](CLAUDE.md).
