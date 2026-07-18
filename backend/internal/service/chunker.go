@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/d2jvkpn/rag/backend/internal/model"
-	"github.com/d2jvkpn/rag/backend/internal/rag/parser"
+	"github.com/d2jvkpn/rag/backend/pkg/rag/parser"
 )
 
 const (

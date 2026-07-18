@@ -36,6 +36,19 @@ Default account: `admin` / `admin123`. Change the JWT secret, passwords, API key
 
 Optional services (PostgreSQL, Redis, Milvus, embedding API) are configured in the YAML config — the project runs without them for local development.
 
+### MCP retrieval server (optional)
+
+`mcp/` is a standalone Go module exposing read-only search over a configured subset of Milvus
+collections as an MCP tool, for use by AI agents. It requires a reachable Milvus + embedding
+endpoint (no Noop fallback) and is independent of the main backend's auth/database:
+
+```bash
+cd mcp
+go run . --config examples/mcp.yaml  # listens on :3062
+```
+
+See [Architecture · MCP 检索服务](docs/Architecture.md#mcp-检索服务) for config reference and design.
+
 ## Documentation
 
 Detailed documentation lives under [docs/](docs):

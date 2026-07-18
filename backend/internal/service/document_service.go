@@ -23,8 +23,8 @@ import (
 	"github.com/d2jvkpn/rag/backend/internal/infra"
 	"github.com/d2jvkpn/rag/backend/internal/model"
 	"github.com/d2jvkpn/rag/backend/internal/queue"
-	"github.com/d2jvkpn/rag/backend/internal/rag"
-	"github.com/d2jvkpn/rag/backend/internal/rag/parser"
+	"github.com/d2jvkpn/rag/backend/pkg/rag"
+	"github.com/d2jvkpn/rag/backend/pkg/rag/parser"
 	"github.com/d2jvkpn/rag/backend/internal/repository"
 )
 

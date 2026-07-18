@@ -64,8 +64,8 @@ uploaded
 
 | 组件 | 包 | 装配函数 | 激活条件 |
 |---|---|---|---|
-| Embedder | `internal/rag/` | `WithEmbedder()` | `embedder.base_url` + `api_key` 均已配置 |
-| VectorStore | `internal/rag/` | `WithVectorStore()` | `milvus.addr` 已配置 |
+| Embedder | `pkg/rag/` | `WithEmbedder()` | `embedder.base_url` + `api_key` 均已配置 |
+| VectorStore | `pkg/rag/` | `WithVectorStore()` | `milvus.addr` 已配置 |
 | TaskQueue | `internal/queue/` | `WithTaskQueue()` | `redis.dsn` 已配置（否则用 GoroutineQueue） |
 
 **Embedder**：`batch_size` 默认 10，DashScope 兼容端点不支持更大批次，不要调大。

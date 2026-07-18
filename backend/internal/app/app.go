@@ -13,7 +13,7 @@ import (
 
 	"github.com/d2jvkpn/rag/backend/internal/api"
 	"github.com/d2jvkpn/rag/backend/internal/infra"
-	"github.com/d2jvkpn/rag/backend/internal/rag"
+	"github.com/d2jvkpn/rag/backend/pkg/rag"
 	"github.com/d2jvkpn/rag/backend/internal/repository"
 	"github.com/d2jvkpn/rag/backend/internal/service"
 )

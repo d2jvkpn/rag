@@ -5,6 +5,15 @@ app:
   # If omitted, the service falls back to {app.data_dir}/app-state.json.
   state_path: "data/app-state.json"
 
+# Log file rotation (lumberjack). Console output level follows --release
+# (debug when unset, info under --release); logging.level has no effect.
+logging:
+  path: "logs/rag.log"
+  max_size_mb: 100
+  max_backups: 3
+  max_age_days: 7
+  compress: false
+
 init_account:
   username: "admin"
   password: "admin123"

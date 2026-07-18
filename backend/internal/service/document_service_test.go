@@ -13,7 +13,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/d2jvkpn/rag/backend/internal/model"
-	"github.com/d2jvkpn/rag/backend/internal/rag"
+	"github.com/d2jvkpn/rag/backend/pkg/rag"
 	"github.com/d2jvkpn/rag/backend/internal/repository"
 )
 

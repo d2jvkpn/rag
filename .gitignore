@@ -10,6 +10,7 @@ docker-compose.yaml
 docker-compose.yml
 compose.yaml
 compose.yml
+go.work.sum
 
 #### directories
 configs/

@@ -191,6 +191,14 @@ backend/
 ├── examples/            # 示例配置文件
 ├── scripts/             # 辅助脚本（如 PDF 解析 Python 脚本）
 ├── tests/               # 集成测试
+├── pkg/
+│   └── rag/             # RAG 核心组件（导出包，供 mcp/ 模块复用，见下）
+│       ├── parser/      # 文件解析器（PDF / DOCX / PPTX / Markdown / 媒体）
+│       ├── embedder.go          # Embedder 接口
+│       ├── openai_embed.go      # OpenAI-compatible Embedding 实现
+│       ├── vectorstore.go       # VectorStore 接口
+│       ├── milvus.go            # Milvus VectorStore 实现
+│       └── llm.go               # LLM 接口（预留）
 └── internal/
     ├── app/             # 应用初始化与依赖装配（wiring）
     │   ├── app.go       # 组装 Store/Queue/Service/Router，启动 HTTP Server
@@ -212,13 +220,6 @@ backend/
     │   ├── queue.go             # TaskQueue 接口
     │   ├── goroutine.go         # GoroutineQueue（进程内 channel）
     │   └── asynq.go             # AsynqQueue（Redis + hibiken/asynq）
-    ├── rag/             # RAG 核心组件
-    │   ├── parser/      # 文件解析器（PDF / DOCX / PPTX / Markdown / 媒体）
-    │   ├── embedder.go          # Embedder 接口
-    │   ├── openai_embed.go      # OpenAI-compatible Embedding 实现
-    │   ├── vectorstore.go       # VectorStore 接口
-    │   ├── milvus.go            # Milvus VectorStore 实现
-    │   └── llm.go               # LLM 接口（预留）
     ├── model/           # 数据模型定义（DB + 业务结构体）
     │   └── models.go
     ├── infra/           # 基础设施工具
@@ -228,6 +229,61 @@ backend/
     │   └── version.go           # 构建版本信息
     └── migrations/      # PostgreSQL 数据库迁移文件
 ```
+
+`pkg/rag` 从 `internal/rag` 迁出，是 Go 语言层面允许跨模块导入的前提（`internal/` 包只能被同一模块树内的代码导入）——`mcp/` 是独立 Go module，无法导入 `backend/internal/...`。
+
+## MCP 检索服务
+
+`mcp/` 是仓库根目录下独立的 Go module（`github.com/d2jvkpn/rag/mcp`），提供一个只读的 Model Context
+Protocol（MCP）服务，让 AI agent 通过 MCP 工具调用对**预先配置的一部分 Milvus collection** 做语义 /
+BM25 / hybrid 检索。
+
+设计要点：
+
+- **独立进程，不依赖主后端**：直接复用 `backend/pkg/rag` 的 `Embedder` / `Milvus VectorStore`
+  构造函数（`rag.NewOpenAIEmbedder`、`rag.NewMilvus`），不经过 `DocumentService` / `Store` / 登录鉴权，
+  因此不依赖 Postgres、Redis、JWT 等主后端基础设施。
+- **代码复用机制**：仓库根目录的 `go.work`（`use ./backend ./mcp`）让 `mcp` 模块在本地构建时直接使用
+  `backend` 模块的源码；`mcp/go.mod` 中的 `replace github.com/d2jvkpn/rag/backend => ../backend`
+  保证脱离 workspace（例如 CI 中单独 `go build`）时也能解析到同一份本地代码。
+- **传输**：仅支持 Streamable HTTP（`github.com/modelcontextprotocol/go-sdk/mcp`），独立监听端口
+  （默认 `:3062`，区别于主后端的 `:3061`）。
+- **collections 白名单**：`mcp.yaml` 的 `milvus.collections` 显式列出该服务允许检索的 collection
+  （name + description）；请求中 `collection` 不在该列表时直接拒绝，即使该 collection 在 Milvus 中真实存在。
+- **单一工具 `search`**：输入 `collection`（enum 为配置中的 collection 名）、`query`、`top_k`
+  （默认 5，最大 50）、`search_mode`（`dense`/`bm25`/`hybrid`，默认 `dense`）、`document_ids`
+  （可选过滤）。校验逻辑与 `DocumentService.Query`（`docs/backend.md`）一致：dense/hybrid 模式先调用
+  Embedder 取 query 向量，bm25 跳过；再调用 `VectorStore.Search`。`collection` 的可选值及描述直接体现
+  在工具的 JSON Schema（`enum` + `description`），供 agent 发现，无需额外的 list-collections 工具。
+
+```
+mcp/
+├── go.mod                       # module github.com/d2jvkpn/rag/mcp
+├── Makefile                     # check / build / run
+├── main.go                      # 启动入口：flag、监听、优雅关闭（与 backend/cmd/server 同构）
+├── configs/mcp.yaml             # 本地运行配置（不入库）
+├── examples/mcp.yaml            # 示例配置
+└── internal/mcpserver/
+    ├── config.go                 # viper 配置加载与校验
+    └── server.go                 # mcp.Server 构建、search 工具注册与实现
+```
+
+### mcp.yaml 配置参考
+
+默认配置路径为 `mcp/configs/mcp.yaml`；仓库提供示例配置 `mcp/examples/mcp.yaml`，通过 `--config` 指定。
+
+| 键 | 默认值 | 说明 |
+|---|---|---|
+| `mcp.description` | `""` | 通过 MCP `Instructions` 暴露给客户端的服务说明 |
+| `embedder.base_url` | — | 必填。OpenAI-compatible Embedding 端点（无 Noop 回落） |
+| `embedder.api_key` | — | 必填 |
+| `embedder.model` | — | 必填 |
+| `embedder.batch_size` | `10` | 每次请求的最大 input 条数 |
+| `embedder.dim` | — | 必填。需与 `milvus.collections` 中各 collection 的实际向量维度一致 |
+| `milvus.addr` | — | 必填。Milvus gRPC 地址 |
+| `milvus.db` | — | Milvus 数据库名 |
+| `milvus.api_key` | `""` | Milvus API key |
+| `milvus.collections` | — | 必填，非空列表；每项 `name`（必填，对应 Milvus collection / 主后端的 knowledge_base_id）+ `description` |
 
 ## 前端模块结构
 
@@ -321,6 +377,12 @@ Loader 将 snake_case 字段规范化为 camelCase。
 | `milvus.db` | — | Milvus 数据库名 |
 | `milvus.api_key` | `""` | Milvus API key，默认空字符串，不启用认证 |
 | `embedder.dim` | — | 必填。Embedding 模型输出维度，UI 新建知识库时写入 collection schema |
-未配置 `database.dsn` 时使用 JSONStore；未配置 `redis.dsn` 时使用 GoroutineQueue 和 MemoryBlacklist；`embedder.dim` 必填；未配置 `embedder.base_url` / `embedder.api_key`、`milvus.addr` 时对应外部组件回落 Noop 实现。
+| `logging.path` | — | 日志文件路径（lumberjack），为空时使用 lumberjack 默认文件名 |
+| `logging.max_size_mb` | `0` | 单个日志文件的最大体积（MB），达到后触发切割 |
+| `logging.max_backups` | `0` | 保留的历史日志文件数量 |
+| `logging.max_age_days` | `0` | 历史日志文件的最大保留天数 |
+| `logging.compress` | `false` | 是否 gzip 压缩切割后的历史日志文件 |
+
+未配置 `database.dsn` 时使用 JSONStore；未配置 `redis.dsn` 时使用 GoroutineQueue 和 MemoryBlacklist；`embedder.dim` 必填；未配置 `embedder.base_url` / `embedder.api_key`、`milvus.addr` 时对应外部组件回落 Noop 实现。日志输出到控制台和 `logging.path` 两处；控制台/文件日志级别由 `--release` 决定（未开启为 debug，开启后为 info），配置文件中没有单独的日志级别开关。
 
 后端运行目录存在 `target/ui/index.html` 时自动托管前端 SPA：`/ui` 为前端入口，`/` 和 `/index.html` 重定向到 `/ui/index.html`；`/api`、`/healthz`、`/static` 保持后端路由，其中 `/static` 服务 `{app.data_dir}/static`。静态资源缓存策略：`index.html` 和 `app.json` 返回 `Cache-Control: no-store`；`assets/` 下带 hash 的 JS/CSS 返回 `Cache-Control: public, max-age=31536000, immutable`；其余文件走默认协商缓存（ETag/Last-Modified）。

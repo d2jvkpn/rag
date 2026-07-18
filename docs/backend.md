@@ -340,8 +340,8 @@ init_account:
 
 | 组件 | 包 | 装配函数 | 激活条件 |
 |---|---|---|---|
-| Embedder | `internal/rag/` | `WithEmbedder()` | `embedder.base_url` + `api_key` 均已配置 |
-| VectorStore | `internal/rag/` | `WithVectorStore()` | `milvus.addr` 已配置 |
+| Embedder | `pkg/rag/` | `WithEmbedder()` | `embedder.base_url` + `api_key` 均已配置 |
+| VectorStore | `pkg/rag/` | `WithVectorStore()` | `milvus.addr` 已配置 |
 | TaskQueue | `internal/queue/` | `WithTaskQueue()` | `redis.dsn` 已配置（否则用 GoroutineQueue） |
 
 **Embedder** 实现：Noop（默认）和 OpenAI-compatible（`embedder.base_url` 指向任意兼容端点）。`batch_size` 默认 `10`，DashScope 兼容端点不支持更大批次，不要调大。
@@ -407,20 +407,23 @@ backend/
   examples/local.yaml         # 示例配置
   data/                      # 文档/快照（gitignore）
   logs/                      # 运行日志（gitignore）
+  pkg/
+    rag/                     # Embedder、VectorStore (Milvus)、parser；导出包，供 mcp/ 模块复用
   internal/
     migrations/sql/         # numbered up/down SQL
     api/                     # gin handler、middleware、response
     app/                     # App 装配（store/embedder/queue/milvus 等）
     infra/                   # 全局 logger、请求日志中间件
-    rag/                     # Embedder、VectorStore (Milvus)
-    parser/                  # Markdown/DOCX/PPTX/PDF parser
     model/                   # 领域模型
     queue/                   # TaskQueue（GoroutineQueue / AsynqQueue）
     repository/              # UserStore/KnowledgeBaseStore/DocumentStore/ChunkStore 接口、Store 组合接口、JSONStore、PostgresStore
     service/                 # AuthService、DocumentService、blacklist、chunker
 ```
 
-> 历史 README/计划里出现过的 `config/`、`uuid/` 包已并入 `app/` / 相关内部包；parser 已迁移为 `internal/rag/parser`。
+> 历史 README/计划里出现过的 `config/`、`uuid/` 包已并入 `app/` / 相关内部包；parser 现位于 `pkg/rag/parser`。
+> `rag` 包由 `internal/rag` 迁至 `pkg/rag`（导出），使仓库根目录的独立 `mcp/` module 能够通过
+> `go.work` 复用同一份 Embedder / Milvus 代码 —— `internal/` 包按 Go 语言规则无法被模块外的代码导入。
+> 详见 [系统架构总览 · MCP 检索服务](./Architecture.md#mcp-检索服务)。
 
 ## 实现顺序
 

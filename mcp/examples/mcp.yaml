@@ -1,0 +1,23 @@
+# Optional free-text description exposed to MCP clients as server instructions.
+mcp:
+  description: "Read-only semantic/BM25/hybrid search over a fixed set of RAG knowledge base collections."
+
+# OpenAI-compatible embedding endpoint. Required — unlike the main backend,
+# there is no Noop fallback: dense/hybrid search needs a real embedder.
+embedder:
+  base_url: "https://api.openai.com/v1"
+  api_key: "sk-xxxxxxxx"
+  model: "text-embedding-v4"
+  batch_size: 10
+  # Must match the vector dimension of the collections below.
+  dim: 1024
+
+milvus:
+  addr: "127.0.0.1:19530"
+  db: "rag"
+  api_key: ""
+  # Only these collections are searchable through this MCP server, regardless
+  # of what else exists in Milvus.
+  collections:
+  - name: "example-kb"
+    description: "Example knowledge base collection."

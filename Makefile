@@ -1,4 +1,4 @@
-.PHONY: backend_check backend_build backend_run frontend_run frontend_build build_image
+.PHONY: backend_check backend_build backend_run mcp_check mcp_build mcp_run frontend_run frontend_build build_image
 
 PUID ?= 1000
 PGID ?= 1000
@@ -16,6 +16,15 @@ backend_build:
 
 backend_run:
 	$(MAKE) -C backend run
+
+mcp_check:
+	$(MAKE) -C mcp check
+
+mcp_build:
+	$(MAKE) -C mcp build
+
+mcp_run:
+	$(MAKE) -C mcp run
 
 frontend_run:
 	$(MAKE) -C frontend run

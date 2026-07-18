@@ -17,6 +17,18 @@ go run cmd/server/main.go               # dev server (defaults to configs/local.
 go run cmd/server/main.go --addr :9000  # override port
 ```
 
+### MCP retrieval server
+
+Standalone module at `mcp/` (module `github.com/d2jvkpn/rag/mcp`), linked to `backend/` via the
+repo-root `go.work` so it can import `backend/pkg/rag` directly. Commands run from `mcp/`.
+
+```bash
+go build ./...                          # compile check
+go test ./...                           # all tests
+go run .                                # dev server (defaults to configs/mcp.yaml, :3062)
+go run . --config examples/mcp.yaml --addr :9001  # override config/port
+```
+
 ### Frontend
 
 All commands run from `frontend/`.
@@ -45,6 +57,7 @@ on one physical line to remain valid and copy-pasteable, even when doing so exce
 | `docs/ux.md` | UX design decisions |
 | `docs/frontend.md` | Frontend technical design: pages, components, behavior |
 | `backend/examples/local.yaml` | Example server config: all `local.yaml` fields |
+| `mcp/examples/mcp.yaml` | Example MCP server config: all `mcp.yaml` fields |
 
 @docs/Architecture.md
 @docs/Design.md
@@ -56,8 +69,9 @@ on one physical line to remain valid and copy-pasteable, even when doing so exce
   later" — write the actual description at the time of the change. No need to ask for confirmation
   when a sync is warranted.
 
-- **`backend/examples/local.yaml`** must also be kept in sync: whenever a config key is added,
-  removed, or renamed in `backend/configs/local.yaml`, update the example file in the same pass.
+- **`backend/examples/local.yaml`** and **`mcp/examples/mcp.yaml`** must also be kept in sync:
+  whenever a config key is added, removed, or renamed in `backend/configs/local.yaml` or
+  `mcp/configs/mcp.yaml` respectively, update the matching example file in the same pass.
 
 - When the user's message is exactly **`:sync docs`**, immediately sync the docs listed in the
   table above and example configs that are out of alignment with current code, regardless of
