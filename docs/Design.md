@@ -2,7 +2,7 @@
 
 相关文档：
 
-- [系统架构总览](./architecture.md)
+- [系统架构总览](./Architecture.md)
 - [流程与业务规则](./workflow.md)
 - [后端架构与技术方案](./backend.md)
 - [API 设计](./api.md)

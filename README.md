@@ -40,8 +40,8 @@ Optional services (PostgreSQL, Redis, Milvus, embedding API) are configured in t
 
 Detailed documentation lives under [docs/](docs):
 
-- [Architecture](docs/architecture.md)
-- [Design decisions](docs/design.md)
+- [Architecture](docs/Architecture.md)
+- [Design decisions](docs/Design.md)
 - [Workflow](docs/workflow.md)
 - [Backend](docs/backend.md)
 - [API](docs/api.md)

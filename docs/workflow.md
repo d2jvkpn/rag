@@ -2,8 +2,8 @@
 
 相关文档：
 
-- [设计决策与关键约定](./design.md)
-- [系统架构总览](./architecture.md)
+- [设计决策与关键约定](./Design.md)
+- [系统架构总览](./Architecture.md)
 - [API 设计](./api.md)
 
 ## 目标
@@ -35,7 +35,7 @@
 输入：
 
 - 文件二进制
-- `knowledge_base_id`（必填，文档归属边界，用于 collection 校验、chunk 参数选择和检索过滤，详见 [设计决策与关键约定](./design.md#知识库与-knowledge_base_id)）
+- `knowledge_base_id`（必填，文档归属边界，用于 collection 校验、chunk 参数选择和检索过滤，详见 [设计决策与关键约定](./Design.md#知识库与-knowledge_base_id)）
 - 可选：`doc_id`、`title`、`tags`
 
 落盘建议：
@@ -192,7 +192,7 @@ chunk 落盘和快照复用的具体实现约定，见 [后端架构与技术方
 | approve | 全部 draft chunk → approved，自动触发 embedding + indexing |
 | rechunk | 重新自动切分整个文档，生成新的 chunk version |
 
-chunk 状态（draft / approved / rejected）与文档生命周期完整定义见 [设计决策与关键约定](./design.md#文档生命周期)。
+chunk 状态（draft / approved / rejected）与文档生命周期完整定义见 [设计决策与关键约定](./Design.md#文档生命周期)。
 
 ## 删除与更新
 

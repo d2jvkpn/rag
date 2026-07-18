@@ -2,7 +2,7 @@
 
 相关文档：
 
-- [设计决策与关键约定](./design.md)
+- [设计决策与关键约定](./Design.md)
 - [流程与业务规则](./workflow.md)
 - [后端架构与技术方案](./backend.md)
 - [前端技术方案](./frontend.md)
