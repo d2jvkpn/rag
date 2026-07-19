@@ -10,6 +10,16 @@ type Embedder interface {
 	Model() string
 }
 
+// EmbedderWithUsage is an optional capability implemented by embedders that
+// can report provider-side token consumption alongside the vectors, for
+// callers that want to log or meter it (e.g. the MCP search server).
+type EmbedderWithUsage interface {
+	Embedder
+	// EmbedWithUsage behaves like Embed but also returns the total number of
+	// tokens the provider billed for the request.
+	EmbedWithUsage(ctx context.Context, texts []string) ([][]float32, int, error)
+}
+
 // NoopEmbedder silently skips embedding; used until a real provider is configured.
 type NoopEmbedder struct{}
 

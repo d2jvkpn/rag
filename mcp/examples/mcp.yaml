@@ -21,3 +21,10 @@ milvus:
   collections:
   - name: "example-kb"
     description: "Example knowledge base collection."
+
+logging:
+  path: "logs/mcp.log"
+  max_size_mb: 100
+  max_backups: 3
+  max_age_days: 7
+  compress: false

@@ -39,18 +39,27 @@ func NewOpenAIEmbedder(baseURL, apiKey, model string, batchSize int) *OpenAIEmbe
 func (o *OpenAIEmbedder) Model() string { return o.model }
 
 func (o *OpenAIEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+	embeddings, _, err := o.EmbedWithUsage(ctx, texts)
+	return embeddings, err
+}
+
+// EmbedWithUsage behaves like Embed but also returns the total tokens billed
+// across all batches, as reported by the provider's response.
+func (o *OpenAIEmbedder) EmbedWithUsage(ctx context.Context, texts []string) ([][]float32, int, error) {
 	if len(texts) == 0 {
-		return nil, nil
+		return nil, 0, nil
 	}
 	embeddings := make([][]float32, len(texts))
+	totalTokens := 0
 	for _, batch := range embeddingBatches(texts, o.batchSize) {
 		resp, err := o.client.Embeddings.New(ctx, openai.EmbeddingNewParams{
 			Input: openai.EmbeddingNewParamsInputUnion{OfArrayOfStrings: batch.texts},
 			Model: openai.EmbeddingModel(o.model),
 		})
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
+		totalTokens += int(resp.Usage.TotalTokens)
 		for _, d := range resp.Data {
 			idx := batch.start + int(d.Index)
 			if idx < len(embeddings) {
@@ -62,7 +71,7 @@ func (o *OpenAIEmbedder) Embed(ctx context.Context, texts []string) ([][]float32
 			}
 		}
 	}
-	return embeddings, nil
+	return embeddings, totalTokens, nil
 }
 
 type embeddingBatch struct {

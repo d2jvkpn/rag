@@ -255,6 +255,12 @@ BM25 / hybrid 检索。
   （可选过滤）。校验逻辑与 `DocumentService.Query`（`docs/backend.md`）一致：dense/hybrid 模式先调用
   Embedder 取 query 向量，bm25 跳过；再调用 `VectorStore.Search`。`collection` 的可选值及描述直接体现
   在工具的 JSON Schema（`enum` + `description`），供 agent 发现，无需额外的 list-collections 工具。
+- **日志**：`internal/infra`（zap + lumberjack，与主后端 `backend/internal/infra` 同构，各自独立的包级
+  logger）。`--release` flag 控制日志级别（未开启为 debug，开启后为 info），未配置 `logging.path` 时
+  lumberjack 使用默认文件名。每次 `search` 工具调用在 `handleSearch` 返回前记一条日志（成功 Info /
+  失败 Warn），字段包括 `collection`、`query`、`search_mode`、`top_k`、`document_ids`（数量）、
+  `embedding_tokens`（embedder 上报的 token 消耗，仅当 embedder 实现 `rag.EmbedderWithUsage` 时非零）、
+  `embed_latency`、`milvus_latency`、`items`（返回条目数）、`latency`（总耗时），失败时追加 `error`。
 
 ```
 mcp/
@@ -263,9 +269,12 @@ mcp/
 ├── main.go                      # 启动入口：flag、监听、优雅关闭（与 backend/cmd/server 同构）
 ├── configs/mcp.yaml             # 本地运行配置（不入库）
 ├── examples/mcp.yaml            # 示例配置
-└── internal/mcpserver/
-    ├── config.go                 # viper 配置加载与校验
-    └── server.go                 # mcp.Server 构建、search 工具注册与实现
+├── tests/                       # 手动 HTTP smoke-test 客户端（非 go test，go run 直接调用）
+└── internal/
+    ├── infra/logger.go           # zap + lumberjack 日志初始化（与 backend/internal/infra 同构）
+    └── mcpserver/
+        ├── config.go             # viper 配置加载与校验
+        └── server.go              # mcp.Server 构建、search 工具注册与实现（含请求日志）
 ```
 
 ### mcp.yaml 配置参考
@@ -284,6 +293,11 @@ mcp/
 | `milvus.db` | — | Milvus 数据库名 |
 | `milvus.api_key` | `""` | Milvus API key |
 | `milvus.collections` | — | 必填，非空列表；每项 `name`（必填，对应 Milvus collection / 主后端的 knowledge_base_id）+ `description` |
+| `logging.path` | — | 日志文件路径（lumberjack），为空时使用 lumberjack 默认文件名 |
+| `logging.max_size_mb` | `0` | 单个日志文件的最大体积（MB），达到后触发切割 |
+| `logging.max_backups` | `0` | 保留的历史日志文件数量 |
+| `logging.max_age_days` | `0` | 历史日志文件的最大保留天数 |
+| `logging.compress` | `false` | 是否 gzip 压缩切割后的历史日志文件 |
 
 ## 前端模块结构
 

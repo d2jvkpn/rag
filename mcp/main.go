@@ -5,7 +5,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -13,12 +12,16 @@ import (
 	"syscall"
 	"time"
 
+	"go.uber.org/zap"
+
+	"github.com/d2jvkpn/rag/mcp/internal/infra"
 	"github.com/d2jvkpn/rag/mcp/internal/mcpserver"
 )
 
 func main() {
 	var (
 		err        error
+		release    bool
 		addr       string
 		configPath string
 		listener   net.Listener
@@ -32,20 +35,25 @@ func main() {
 		flag.PrintDefaults()
 	}
 
+	flag.BoolVar(&release, "release", false, "run in release mode")
 	flag.StringVar(&addr, "addr", ":3062", "http listen address override")
 	flag.StringVar(&configPath, "config", "configs/mcp.yaml", "config file path")
 	flag.Parse()
 
 	config := mcpserver.LoadConfig(configPath)
+	config.Set("app.release", release)
+
+	infra.Init(config)
+	defer infra.Sync()
 
 	if listener, err = net.Listen("tcp", addr); err != nil {
-		slog.Error("listen tcp", "addr", addr, "error", err)
+		infra.L.Error("listen tcp", zap.String("addr", addr), zap.Error(err))
 		os.Exit(1)
 	}
 
 	application, err := mcpserver.New(config)
 	if err != nil {
-		slog.Error("init mcp server", "error", err)
+		infra.L.Error("init mcp server", zap.Error(err))
 		os.Exit(1)
 	}
 
@@ -64,24 +72,24 @@ func main() {
 		defer cancel()
 
 		if err := server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, context.Canceled) {
-			slog.Warn("http server shutdown", "error", err)
+			infra.L.Warn("http server shutdown", zap.Error(err))
 		}
 	}()
 
-	slog.Info("mcp server starting", "addr", addr, "config", configPath)
+	infra.L.Info("mcp server starting", zap.Bool("release", release), zap.String("addr", addr), zap.String("config", configPath))
 	if err = server.Serve(listener); err != nil && err != http.ErrServerClosed {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		if shutdownErr := application.Shutdown(shutdownCtx); shutdownErr != nil {
-			slog.Warn("mcp server shutdown after listen failure", "error", shutdownErr)
+			infra.L.Warn("mcp server shutdown after listen failure", zap.Error(shutdownErr))
 		}
 		cancel()
-		slog.Error("listen", "error", err)
+		infra.L.Error("listen", zap.Error(err))
 		os.Exit(1)
 	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err = application.Shutdown(shutdownCtx); err != nil && !errors.Is(err, context.Canceled) {
-		slog.Warn("mcp server shutdown", "error", err)
+		infra.L.Warn("mcp server shutdown", zap.Error(err))
 	}
 }
