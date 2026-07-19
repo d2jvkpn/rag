@@ -15,6 +15,7 @@ backend_build:
 	$(MAKE) -C backend build
 
 backend_run:
+	$(MAKE) -C frontend build
 	$(MAKE) -C backend run
 
 mcp_check:
@@ -31,10 +32,6 @@ frontend_run:
 
 frontend_build:
 	$(MAKE) -C frontend build
-
-run:
-	$(MAKE) -C frontend build
-	$(MAKE) -C backend run
 
 build_image:
 	docker build -f deploy/Containerfile \
