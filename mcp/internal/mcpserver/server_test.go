@@ -2,6 +2,8 @@ package mcpserver
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -222,5 +224,56 @@ func TestSearchToolOverProtocol(t *testing.T) {
 	}
 	if !badResult.IsError {
 		t.Fatal("expected tool error for unconfigured collection via protocol call, got success")
+	}
+}
+
+func TestHTTPHandlerRequiresBearerTokenWhenConfigured(t *testing.T) {
+	s := testServer(t, &fakeEmbedder{}, &fakeVectorStore{})
+	handler := s.HTTPHandler("secret")
+
+	cases := []struct {
+		name   string
+		header string
+	}{
+		{"missing header", ""},
+		{"wrong token", "Bearer wrong"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/", nil)
+			if c.header != "" {
+				req.Header.Set("Authorization", c.header)
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("got status %d, want %d", rec.Code, http.StatusUnauthorized)
+			}
+		})
+	}
+}
+
+func TestHTTPHandlerAcceptsCorrectBearerToken(t *testing.T) {
+	s := testServer(t, &fakeEmbedder{}, &fakeVectorStore{})
+	handler := s.HTTPHandler("secret")
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code == http.StatusUnauthorized {
+		t.Fatalf("got status %d, want request to pass auth", rec.Code)
+	}
+}
+
+func TestHTTPHandlerSkipsAuthWhenAPIKeyEmpty(t *testing.T) {
+	s := testServer(t, &fakeEmbedder{}, &fakeVectorStore{})
+	handler := s.HTTPHandler("")
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code == http.StatusUnauthorized {
+		t.Fatalf("got status %d, want no auth to be enforced", rec.Code)
 	}
 }

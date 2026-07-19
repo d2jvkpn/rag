@@ -255,6 +255,11 @@ BM25 / hybrid 检索。
   （可选过滤）。校验逻辑与 `DocumentService.Query`（`docs/backend.md`）一致：dense/hybrid 模式先调用
   Embedder 取 query 向量，bm25 跳过；再调用 `VectorStore.Search`。`collection` 的可选值及描述直接体现
   在工具的 JSON Schema（`enum` + `description`），供 agent 发现，无需额外的 list-collections 工具。
+- **鉴权**：可选的共享密钥（`auth.api_key`），复用 `go-sdk` 自带的
+  `github.com/modelcontextprotocol/go-sdk/auth` 包（`auth.RequireBearerToken` 中间件）包裹
+  `StreamableHTTPHandler`。配置后请求须携带 `Authorization: Bearer <api_key>`，`token` 用
+  `crypto/subtle.ConstantTimeCompare` 做常量时间比较；未配置时不鉴权，启动时打印一条 Warn 日志。没有
+  用户身份或多租户概念，仅用于限制谁能调用这个只读检索接口。
 - **日志**：`internal/infra`（zap + lumberjack，与主后端 `backend/internal/infra` 同构，各自独立的包级
   logger）。`--release` flag 控制日志级别（未开启为 debug，开启后为 info），未配置 `logging.path` 时
   lumberjack 使用默认文件名。每次 `search` 工具调用在 `handleSearch` 返回前记一条日志（成功 Info /
@@ -284,6 +289,7 @@ mcp/
 | 键 | 默认值 | 说明 |
 |---|---|---|
 | `mcp.description` | `""` | 通过 MCP `Instructions` 暴露给客户端的服务说明 |
+| `auth.api_key` | `""` | 共享密钥；配置后请求须携带 `Authorization: Bearer <api_key>`，未配置时不鉴权（启动时打印警告） |
 | `embedder.base_url` | — | 必填。OpenAI-compatible Embedding 端点（无 Noop 回落） |
 | `embedder.api_key` | — | 必填 |
 | `embedder.model` | — | 必填 |

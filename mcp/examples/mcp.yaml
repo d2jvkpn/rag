@@ -2,6 +2,12 @@
 mcp:
   description: "Read-only semantic/BM25/hybrid search over a fixed set of RAG knowledge base collections."
 
+# Optional shared-secret auth. Leave api_key empty to run without authentication
+# (a warning is logged at startup). When set, requests must carry
+# "Authorization: Bearer <api_key>".
+auth:
+  api_key: ""
+
 # OpenAI-compatible embedding endpoint. Required — unlike the main backend,
 # there is no Noop fallback: dense/hybrid search needs a real embedder.
 embedder:

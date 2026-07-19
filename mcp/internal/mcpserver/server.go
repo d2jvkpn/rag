@@ -2,12 +2,14 @@ package mcpserver
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
@@ -84,11 +86,28 @@ func newServer(
 	return s, nil
 }
 
-// HTTPHandler exposes the server over the MCP Streamable HTTP transport.
-func (s *Server) HTTPHandler() http.Handler {
-	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
+// HTTPHandler exposes the server over the MCP Streamable HTTP transport. When
+// apiKey is non-empty, requests must carry "Authorization: Bearer <apiKey>";
+// an empty apiKey leaves the server unauthenticated (logged as a warning).
+func (s *Server) HTTPHandler(apiKey string) http.Handler {
+	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 		return s.mcpServer
 	}, nil)
+
+	if apiKey == "" {
+		infra.L.Warn("auth.api_key is not configured; mcp server is running without authentication")
+		return handler
+	}
+
+	verifier := func(_ context.Context, token string, _ *http.Request) (*auth.TokenInfo, error) {
+		if subtle.ConstantTimeCompare([]byte(token), []byte(apiKey)) != 1 {
+			return nil, auth.ErrInvalidToken
+		}
+		// The shared key never expires; the library requires a non-zero
+		// Expiration, so report one comfortably past any single request.
+		return &auth.TokenInfo{Expiration: time.Now().Add(time.Hour)}, nil
+	}
+	return auth.RequireBearerToken(verifier, nil)(handler)
 }
 
 // Shutdown releases the Milvus connection.

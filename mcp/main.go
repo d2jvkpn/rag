@@ -59,7 +59,7 @@ func main() {
 
 	server = &http.Server{
 		Addr:              addr,
-		Handler:           application.HTTPHandler(),
+		Handler:           application.HTTPHandler(config.GetString("auth.api_key")),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
