@@ -7,11 +7,17 @@ import (
 )
 
 func parseMarkdown(path string) (ParseResult, error) {
-	raw, err := os.ReadFile(path)
+	var (
+		raw  []byte
+		err  error
+		text string
+	)
+
+	raw, err = os.ReadFile(path)
 	if err != nil {
 		return ParseResult{}, err
 	}
-	text := strings.TrimSpace(string(raw))
+	text = strings.TrimSpace(string(raw))
 	if text == "" {
 		return ParseResult{}, errors.New("markdown content is empty")
 	}
@@ -23,12 +29,17 @@ func parseMarkdown(path string) (ParseResult, error) {
 // extracted into Refs; image syntax is replaced with a placeholder, and link
 // URLs are stripped from the body text (anchor text is preserved).
 func splitMarkdownBlocks(text string) []ParseBlock {
-	lines := strings.Split(text, "\n")
-	var blocks []ParseBlock
-	var currentTitle string
-	var currentLines []string
+	var (
+		lines        []string
+		blocks       []ParseBlock
+		currentTitle string
+		currentLines []string
+		flush        func()
+	)
 
-	flush := func() {
+	lines = strings.Split(text, "\n")
+
+	flush = func() {
 		raw := strings.TrimSpace(strings.Join(currentLines, "\n"))
 		if raw == "" {
 			return
@@ -55,9 +66,11 @@ func splitMarkdownBlocks(text string) []ParseBlock {
 }
 
 func isMarkdownHeading(line string) bool {
+	var rest string
+
 	if !strings.HasPrefix(line, "#") {
 		return false
 	}
-	rest := strings.TrimLeft(line, "#")
+	rest = strings.TrimLeft(line, "#")
 	return rest == "" || rest[0] == ' ' || rest[0] == '\t'
 }

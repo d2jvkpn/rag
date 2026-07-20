@@ -38,21 +38,30 @@ type Milvus struct {
 }
 
 func NewMilvus(addr, db, apiKey string) (*Milvus, error) {
-	cfg := &milvusclient.ClientConfig{
+	var (
+		cfg    *milvusclient.ClientConfig
+		ctx    context.Context
+		cancel context.CancelFunc
+		c      *milvusclient.Client
+		err    error
+		m      *Milvus
+	)
+
+	cfg = &milvusclient.ClientConfig{
 		Address: addr,
 	}
 	if apiKey != "" {
 		cfg.APIKey = apiKey
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	c, err := milvusclient.New(ctx, cfg)
+	c, err = milvusclient.New(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("milvus connect: %w", err)
 	}
 
-	m := &Milvus{client: c}
+	m = &Milvus{client: c}
 
 	if db != "" {
 		if err := m.ensureDatabase(ctx, db); err != nil {
@@ -72,10 +81,17 @@ func (m *Milvus) Close(ctx context.Context) error {
 }
 
 func (m *Milvus) ValidateKnowledgeBase(kbID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	var (
+		ctx    context.Context
+		cancel context.CancelFunc
+		has    bool
+		err    error
+	)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	has, err := m.client.HasCollection(ctx, milvusclient.NewHasCollectionOption(kbID))
+	has, err = m.client.HasCollection(ctx, milvusclient.NewHasCollectionOption(kbID))
 	if err != nil {
 		return fmt.Errorf("milvus has_collection %q: %w", kbID, err)
 	}
@@ -91,7 +107,9 @@ func (m *Milvus) CreateKnowledgeBase(ctx context.Context, cfg CollectionConfig) 
 }
 
 func (m *Milvus) DeleteKnowledgeBase(ctx context.Context, kbID string) error {
-	err := m.client.DropCollection(ctx, milvusclient.NewDropCollectionOption(kbID))
+	var err error
+
+	err = m.client.DropCollection(ctx, milvusclient.NewDropCollectionOption(kbID))
 	if err != nil && !strings.Contains(strings.ToLower(err.Error()), "not exist") {
 		return fmt.Errorf("milvus drop_collection %q: %w", kbID, err)
 	}
@@ -99,29 +117,47 @@ func (m *Milvus) DeleteKnowledgeBase(ctx context.Context, kbID string) error {
 }
 
 func (m *Milvus) Upsert(ctx context.Context, records []VectorRecord) error {
+	var (
+		collection    string
+		dim           int
+		kbIDs         []string
+		docIDs        []string
+		chunkIDs      []string
+		chunkIdxs     []int32
+		filenames     []string
+		sectionTitles []string
+		pageStarts    []int32
+		pageEnds      []int32
+		tagsValues    [][]string
+		fileSHA256s   []string
+		texts         []string
+		embeddings    [][]float32
+		err           error
+	)
+
 	if len(records) == 0 {
 		return nil
 	}
-	collection := records[0].KnowledgeBaseID
+	collection = records[0].KnowledgeBaseID
 	if err := m.ValidateKnowledgeBase(collection); err != nil {
 		return err
 	}
-	dim := len(records[0].Embedding)
+	dim = len(records[0].Embedding)
 
-	kbIDs := make([]string, len(records))
-	docIDs := make([]string, len(records))
-	chunkIDs := make([]string, len(records))
-	chunkIdxs := make([]int32, len(records))
-	filenames := make([]string, len(records))
+	kbIDs = make([]string, len(records))
+	docIDs = make([]string, len(records))
+	chunkIDs = make([]string, len(records))
+	chunkIdxs = make([]int32, len(records))
+	filenames = make([]string, len(records))
 
-	sectionTitles := make([]string, len(records))
-	pageStarts := make([]int32, len(records))
-	pageEnds := make([]int32, len(records))
-	tagsValues := make([][]string, len(records))
-	fileSHA256s := make([]string, len(records))
+	sectionTitles = make([]string, len(records))
+	pageStarts = make([]int32, len(records))
+	pageEnds = make([]int32, len(records))
+	tagsValues = make([][]string, len(records))
+	fileSHA256s = make([]string, len(records))
 
-	texts := make([]string, len(records))
-	embeddings := make([][]float32, len(records))
+	texts = make([]string, len(records))
+	embeddings = make([][]float32, len(records))
 
 	for i, r := range records {
 		kbIDs[i] = r.KnowledgeBaseID
@@ -142,7 +178,7 @@ func (m *Milvus) Upsert(ctx context.Context, records []VectorRecord) error {
 		fileSHA256s[i] = r.FileSHA256
 	}
 
-	_, err := m.client.Upsert(ctx, milvusclient.NewColumnBasedInsertOption(collection,
+	_, err = m.client.Upsert(ctx, milvusclient.NewColumnBasedInsertOption(collection,
 		column.NewColumnVarChar("knowledge_base_id", kbIDs),
 		column.NewColumnVarChar("document_id", docIDs),
 		column.NewColumnVarChar("filename", filenames),
@@ -161,10 +197,12 @@ func (m *Milvus) Upsert(ctx context.Context, records []VectorRecord) error {
 }
 
 func (m *Milvus) DeleteByDocument(ctx context.Context, knowledgeBaseID, documentID string) error {
+	var err error
+
 	if err := m.ValidateKnowledgeBase(knowledgeBaseID); err != nil {
 		return err
 	}
-	_, err := m.client.Delete(ctx,
+	_, err = m.client.Delete(ctx,
 		milvusclient.NewDeleteOption(knowledgeBaseID).
 			WithExpr(fmt.Sprintf(`document_id == "%s"`, escapeFilterString(documentID))),
 	)
@@ -172,10 +210,18 @@ func (m *Milvus) DeleteByDocument(ctx context.Context, knowledgeBaseID, document
 }
 
 func (m *Milvus) Search(ctx context.Context, req SearchRequest) ([]SearchResult, error) {
+	var (
+		filter       string
+		filterParams map[string]any
+		annReqs      []*milvusclient.AnnRequest
+		resultSets   []milvusclient.ResultSet
+		err          error
+	)
+
 	if err := m.ValidateKnowledgeBase(req.KnowledgeBaseID); err != nil {
 		return nil, err
 	}
-	filter, filterParams := buildDocFilter(req.DocumentIDs)
+	filter, filterParams = buildDocFilter(req.DocumentIDs)
 
 	if req.Mode == SearchModeBM25 {
 		return m.searchBM25(
@@ -190,10 +236,13 @@ func (m *Milvus) Search(ctx context.Context, req SearchRequest) ([]SearchResult,
 		)
 	}
 
-	annReqs := []*milvusclient.AnnRequest{
+	annReqs = []*milvusclient.AnnRequest{
 		denseAnnReq(req.Embedding, req.TopK, req.EF, filter, filterParams),
 		bm25AnnReq(req.Query, req.TopK, req.DropRatio, filter, filterParams),
 	}
+	// opt/rrf hold Milvus builder types that are unexported outside this
+	// package (*hybridSearchOption / *rrfReranker), so their type cannot be
+	// spelled in a var block here; := is required.
 	opt := milvusclient.NewHybridSearchOption(req.KnowledgeBaseID, req.TopK, annReqs...).
 		WithOutputFields(searchOutputFields...)
 
@@ -205,7 +254,7 @@ func (m *Milvus) Search(ctx context.Context, req SearchRequest) ([]SearchResult,
 	}
 	opt = opt.WithReranker(rrf)
 
-	resultSets, err := m.client.HybridSearch(ctx, opt)
+	resultSets, err = m.client.HybridSearch(ctx, opt)
 	if err != nil {
 		return nil, err
 	}
@@ -216,6 +265,14 @@ func (m *Milvus) searchDense(
 	ctx context.Context, collection string, embedding []float32, topK, ef int,
 	filter string, filterParams map[string]any,
 ) ([]SearchResult, error) {
+	var (
+		resultSets []milvusclient.ResultSet
+		err        error
+	)
+
+	// opt holds a Milvus builder type that is unexported outside this package
+	// (*searchOption), so its type cannot be spelled in a var block here;
+	// := is required.
 	opt := milvusclient.NewSearchOption(
 		collection, topK, []entity.Vector{entity.FloatVector(embedding)},
 	).
@@ -231,7 +288,7 @@ func (m *Milvus) searchDense(
 			opt = opt.WithTemplateParam(k, v)
 		}
 	}
-	resultSets, err := m.client.Search(ctx, opt)
+	resultSets, err = m.client.Search(ctx, opt)
 	if err != nil {
 		return nil, err
 	}
@@ -242,6 +299,14 @@ func (m *Milvus) searchBM25(
 	ctx context.Context, collection, query string, topK int, dropRatio float64,
 	filter string, filterParams map[string]any,
 ) ([]SearchResult, error) {
+	var (
+		resultSets []milvusclient.ResultSet
+		err        error
+	)
+
+	// opt holds a Milvus builder type that is unexported outside this package
+	// (*searchOption), so its type cannot be spelled in a var block here;
+	// := is required.
 	opt := milvusclient.NewSearchOption(collection, topK, []entity.Vector{entity.Text(query)}).
 		WithANNSField("sparse").
 		WithOutputFields(searchOutputFields...)
@@ -254,7 +319,7 @@ func (m *Milvus) searchBM25(
 			opt = opt.WithTemplateParam(k, v)
 		}
 	}
-	resultSets, err := m.client.Search(ctx, opt)
+	resultSets, err = m.client.Search(ctx, opt)
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +336,9 @@ func firstResultSet(resultSets []milvusclient.ResultSet) []SearchResult {
 func denseAnnReq(
 	embedding []float32, topK, ef int, filter string, filterParams map[string]any,
 ) *milvusclient.AnnRequest {
-	r := milvusclient.NewAnnRequest("embedding", topK, entity.FloatVector(embedding)).
+	var r *milvusclient.AnnRequest
+
+	r = milvusclient.NewAnnRequest("embedding", topK, entity.FloatVector(embedding)).
 		WithSearchParam("metric_type", string(entity.COSINE))
 	if ef > 0 {
 		r = r.WithSearchParam("ef", fmt.Sprintf("%d", ef))
@@ -288,7 +355,9 @@ func denseAnnReq(
 func bm25AnnReq(
 	query string, topK int, dropRatio float64, filter string, filterParams map[string]any,
 ) *milvusclient.AnnRequest {
-	r := milvusclient.NewAnnRequest("sparse", topK, entity.Text(query))
+	var r *milvusclient.AnnRequest
+
+	r = milvusclient.NewAnnRequest("sparse", topK, entity.Text(query))
 	if dropRatio > 0 {
 		r = r.WithSearchParam("drop_ratio_search", fmt.Sprintf("%g", dropRatio))
 	}
@@ -304,13 +373,15 @@ func bm25AnnReq(
 // buildDocFilter returns a template expression and its parameter map for use
 // with WithFilter + WithTemplateParam, avoiding string interpolation entirely.
 func buildDocFilter(documentIDs []string) (string, map[string]any) {
+	var ids []any
+
 	if len(documentIDs) == 0 {
 		return "", nil
 	}
 	if len(documentIDs) == 1 {
 		return "document_id == {doc_id}", map[string]any{"doc_id": documentIDs[0]}
 	}
-	ids := make([]any, len(documentIDs))
+	ids = make([]any, len(documentIDs))
 	for i, id := range documentIDs {
 		ids[i] = id
 	}
@@ -327,7 +398,9 @@ func escapeFilterString(s string) string {
 }
 
 func parseResults(rs milvusclient.ResultSet) []SearchResult {
-	results := make([]SearchResult, 0, rs.ResultCount)
+	var results []SearchResult
+
+	results = make([]SearchResult, 0, rs.ResultCount)
 	for i := range rs.ResultCount {
 		score := float32(0)
 		if i < len(rs.Scores) {
@@ -353,33 +426,50 @@ func parseResults(rs milvusclient.ResultSet) []SearchResult {
 }
 
 func colStr(rs milvusclient.ResultSet, field string, i int) string {
-	col := rs.GetColumn(field)
+	var (
+		col column.Column
+		v   string
+	)
+
+	col = rs.GetColumn(field)
 	if col == nil {
 		return ""
 	}
-	v, _ := col.GetAsString(i)
+	v, _ = col.GetAsString(i)
 	return v
 }
 
 func colInt(rs milvusclient.ResultSet, field string, i int) int {
-	col := rs.GetColumn(field)
+	var (
+		col column.Column
+		v   int64
+	)
+
+	col = rs.GetColumn(field)
 	if col == nil {
 		return 0
 	}
-	v, _ := col.GetAsInt64(i)
+	v, _ = col.GetAsInt64(i)
 	return int(v)
 }
 
 func colStrArray(rs milvusclient.ResultSet, field string, i int) []string {
-	col := rs.GetColumn(field)
+	var (
+		col  column.Column
+		arr  *column.ColumnVarCharArray
+		ok   bool
+		data [][]string
+	)
+
+	col = rs.GetColumn(field)
 	if col == nil {
 		return nil
 	}
-	arr, ok := col.(*column.ColumnVarCharArray)
+	arr, ok = col.(*column.ColumnVarCharArray)
 	if !ok {
 		return nil
 	}
-	data := arr.Data()
+	data = arr.Data()
 	if i >= len(data) {
 		return nil
 	}
@@ -387,7 +477,9 @@ func colStrArray(rs milvusclient.ResultSet, field string, i int) []string {
 }
 
 func (m *Milvus) ensureDatabase(ctx context.Context, db string) error {
-	err := m.client.CreateDatabase(ctx, milvusclient.NewCreateDatabaseOption(db))
+	var err error
+
+	err = m.client.CreateDatabase(ctx, milvusclient.NewCreateDatabaseOption(db))
 	if err != nil && !strings.Contains(strings.ToLower(err.Error()), "exist") {
 		return fmt.Errorf("milvus create database %q: %w", db, err)
 	}
@@ -395,13 +487,25 @@ func (m *Milvus) ensureDatabase(ctx context.Context, db string) error {
 }
 
 func (m *Milvus) ensureCollection(ctx context.Context, cfg CollectionConfig) error {
-	name := cfg.Name
-	analyzer := cfg.Analyzer
+	var (
+		name       string
+		analyzer   string
+		has        bool
+		err        error
+		textField  *entity.Field
+		schema     *entity.Schema
+		denseTask  *milvusclient.CreateIndexTask
+		sparseTask *milvusclient.CreateIndexTask
+		loadTask   milvusclient.LoadTask
+	)
+
+	name = cfg.Name
+	analyzer = cfg.Analyzer
 	if analyzer == "" {
 		analyzer = "chinese"
 	}
 
-	has, err := m.client.HasCollection(ctx, milvusclient.NewHasCollectionOption(name))
+	has, err = m.client.HasCollection(ctx, milvusclient.NewHasCollectionOption(name))
 	if err != nil {
 		return fmt.Errorf("milvus has_collection %q: %w", name, err)
 	}
@@ -441,14 +545,14 @@ func (m *Milvus) ensureCollection(ctx context.Context, cfg CollectionConfig) err
 		}
 	}
 
-	textField := entity.NewField().
+	textField = entity.NewField().
 		WithName("text").
 		WithDataType(entity.FieldTypeVarChar).
 		WithMaxLength(65535).
 		WithEnableAnalyzer(true).
 		WithAnalyzerParams(map[string]any{"type": analyzer})
 
-	schema := entity.NewSchema().
+	schema = entity.NewSchema().
 		WithName(name).
 		WithField(entity.NewField().WithName("chunk_id").
 			WithDataType(entity.FieldTypeVarChar).
@@ -494,7 +598,7 @@ func (m *Milvus) ensureCollection(ctx context.Context, cfg CollectionConfig) err
 		return fmt.Errorf("milvus create_collection %q: %w", name, err)
 	}
 
-	denseTask, err := m.client.CreateIndex(ctx, milvusclient.NewCreateIndexOption(
+	denseTask, err = m.client.CreateIndex(ctx, milvusclient.NewCreateIndexOption(
 		name, "embedding", milvusindex.NewHNSWIndex(entity.COSINE, 16, 64),
 	))
 	if err != nil {
@@ -504,7 +608,7 @@ func (m *Milvus) ensureCollection(ctx context.Context, cfg CollectionConfig) err
 		return fmt.Errorf("milvus index embedding await %q: %w", name, err)
 	}
 
-	sparseTask, err := m.client.CreateIndex(ctx, milvusclient.NewCreateIndexOption(
+	sparseTask, err = m.client.CreateIndex(ctx, milvusclient.NewCreateIndexOption(
 		name, "sparse", milvusindex.NewSparseInvertedIndex(entity.BM25, 0.0),
 	))
 	if err != nil {
@@ -514,7 +618,7 @@ func (m *Milvus) ensureCollection(ctx context.Context, cfg CollectionConfig) err
 		return fmt.Errorf("milvus index sparse await %q: %w", name, err)
 	}
 
-	loadTask, err := m.client.LoadCollection(ctx, milvusclient.NewLoadCollectionOption(name))
+	loadTask, err = m.client.LoadCollection(ctx, milvusclient.NewLoadCollectionOption(name))
 	if err != nil {
 		return fmt.Errorf("milvus load_collection %q: %w", name, err)
 	}

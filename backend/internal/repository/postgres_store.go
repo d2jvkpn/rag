@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database"
 	migratepg "github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/golang-migrate/migrate/v4/source"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/google/uuid"
 	"github.com/lib/pq"
@@ -27,7 +29,12 @@ type PostgresStore struct {
 }
 
 func (s *PostgresStore) Close() error {
-	sqlDB, err := s.db.DB()
+	var (
+		sqlDB *sql.DB
+		err   error
+	)
+
+	sqlDB, err = s.db.DB()
 	if err != nil {
 		return err
 	}
@@ -35,7 +42,15 @@ func (s *PostgresStore) Close() error {
 }
 
 func NewPostgresStore(dsn string, account InitAccount) (*PostgresStore, AccountSyncResult, error) {
-	sqlDB, err := sql.Open("postgres", postgresDSNWithConnectTimeout(dsn))
+	var (
+		sqlDB  *sql.DB
+		err    error
+		db     *gorm.DB
+		store  *PostgresStore
+		result AccountSyncResult
+	)
+
+	sqlDB, err = sql.Open("postgres", postgresDSNWithConnectTimeout(dsn))
 	if err != nil {
 		return nil, AccountSyncResult{}, err
 	}
@@ -48,7 +63,7 @@ func NewPostgresStore(dsn string, account InitAccount) (*PostgresStore, AccountS
 		return nil, AccountSyncResult{}, err
 	}
 
-	db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{
+	db, err = gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{
 		DefaultContextTimeout: 10 * time.Second,
 		Logger:                gormlogger.Default.LogMode(gormlogger.Silent),
 	})
@@ -56,8 +71,8 @@ func NewPostgresStore(dsn string, account InitAccount) (*PostgresStore, AccountS
 		return nil, AccountSyncResult{}, err
 	}
 
-	store := &PostgresStore{db: db}
-	result, err := store.ensureInitAccount(account)
+	store = &PostgresStore{db: db}
+	result, err = store.ensureInitAccount(account)
 	if err != nil {
 		return nil, AccountSyncResult{}, err
 	}
@@ -65,10 +80,15 @@ func NewPostgresStore(dsn string, account InitAccount) (*PostgresStore, AccountS
 }
 
 func postgresDSNWithConnectTimeout(dsn string) string {
+	var (
+		u   *url.URL
+		err error
+	)
+
 	if strings.Contains(dsn, "connect_timeout") {
 		return dsn
 	}
-	u, err := url.Parse(dsn)
+	u, err = url.Parse(dsn)
 	if err == nil && u.Scheme != "" {
 		q := u.Query()
 		q.Set("connect_timeout", "5")
@@ -82,15 +102,22 @@ func postgresDSNWithConnectTimeout(dsn string) string {
 }
 
 func runMigrations(sqlDB *sql.DB) error {
-	src, err := iofs.New(migrations.FS, "sql")
+	var (
+		src    source.Driver
+		err    error
+		driver database.Driver
+		m      *migrate.Migrate
+	)
+
+	src, err = iofs.New(migrations.FS, "sql")
 	if err != nil {
 		return err
 	}
-	driver, err := migratepg.WithInstance(sqlDB, &migratepg.Config{})
+	driver, err = migratepg.WithInstance(sqlDB, &migratepg.Config{})
 	if err != nil {
 		return err
 	}
-	m, err := migrate.NewWithInstance("iofs", src, "postgres", driver)
+	m, err = migrate.NewWithInstance("iofs", src, "postgres", driver)
 	if err != nil {
 		return err
 	}
@@ -101,11 +128,16 @@ func runMigrations(sqlDB *sql.DB) error {
 }
 
 func (s *PostgresStore) ensureInitAccount(account InitAccount) (AccountSyncResult, error) {
+	var (
+		count int64
+		now   time.Time
+		row   userRow
+	)
+
 	if account.Username == "" || account.Password == "" {
 		return AccountSyncResult{Action: "skipped"}, nil
 	}
 
-	var count int64
 	if err := s.db.Model(&userRow{}).Count(&count).Error; err != nil {
 		return AccountSyncResult{}, err
 	}
@@ -113,8 +145,8 @@ func (s *PostgresStore) ensureInitAccount(account InitAccount) (AccountSyncResul
 		return AccountSyncResult{Action: "skipped"}, nil
 	}
 
-	now := time.Now().UTC()
-	row := userRow{
+	now = time.Now().UTC()
+	row = userRow{
 		UserID:       uuid.Must(uuid.NewV7()).String(),
 		Username:     account.Username,
 		PasswordHash: resolvePasswordHash(account.Password),
@@ -156,9 +188,13 @@ func (s *PostgresStore) UpdateUser(user model.User) error {
 }
 
 func (s *PostgresStore) ListUsers() []model.User {
-	var rows []userRow
+	var (
+		rows  []userRow
+		users []model.User
+	)
+
 	s.db.Order("created_at asc").Find(&rows)
-	users := make([]model.User, len(rows))
+	users = make([]model.User, len(rows))
 	for i, r := range rows {
 		users[i] = userFromRow(r)
 	}
@@ -204,8 +240,13 @@ func (s *PostgresStore) ListKnowledgeBases() []model.KnowledgeBase {
 		MinChunks       int       `gorm:"column:min_chunks"`
 		DocumentCount   int       `gorm:"column:document_count"`
 	}
-	var rows []resultRow
-	sql := `
+	var (
+		rows  []resultRow
+		sql   string
+		items []model.KnowledgeBase
+	)
+
+	sql = `
 		SELECT kb.*, count(d.document_id)::int AS document_count
 		FROM knowledge_bases kb
 		LEFT JOIN documents d ON d.knowledge_base_id = kb.knowledge_base_id
@@ -213,7 +254,7 @@ func (s *PostgresStore) ListKnowledgeBases() []model.KnowledgeBase {
 		ORDER BY kb.created_at ASC
 	`
 	s.db.Raw(sql).Scan(&rows)
-	items := make([]model.KnowledgeBase, len(rows))
+	items = make([]model.KnowledgeBase, len(rows))
 	for i, r := range rows {
 		items[i] = model.KnowledgeBase{
 			KnowledgeBaseID: r.KnowledgeBaseID,
@@ -233,7 +274,9 @@ func (s *PostgresStore) ListKnowledgeBases() []model.KnowledgeBase {
 }
 
 func (s *PostgresStore) DeleteKnowledgeBase(knowledgeBaseID string) error {
-	result := s.db.Where("knowledge_base_id = ?", knowledgeBaseID).Delete(&knowledgeBaseRow{})
+	var result *gorm.DB
+
+	result = s.db.Where("knowledge_base_id = ?", knowledgeBaseID).Delete(&knowledgeBaseRow{})
 	if result.Error != nil {
 		return result.Error
 	}
@@ -244,7 +287,9 @@ func (s *PostgresStore) DeleteKnowledgeBase(knowledgeBaseID string) error {
 }
 
 func (s *PostgresStore) EnsureKnowledgeBasesFromDocuments(dim int, embedderModel string) error {
-	sql := `
+	var sql string
+
+	sql = `
 		INSERT INTO knowledge_bases (
 			knowledge_base_id, created_at, updated_at, created_by,
 			dim, model, analyzer, chunk_size, chunk_overlap, min_chunks
@@ -287,15 +332,22 @@ func (s *PostgresStore) GetDocument(documentID string) (model.Document, error) {
 }
 
 func (s *PostgresStore) ListDocuments(knowledgeBaseID, tag string) ([]model.Document, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	var (
+		ctx    context.Context
+		cancel context.CancelFunc
+		q      *gorm.DB
+		rows   []documentRow
+		docs   []model.Document
+	)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	q := s.documentsQuery(s.db.WithContext(ctx), knowledgeBaseID, tag, "").Order("created_at desc")
-	var rows []documentRow
+	q = s.documentsQuery(s.db.WithContext(ctx), knowledgeBaseID, tag, "").Order("created_at desc")
 	if err := q.Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	docs := make([]model.Document, len(rows))
+	docs = make([]model.Document, len(rows))
 	for i, r := range rows {
 		docs[i] = documentFromRow(r)
 	}
@@ -306,15 +358,25 @@ func (s *PostgresStore) ListDocumentsPage(
 	knowledgeBaseID, tag, status string,
 	page, pageSize int,
 ) (model.DocumentPage, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	var (
+		ctx        context.Context
+		cancel     context.CancelFunc
+		q          *gorm.DB
+		total      int64
+		totalPages int
+		rows       []documentRow
+		offset     int
+		docs       []model.Document
+	)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	q := s.documentsQuery(s.db.WithContext(ctx).Model(&documentRow{}), knowledgeBaseID, tag, status)
-	var total int64
+	q = s.documentsQuery(s.db.WithContext(ctx).Model(&documentRow{}), knowledgeBaseID, tag, status)
 	if err := q.Count(&total).Error; err != nil {
 		return model.DocumentPage{}, err
 	}
-	totalPages := 0
+	totalPages = 0
 	if total > 0 {
 		totalPages = (int(total) + pageSize - 1) / pageSize
 	}
@@ -322,12 +384,11 @@ func (s *PostgresStore) ListDocumentsPage(
 		page = totalPages
 	}
 
-	var rows []documentRow
-	offset := (page - 1) * pageSize
+	offset = (page - 1) * pageSize
 	if err := q.Order("created_at desc").Limit(pageSize).Offset(offset).Find(&rows).Error; err != nil {
 		return model.DocumentPage{}, err
 	}
-	docs := make([]model.Document, len(rows))
+	docs = make([]model.Document, len(rows))
 	for i, r := range rows {
 		docs[i] = documentFromRow(r)
 	}
@@ -361,8 +422,13 @@ func (s *PostgresStore) ListDocumentTags(knowledgeBaseID string) ([]model.Docume
 		Count int    `gorm:"column:count"`
 	}
 
-	var rows []row
-	sql := `
+	var (
+		rows  []row
+		sql   string
+		items []model.DocumentTagCount
+	)
+
+	sql = `
 		SELECT tag, count(*) AS count
 		FROM documents, unnest(tags) AS tag
 		WHERE ($1 = '' OR knowledge_base_id = $1) AND tag <> ''
@@ -373,7 +439,7 @@ func (s *PostgresStore) ListDocumentTags(knowledgeBaseID string) ([]model.Docume
 		return nil, err
 	}
 
-	items := make([]model.DocumentTagCount, len(rows))
+	items = make([]model.DocumentTagCount, len(rows))
 	for i, r := range rows {
 		items[i] = model.DocumentTagCount{Tag: r.Tag, Count: r.Count}
 	}
@@ -383,10 +449,13 @@ func (s *PostgresStore) ListDocumentTags(knowledgeBaseID string) ([]model.Docume
 func (s *PostgresStore) DeleteDocument(
 	documentID string,
 ) (model.Document, []model.DocumentChunk, error) {
-	var doc model.Document
-	var chunks []model.DocumentChunk
+	var (
+		doc    model.Document
+		chunks []model.DocumentChunk
+		err    error
+	)
 
-	err := s.db.Transaction(func(tx *gorm.DB) error {
+	err = s.db.Transaction(func(tx *gorm.DB) error {
 		var row documentRow
 		if err := tx.First(&row, "document_id = ?", documentID).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -448,13 +517,15 @@ func (s *PostgresStore) BulkUpdateChunks(chunks []model.DocumentChunk) error {
 
 func (s *PostgresStore) ReplaceChunks(documentID string, chunks []model.DocumentChunk) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
+		var rows []chunkRow
+
 		if err := tx.Delete(&chunkRow{}, "document_id = ?", documentID).Error; err != nil {
 			return err
 		}
 		if len(chunks) == 0 {
 			return nil
 		}
-		rows := make([]chunkRow, len(chunks))
+		rows = make([]chunkRow, len(chunks))
 		for i, c := range chunks {
 			rows[i] = chunkToRow(c)
 		}
@@ -463,13 +534,17 @@ func (s *PostgresStore) ReplaceChunks(documentID string, chunks []model.Document
 }
 
 func (s *PostgresStore) GetChunks(documentID string) ([]model.DocumentChunk, error) {
-	var rows []chunkRow
+	var (
+		rows   []chunkRow
+		chunks []model.DocumentChunk
+	)
+
 	if err := s.db.Where("document_id = ?", documentID).
 		Order("chunk_index asc").
 		Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	chunks := make([]model.DocumentChunk, len(rows))
+	chunks = make([]model.DocumentChunk, len(rows))
 	for i, r := range rows {
 		chunks[i] = chunkFromRow(r)
 	}
@@ -477,11 +552,18 @@ func (s *PostgresStore) GetChunks(documentID string) ([]model.DocumentChunk, err
 }
 
 func (s *PostgresStore) ListChunksPage(documentID string, page, pageSize int) (model.DocumentChunkPage, error) {
-	var total int64
+	var (
+		total      int64
+		totalPages int
+		rows       []chunkRow
+		offset     int
+		chunks     []model.DocumentChunk
+	)
+
 	if err := s.db.Model(&chunkRow{}).Where("document_id = ?", documentID).Count(&total).Error; err != nil {
 		return model.DocumentChunkPage{}, err
 	}
-	totalPages := 0
+	totalPages = 0
 	if total > 0 {
 		totalPages = (int(total) + pageSize - 1) / pageSize
 	}
@@ -489,8 +571,7 @@ func (s *PostgresStore) ListChunksPage(documentID string, page, pageSize int) (m
 		page = totalPages
 	}
 
-	var rows []chunkRow
-	offset := (page - 1) * pageSize
+	offset = (page - 1) * pageSize
 	if err := s.db.Where("document_id = ?", documentID).
 		Order("chunk_index asc").
 		Limit(pageSize).
@@ -498,7 +579,7 @@ func (s *PostgresStore) ListChunksPage(documentID string, page, pageSize int) (m
 		Find(&rows).Error; err != nil {
 		return model.DocumentChunkPage{}, err
 	}
-	chunks := make([]model.DocumentChunk, len(rows))
+	chunks = make([]model.DocumentChunk, len(rows))
 	for i, r := range rows {
 		chunks[i] = chunkFromRow(r)
 	}
@@ -636,7 +717,9 @@ func userToRow(u model.User) userRow {
 }
 
 func documentFromRow(r documentRow) model.Document {
-	tags := []string(r.Tags)
+	var tags []string
+
+	tags = []string(r.Tags)
 	if tags == nil {
 		tags = []string{}
 	}
@@ -669,7 +752,9 @@ func documentFromRow(r documentRow) model.Document {
 }
 
 func documentToRow(d model.Document) documentRow {
-	tags := pq.StringArray(d.Tags)
+	var tags pq.StringArray
+
+	tags = pq.StringArray(d.Tags)
 	if tags == nil {
 		tags = pq.StringArray{}
 	}
@@ -760,7 +845,9 @@ func chunkFromRow(r chunkRow) model.DocumentChunk {
 }
 
 func chunkToRow(c model.DocumentChunk) chunkRow {
-	refs, _ := json.Marshal(c.ResourceRefs)
+	var refs []byte
+
+	refs, _ = json.Marshal(c.ResourceRefs)
 	if refs == nil {
 		refs = json.RawMessage("[]")
 	}

@@ -18,12 +18,33 @@ import (
 )
 
 func parsePDF(path, mediaDir string) (ParseResult, error) {
-	pythonBin := strings.TrimSpace(os.Getenv("PDF_PARSER_PYTHON"))
+	var (
+		pythonBin  string
+		scriptPath string
+		ctx        context.Context
+		cancel     context.CancelFunc
+		args       []string
+		cmd        *exec.Cmd
+		output     []byte
+		err        error
+		payload    struct {
+			Text      string `json:"text"`
+			PageCount int    `json:"page_count"`
+			Pages     []struct {
+				Text string              `json:"text"`
+				Page int                 `json:"page"`
+				Refs []model.ResourceRef `json:"refs"`
+			} `json:"pages"`
+		}
+		blocks []ParseBlock
+	)
+
+	pythonBin = strings.TrimSpace(os.Getenv("PDF_PARSER_PYTHON"))
 	if pythonBin == "" {
 		pythonBin = "python3"
 	}
 
-	scriptPath := strings.TrimSpace(os.Getenv("PDF_PARSER_SCRIPT"))
+	scriptPath = strings.TrimSpace(os.Getenv("PDF_PARSER_SCRIPT"))
 	if scriptPath == "" {
 		var err error
 		scriptPath, err = pdfParserScriptPath()
@@ -32,10 +53,10 @@ func parsePDF(path, mediaDir string) (ParseResult, error) {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel = context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	args := []string{scriptPath, path}
+	args = []string{scriptPath, path}
 	if mediaDir != "" {
 		args = append(args, mediaDir)
 	}
@@ -47,11 +68,11 @@ func parsePDF(path, mediaDir string) (ParseResult, error) {
 		zap.Strings("argv", append([]string{pythonBin}, args...)),
 	)
 
-	cmd := exec.CommandContext(ctx, pythonBin, args...)
+	cmd = exec.CommandContext(ctx, pythonBin, args...)
 	if mediaDir != "" {
 		cmd.Env = append(os.Environ(), "PDF_PARSER_STORAGE_BASE="+staticResourceBase(mediaDir))
 	}
-	output, err := cmd.Output()
+	output, err = cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
@@ -84,15 +105,6 @@ func parsePDF(path, mediaDir string) (ParseResult, error) {
 		)
 	}
 
-	var payload struct {
-		Text      string `json:"text"`
-		PageCount int    `json:"page_count"`
-		Pages     []struct {
-			Text string              `json:"text"`
-			Page int                 `json:"page"`
-			Refs []model.ResourceRef `json:"refs"`
-		} `json:"pages"`
-	}
 	if err := json.Unmarshal(output, &payload); err != nil {
 		return ParseResult{}, fmt.Errorf(
 			"pdf parser returned invalid json (script=%s file=%s): %w",
@@ -108,7 +120,7 @@ func parsePDF(path, mediaDir string) (ParseResult, error) {
 	if payload.PageCount < 1 {
 		payload.PageCount = 1
 	}
-	blocks := make([]ParseBlock, 0, len(payload.Pages))
+	blocks = make([]ParseBlock, 0, len(payload.Pages))
 	for _, p := range payload.Pages {
 		t := strings.TrimSpace(p.Text)
 		if t == "" && len(p.Refs) == 0 {
@@ -124,11 +136,17 @@ func parsePDF(path, mediaDir string) (ParseResult, error) {
 }
 
 func pdfParserScriptPath() (string, error) {
-	_, file, _, ok := runtime.Caller(0)
+	var (
+		file string
+		ok   bool
+		path string
+	)
+
+	_, file, _, ok = runtime.Caller(0)
 	if !ok {
 		return "", errors.New("resolve pdf parser script path: runtime caller unavailable")
 	}
-	path := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "scripts", "parse_pdf.py"))
+	path = filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "scripts", "parse_pdf.py"))
 	if _, err := os.Stat(path); err != nil {
 		return "", err
 	}

@@ -8,12 +8,17 @@ import (
 )
 
 func resolveZIPMedia(reader *zip.Reader, blocks []ParseBlock, mediaDir string) {
+	var (
+		storageBase string
+		seen        map[string]string
+	)
+
 	mediaDir = filepath.Clean(mediaDir)
 	if err := os.MkdirAll(mediaDir, 0o755); err != nil {
 		return
 	}
-	storageBase := staticResourceBase(mediaDir)
-	seen := map[string]string{} // zipPath → relative storage path (or "" on failure)
+	storageBase = staticResourceBase(mediaDir)
+	seen = map[string]string{} // zipPath → relative storage path (or "" on failure)
 	for bi := range blocks {
 		for ri := range blocks[bi].Refs {
 			ref := &blocks[bi].Refs[ri]
@@ -48,8 +53,10 @@ func resolveZIPMedia(reader *zip.Reader, blocks []ParseBlock, mediaDir string) {
 }
 
 func staticResourceBase(mediaDir string) string {
+	var leaf string
+
 	mediaDir = filepath.Clean(mediaDir)
-	leaf := filepath.Base(mediaDir)
+	leaf = filepath.Base(mediaDir)
 	if isDatedDocumentDirName(leaf) {
 		return filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(mediaDir))))
 	}

@@ -61,14 +61,20 @@ func countTokens(text string) int {
 }
 
 func chunkConfigHash(chunkSize, overlap, minChunks int) string {
+	var (
+		enc string
+		s   string
+		sum [32]byte
+	)
+
 	tokMu.Lock()
-	enc := tokName
+	enc = tokName
 	tokMu.Unlock()
-	s := fmt.Sprintf(
+	s = fmt.Sprintf(
 		"strategy=structure-first;encoding=%s;chunk_size=%d;chunk_overlap=%d;min_chunks=%d",
 		enc, chunkSize, overlap, minChunks,
 	)
-	sum := sha256.Sum256([]byte(s))
+	sum = sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
 }
 
@@ -102,11 +108,16 @@ func newChunk(
 // within chunkSize. Prevents tiny chunks when document sections are shorter than
 // chunkSize — adjacent sections are accumulated until they'd exceed the limit.
 func mergeSmallBlocks(blocks []parser.ParseBlock, chunkSize int) []parser.ParseBlock {
+	var (
+		result []parser.ParseBlock
+		cur    parser.ParseBlock
+	)
+
 	if len(blocks) == 0 {
 		return nil
 	}
-	result := make([]parser.ParseBlock, 0, len(blocks))
-	cur := blocks[0]
+	result = make([]parser.ParseBlock, 0, len(blocks))
+	cur = blocks[0]
 	for _, b := range blocks[1:] {
 		bText := strings.TrimSpace(b.Text)
 		if bText == "" {
@@ -142,15 +153,21 @@ func BuildChunks(
 	chunkVersion, chunkSize, overlap, minChunks int,
 	approved bool,
 ) []model.DocumentChunk {
-	status := "draft"
+	var (
+		status    string
+		now       time.Time
+		allChunks []model.DocumentChunk
+	)
+
+	status = "draft"
 	if approved {
 		status = "approved"
 	}
-	now := time.Now().UTC()
+	now = time.Now().UTC()
 
 	blocks = mergeSmallBlocks(blocks, chunkSize)
 
-	allChunks := make([]model.DocumentChunk, 0)
+	allChunks = make([]model.DocumentChunk, 0)
 	for _, block := range blocks {
 		normalized := strings.TrimSpace(block.Text)
 		if normalized == "" {
@@ -234,8 +251,13 @@ func BuildChunks(
 const codeFenceGap = "\x01"
 
 func protectCodeFences(text string) string {
-	lines := strings.Split(text, "\n")
-	inFence := false
+	var (
+		lines   []string
+		inFence bool
+	)
+
+	lines = strings.Split(text, "\n")
+	inFence = false
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if !inFence {
@@ -258,10 +280,16 @@ func restoreCodeFences(text string) string {
 }
 
 func splitByLength(text string, chunkSize, overlap int) []string {
+	var (
+		paragraphs []string
+		segments   []string
+		current    string
+	)
+
 	text = protectCodeFences(text)
-	paragraphs := strings.Split(text, "\n\n")
-	segments := make([]string, 0)
-	current := ""
+	paragraphs = strings.Split(text, "\n\n")
+	segments = make([]string, 0)
+	current = ""
 
 	for _, paragraph := range paragraphs {
 		paragraph = strings.TrimSpace(paragraph)
@@ -314,7 +342,9 @@ func splitByLength(text string, chunkSize, overlap int) []string {
 }
 
 func isMarkdownTable(text string) bool {
-	lines := strings.SplitN(strings.TrimSpace(text), "\n", 3)
+	var lines []string
+
+	lines = strings.SplitN(strings.TrimSpace(text), "\n", 3)
 	if len(lines) < 2 {
 		return false
 	}
@@ -325,14 +355,22 @@ func isMarkdownTable(text string) bool {
 // splitMarkdownTable splits an oversized Markdown table by rows, repeating the
 // header and separator line in every part.
 func splitMarkdownTable(text string, chunkSize int) []string {
-	lines := strings.Split(strings.TrimSpace(text), "\n")
+	var (
+		lines     []string
+		header    string
+		separator string
+		dataRows  []string
+		prefix    string
+	)
+
+	lines = strings.Split(strings.TrimSpace(text), "\n")
 	if len(lines) < 2 {
 		return []string{text}
 	}
-	header := lines[0]
-	separator := lines[1]
-	dataRows := lines[2:]
-	prefix := header + "\n" + separator
+	header = lines[0]
+	separator = lines[1]
+	dataRows = lines[2:]
+	prefix = header + "\n" + separator
 
 	var parts []string
 	var current []string
@@ -357,17 +395,24 @@ func splitMarkdownTable(text string, chunkSize int) []string {
 // splitByTokens splits text using a token-count sliding window when a single
 // paragraph exceeds chunkSize. This is the fallback called by splitByLength.
 func splitByTokens(text string, chunkSize, overlap int) []string {
-	enc := getTokenizer()
-	tokens := enc.Encode(text, nil, nil)
+	var (
+		enc    *tiktoken.Tiktoken
+		tokens []int
+		step   int
+		start  int
+	)
+
+	enc = getTokenizer()
+	tokens = enc.Encode(text, nil, nil)
 	if len(tokens) <= chunkSize {
 		return []string{text}
 	}
-	step := chunkSize - overlap
+	step = chunkSize - overlap
 	if step <= 0 {
 		step = chunkSize
 	}
 	var parts []string
-	start := 0
+	start = 0
 	for start < len(tokens) {
 		end := start + chunkSize
 		if end > len(tokens) {
@@ -390,13 +435,20 @@ func splitByTokens(text string, chunkSize, overlap int) []string {
 // chunk. The tail is overlap tokens long, then advanced to the first sentence
 // boundary so the overlap begins at a clean sentence.
 func overlapTail(text string, overlap int) string {
-	enc := getTokenizer()
-	tokens := enc.Encode(text, nil, nil)
+	var (
+		enc    *tiktoken.Tiktoken
+		tokens []int
+		tail   string
+		runes  []rune
+	)
+
+	enc = getTokenizer()
+	tokens = enc.Encode(text, nil, nil)
 	if len(tokens) <= overlap {
 		return text
 	}
-	tail := strings.TrimSpace(string(enc.Decode(tokens[len(tokens)-overlap:])))
-	runes := []rune(tail)
+	tail = strings.TrimSpace(string(enc.Decode(tokens[len(tokens)-overlap:])))
+	runes = []rune(tail)
 	for i, r := range runes {
 		if isSentenceEnd(r) && i+1 < len(runes) {
 			return string(runes[i+1:])
@@ -413,7 +465,9 @@ func refsForSegment(seg string, blockRefs []model.ResourceRef) []model.ResourceR
 	if len(blockRefs) == 0 {
 		return []model.ResourceRef{}
 	}
-	refs := make([]model.ResourceRef, 0, len(blockRefs))
+	var refs []model.ResourceRef
+
+	refs = make([]model.ResourceRef, 0, len(blockRefs))
 	for _, r := range blockRefs {
 		if r.RefType == "image" {
 			if strings.Contains(seg, "[Image:"+r.RefID) {

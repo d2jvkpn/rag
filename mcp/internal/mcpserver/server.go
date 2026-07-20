@@ -31,14 +31,22 @@ type Server struct {
 
 // New builds a Server from an MCP config loaded via LoadConfig.
 func New(v *viper.Viper) (*Server, error) {
-	embedder := rag.NewOpenAIEmbedder(
+	var (
+		embedder    *rag.OpenAIEmbedder
+		milvus      *rag.Milvus
+		err         error
+		collections map[string]string
+		s           *Server
+	)
+
+	embedder = rag.NewOpenAIEmbedder(
 		v.GetString("embedder.base_url"),
 		v.GetString("embedder.api_key"),
 		v.GetString("embedder.model"),
 		v.GetInt("embedder.batch_size"),
 	)
 
-	milvus, err := rag.NewMilvus(
+	milvus, err = rag.NewMilvus(
 		v.GetString("milvus.addr"),
 		v.GetString("milvus.db"),
 		v.GetString("milvus.api_key"),
@@ -47,7 +55,7 @@ func New(v *viper.Viper) (*Server, error) {
 		return nil, fmt.Errorf("connect milvus: %w", err)
 	}
 
-	collections := make(map[string]string)
+	collections = make(map[string]string)
 	for _, c := range Collections(v) {
 		collections[c.Name] = c.Description
 	}
@@ -58,7 +66,7 @@ func New(v *viper.Viper) (*Server, error) {
 		}
 	}
 
-	s, err := newServer(embedder, milvus, collections, v.GetString("mcp.description"))
+	s, err = newServer(embedder, milvus, collections, v.GetString("mcp.description"))
 	if err != nil {
 		_ = milvus.Close(context.Background())
 		return nil, err
@@ -73,7 +81,9 @@ func New(v *viper.Viper) (*Server, error) {
 func newServer(
 	embedder rag.Embedder, vectorStore rag.VectorStore, collections map[string]string, description string,
 ) (*Server, error) {
-	s := &Server{
+	var s *Server
+
+	s = &Server{
 		embedder:    embedder,
 		vectorStore: vectorStore,
 		collections: collections,
@@ -96,7 +106,12 @@ func newServer(
 // apiKey is non-empty, requests must carry "Authorization: Bearer <apiKey>";
 // an empty apiKey leaves the server unauthenticated (logged as a warning).
 func (s *Server) HTTPHandler(apiKey string) http.Handler {
-	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
+	var (
+		handler  http.Handler
+		verifier auth.TokenVerifier
+	)
+
+	handler = mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 		return s.mcpServer
 	}, nil)
 
@@ -105,7 +120,7 @@ func (s *Server) HTTPHandler(apiKey string) http.Handler {
 		return handler
 	}
 
-	verifier := func(_ context.Context, token string, _ *http.Request) (*auth.TokenInfo, error) {
+	verifier = func(_ context.Context, token string, _ *http.Request) (*auth.TokenInfo, error) {
 		if subtle.ConstantTimeCompare([]byte(token), []byte(apiKey)) != 1 {
 			return nil, auth.ErrInvalidToken
 		}
@@ -142,19 +157,27 @@ type SearchOutput struct {
 // enum drawn from the configured collections, so an agent can discover what's
 // searchable directly from the tool schema without a separate list-tool.
 func (s *Server) registerSearchTool() error {
-	schema, err := jsonschema.For[SearchInput](nil)
+	var (
+		schema *jsonschema.Schema
+		err    error
+		prop   *jsonschema.Schema
+		ok     bool
+		desc   strings.Builder
+		names  []any
+	)
+
+	schema, err = jsonschema.For[SearchInput](nil)
 	if err != nil {
 		return fmt.Errorf("infer search input schema: %w", err)
 	}
-	prop, ok := schema.Properties["collection"]
+	prop, ok = schema.Properties["collection"]
 	if !ok {
 		return fmt.Errorf("search input schema missing collection property")
 	}
 
-	var desc strings.Builder
 	desc.WriteString("Search a configured knowledge base collection using dense, bm25, or hybrid retrieval.\n" +
 		"Available collections:\n")
-	names := make([]any, 0, len(s.collections))
+	names = make([]any, 0, len(s.collections))
 	for name, d := range s.collections {
 		names = append(names, name)
 		if d != "" {
@@ -176,17 +199,26 @@ func (s *Server) registerSearchTool() error {
 func (s *Server) handleSearch(
 	ctx context.Context, _ *mcp.CallToolRequest, in SearchInput,
 ) (result *mcp.CallToolResult, out SearchOutput, err error) {
-	start := time.Now()
+	var (
+		start      time.Time
+		topK       int
+		searchMode string
+		stats      rag.QueryStats
+		items      []rag.SearchResult
+	)
 
-	topK := rag.ClampTopK(in.TopK)
-	searchMode := in.SearchMode
+	start = time.Now()
+
+	topK = rag.ClampTopK(in.TopK)
+	searchMode = in.SearchMode
 	if searchMode == "" {
 		searchMode = rag.SearchModeDense
 	}
 
-	var stats rag.QueryStats
 	defer func() {
-		fields := []zap.Field{
+		var fields []zap.Field
+
+		fields = []zap.Field{
 			zap.String("collection", in.Collection),
 			zap.String("query", in.Query),
 			zap.String("search_mode", searchMode),
@@ -212,7 +244,7 @@ func (s *Server) handleSearch(
 		return nil, SearchOutput{}, fmt.Errorf("query is required")
 	}
 
-	items, stats, err := rag.Query(ctx, s.embedder, s.vectorStore, rag.QueryParams{
+	items, stats, err = rag.Query(ctx, s.embedder, s.vectorStore, rag.QueryParams{
 		KnowledgeBaseID: in.Collection,
 		Query:           in.Query,
 		TopK:            topK,

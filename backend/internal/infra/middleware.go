@@ -12,10 +12,16 @@ import (
 // ending with "/" are treated as prefix matches (e.g. "/static/"), others as
 // exact matches (e.g. "/healthz").
 func RequestLogger(basePath string, skipPaths ...string) gin.HandlerFunc {
-	exact := make(map[string]struct{}, len(skipPaths))
-	var prefixes []string
+	var (
+		exact    map[string]struct{}
+		prefixes []string
+		base     string
+		log      *zap.Logger
+	)
 
-	base := strings.TrimRight(basePath, "/")
+	exact = make(map[string]struct{}, len(skipPaths))
+
+	base = strings.TrimRight(basePath, "/")
 	for _, p := range skipPaths {
 		full := base + p
 		if strings.HasSuffix(p, "/") {
@@ -25,7 +31,7 @@ func RequestLogger(basePath string, skipPaths ...string) gin.HandlerFunc {
 		}
 	}
 
-	log := L.WithOptions(zap.WithCaller(false))
+	log = L.WithOptions(zap.WithCaller(false))
 
 	return func(c *gin.Context) {
 		urlPath := c.Request.URL.Path

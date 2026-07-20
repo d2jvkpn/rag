@@ -8,7 +8,11 @@ import (
 )
 
 func LoadConfig(path string) (config *viper.Viper) {
-	var err error
+	var (
+		err      error
+		basePath string
+		v        []string
+	)
 
 	config = viper.New()
 	config.SetConfigFile(path)
@@ -19,7 +23,7 @@ func LoadConfig(path string) (config *viper.Viper) {
 
 	config.SetDefault("app.data_dir", "data")
 
-	basePath := strings.TrimRight(config.GetString("http.base_path"), "/")
+	basePath = strings.TrimRight(config.GetString("http.base_path"), "/")
 	// basePath := filepath.Join(config.GetString("http.base_path"), "/")
 	config.Set("http.base_path", basePath)
 
@@ -35,7 +39,7 @@ func LoadConfig(path string) (config *viper.Viper) {
 		log.Fatal("embedder.dim is required and must be positive")
 	}
 
-	v := config.GetStringSlice("http.allow_origins")
+	v = config.GetStringSlice("http.allow_origins")
 	if len(v) == 0 {
 		log.Fatal("http.allow_origins must not be empty")
 	}

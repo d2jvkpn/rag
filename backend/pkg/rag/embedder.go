@@ -24,7 +24,9 @@ type EmbedderWithUsage interface {
 type NoopEmbedder struct{}
 
 func (NoopEmbedder) Embed(_ context.Context, texts []string) ([][]float32, error) {
-	out := make([][]float32, len(texts))
+	var out [][]float32
+
+	out = make([][]float32, len(texts))
 	for i := range out {
 		out[i] = []float32{}
 	}

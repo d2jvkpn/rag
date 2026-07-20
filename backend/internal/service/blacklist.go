@@ -25,7 +25,9 @@ type MemoryBlacklist struct {
 }
 
 func NewMemoryBlacklist() *MemoryBlacklist {
-	b := &MemoryBlacklist{
+	var b *MemoryBlacklist
+
+	b = &MemoryBlacklist{
 		entries: make(map[string]time.Time),
 		done:    make(chan struct{}),
 	}
@@ -42,15 +44,22 @@ func (b *MemoryBlacklist) Block(jti string, expiry time.Time) error {
 }
 
 func (b *MemoryBlacklist) IsBlocked(jti string) (bool, error) {
+	var (
+		expiry time.Time
+		ok     bool
+	)
+
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	expiry, ok := b.entries[jti]
+	expiry, ok = b.entries[jti]
 	return ok && time.Now().Before(expiry), nil
 }
 
 func (b *MemoryBlacklist) sweep() {
+	var ticker *time.Ticker
+
 	defer b.wg.Done()
-	ticker := time.NewTicker(15 * time.Minute)
+	ticker = time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
 
 	for {
@@ -88,7 +97,9 @@ func NewRedisBlacklist(client *redis.Client) *RedisBlacklist {
 }
 
 func (b *RedisBlacklist) Block(jti string, expiry time.Time) error {
-	ttl := time.Until(expiry)
+	var ttl time.Duration
+
+	ttl = time.Until(expiry)
 	if ttl <= 0 {
 		return nil
 	}
@@ -96,7 +107,12 @@ func (b *RedisBlacklist) Block(jti string, expiry time.Time) error {
 }
 
 func (b *RedisBlacklist) IsBlocked(jti string) (bool, error) {
-	n, err := b.client.Exists(context.Background(), "rag:revoked:"+jti).Result()
+	var (
+		n   int64
+		err error
+	)
+
+	n, err = b.client.Exists(context.Background(), "rag:revoked:"+jti).Result()
 	if err != nil {
 		return false, err
 	}

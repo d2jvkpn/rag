@@ -17,7 +17,9 @@ func NewGoroutineQueue(
 	concurrency int,
 	handler func(documentID string, rechunk bool),
 ) *GoroutineQueue {
-	q := &GoroutineQueue{ch: make(chan task, 32)}
+	var q *GoroutineQueue
+
+	q = &GoroutineQueue{ch: make(chan task, 32)}
 	for range concurrency {
 		q.wg.Add(1)
 		go func() {

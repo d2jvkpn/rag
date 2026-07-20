@@ -10,11 +10,16 @@ import (
 )
 
 func GinSPA(c *gin.Context, uiPath, webDir string) bool {
+	var (
+		requestPath string
+		relPath     string
+	)
+
 	if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
 		return false
 	}
 
-	requestPath := c.Request.URL.Path
+	requestPath = c.Request.URL.Path
 	if requestPath == uiPath {
 		c.Redirect(http.StatusMovedPermanently, uiPath+"/")
 		return true
@@ -23,7 +28,7 @@ func GinSPA(c *gin.Context, uiPath, webDir string) bool {
 		return false
 	}
 
-	relPath := strings.TrimPrefix(requestPath, uiPath+"/")
+	relPath = strings.TrimPrefix(requestPath, uiPath+"/")
 	if relPath != "" {
 		assetPath := filepath.Join(webDir, filepath.FromSlash(relPath))
 		if info, err := os.Stat(assetPath); err == nil && !info.IsDir() {

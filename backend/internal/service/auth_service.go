@@ -8,6 +8,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 	"golang.org/x/crypto/bcrypt"
 
@@ -55,7 +56,14 @@ func NewAuthService(
 func (s *AuthService) TokenTTL() time.Duration { return s.tokenTTL }
 
 func (s *AuthService) Login(username, password, totpCode string) (model.User, string, error) {
-	user, err := s.store.FindUserByUsername(username)
+	var (
+		user  model.User
+		err   error
+		now   time.Time
+		token string
+	)
+
+	user, err = s.store.FindUserByUsername(username)
 	if err != nil {
 		return model.User{}, "", errors.New("invalid username or password")
 	}
@@ -75,14 +83,14 @@ func (s *AuthService) Login(username, password, totpCode string) (model.User, st
 		}
 	}
 
-	now := time.Now().UTC()
+	now = time.Now().UTC()
 	user.LastLoginAt = &now
 	user.UpdatedAt = now
 	if err := s.store.UpdateUser(user); err != nil {
 		return model.User{}, "", err
 	}
 
-	token, err := s.issueToken(user.UserID)
+	token, err = s.issueToken(user.UserID)
 	if err != nil {
 		return model.User{}, "", err
 	}
@@ -90,15 +98,21 @@ func (s *AuthService) Login(username, password, totpCode string) (model.User, st
 }
 
 func (s *AuthService) SetupTOTP(userID, origin string) (secret, qrURL string, err error) {
-	user, err := s.store.GetUser(userID)
+	var (
+		user   model.User
+		issuer string
+		key    *otp.Key
+	)
+
+	user, err = s.store.GetUser(userID)
 	if err != nil {
 		return "", "", err
 	}
-	issuer := "RAG"
+	issuer = "RAG"
 	if origin != "" {
 		issuer = "RAG@" + origin
 	}
-	key, err := totp.Generate(totp.GenerateOpts{
+	key, err = totp.Generate(totp.GenerateOpts{
 		Issuer:      issuer,
 		AccountName: user.Username,
 	})
@@ -115,7 +129,12 @@ func (s *AuthService) SetupTOTP(userID, origin string) (secret, qrURL string, er
 }
 
 func (s *AuthService) EnableTOTP(userID, code string) error {
-	user, err := s.store.GetUser(userID)
+	var (
+		user model.User
+		err  error
+	)
+
+	user, err = s.store.GetUser(userID)
 	if err != nil {
 		return err
 	}
@@ -131,7 +150,12 @@ func (s *AuthService) EnableTOTP(userID, code string) error {
 }
 
 func (s *AuthService) DisableTOTP(userID, code string) error {
-	user, err := s.store.GetUser(userID)
+	var (
+		user model.User
+		err  error
+	)
+
+	user, err = s.store.GetUser(userID)
 	if err != nil {
 		return err
 	}
@@ -148,10 +172,15 @@ func (s *AuthService) DisableTOTP(userID, code string) error {
 }
 
 func (s *AuthService) Logout(tokenStr string) error {
+	var (
+		c   *claims
+		err error
+	)
+
 	if tokenStr == "" {
 		return nil
 	}
-	c, err := s.parseTokenRaw(tokenStr)
+	c, err = s.parseTokenRaw(tokenStr)
 	if err != nil {
 		return nil // already expired or invalid — nothing to revoke
 	}
@@ -162,7 +191,13 @@ func (s *AuthService) Logout(tokenStr string) error {
 }
 
 func (s *AuthService) ChangePassword(userID, oldPassword, newPassword string) error {
-	user, err := s.store.GetUser(userID)
+	var (
+		user model.User
+		err  error
+		hash []byte
+	)
+
+	user, err = s.store.GetUser(userID)
 	if err != nil {
 		return err
 	}
@@ -171,7 +206,7 @@ func (s *AuthService) ChangePassword(userID, oldPassword, newPassword string) er
 	); err != nil {
 		return errors.New("incorrect current password")
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	hash, err = bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
@@ -181,11 +216,17 @@ func (s *AuthService) ChangePassword(userID, oldPassword, newPassword string) er
 }
 
 func (s *AuthService) Me(tokenStr string) (model.User, error) {
-	c, err := s.parseToken(tokenStr)
+	var (
+		c    *claims
+		err  error
+		user model.User
+	)
+
+	c, err = s.parseToken(tokenStr)
 	if err != nil {
 		return model.User{}, err
 	}
-	user, err := s.store.GetUser(c.UserID)
+	user, err = s.store.GetUser(c.UserID)
 	if err != nil {
 		return model.User{}, err
 	}
@@ -213,7 +254,12 @@ func (s *AuthService) ListUsers() []model.User {
 }
 
 func (s *AuthService) SetUserStatus(actor model.User, userID, status string) error {
-	user, err := s.store.GetUser(userID)
+	var (
+		user model.User
+		err  error
+	)
+
+	user, err = s.store.GetUser(userID)
 	if err != nil {
 		return err
 	}
@@ -229,20 +275,27 @@ func (s *AuthService) SetUserStatus(actor model.User, userID, status string) err
 }
 
 func (s *AuthService) CreateUser(username, password string, permissions []string) (model.User, error) {
+	var (
+		hash []byte
+		err  error
+		now  time.Time
+		user model.User
+	)
+
 	if _, err := s.store.FindUserByUsername(username); err == nil {
 		return model.User{}, ErrUsernameExists
 	} else if !errors.Is(err, repository.ErrNotFound) {
 		return model.User{}, err
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err = bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return model.User{}, err
 	}
-	now := time.Now().UTC()
+	now = time.Now().UTC()
 	if permissions == nil {
 		permissions = []string{}
 	}
-	user := model.User{
+	user = model.User{
 		UserID:       uuid.Must(uuid.NewV7()).String(),
 		Username:     username,
 		PasswordHash: string(hash),
@@ -258,12 +311,17 @@ func (s *AuthService) CreateUser(username, password string, permissions []string
 }
 
 func (s *AuthService) SetUserPermissions(userID string, permissions []string) error {
+	var (
+		user model.User
+		err  error
+	)
+
 	for _, p := range permissions {
 		if !slices.Contains(repository.AllPermissions, p) {
 			return fmt.Errorf("unknown permission: %s", p)
 		}
 	}
-	user, err := s.store.GetUser(userID)
+	user, err = s.store.GetUser(userID)
 	if err != nil {
 		return err
 	}
@@ -276,14 +334,20 @@ func (s *AuthService) SetUserPermissions(userID string, permissions []string) er
 }
 
 func (s *AuthService) SetUserPassword(actor model.User, userID, newPassword string) error {
+	var (
+		user model.User
+		err  error
+		hash []byte
+	)
+
 	if userID == actor.UserID {
 		return ErrCannotResetOwnPassword
 	}
-	user, err := s.store.GetUser(userID)
+	user, err = s.store.GetUser(userID)
 	if err != nil {
 		return err
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	hash, err = bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
@@ -293,8 +357,13 @@ func (s *AuthService) SetUserPassword(actor model.User, userID, newPassword stri
 }
 
 func (s *AuthService) issueToken(userID string) (string, error) {
-	now := time.Now().UTC()
-	c := claims{
+	var (
+		now time.Time
+		c   claims
+	)
+
+	now = time.Now().UTC()
+	c = claims{
 		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        uuid.Must(uuid.NewV7()).String(),
@@ -308,7 +377,14 @@ func (s *AuthService) issueToken(userID string) (string, error) {
 // parseTokenRaw validates signature and expiry but does NOT check the blacklist.
 // Used by Logout to extract claims from a token that may have just been revoked.
 func (s *AuthService) parseTokenRaw(tokenStr string) (*claims, error) {
-	t, err := jwt.ParseWithClaims(tokenStr, &claims{}, func(t *jwt.Token) (any, error) {
+	var (
+		t   *jwt.Token
+		err error
+		c   *claims
+		ok  bool
+	)
+
+	t, err = jwt.ParseWithClaims(tokenStr, &claims{}, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
@@ -317,7 +393,7 @@ func (s *AuthService) parseTokenRaw(tokenStr string) (*claims, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, ok := t.Claims.(*claims)
+	c, ok = t.Claims.(*claims)
 	if !ok || !t.Valid {
 		return nil, errors.New("invalid token")
 	}
@@ -326,7 +402,12 @@ func (s *AuthService) parseTokenRaw(tokenStr string) (*claims, error) {
 
 // parseToken validates the token and checks the blacklist.
 func (s *AuthService) parseToken(tokenStr string) (*claims, error) {
-	c, err := s.parseTokenRaw(tokenStr)
+	var (
+		c   *claims
+		err error
+	)
+
+	c, err = s.parseTokenRaw(tokenStr)
 	if err != nil {
 		return nil, err
 	}

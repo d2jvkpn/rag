@@ -19,7 +19,9 @@ type OpenAIEmbedder struct {
 const defaultEmbeddingBatchSize = 10
 
 func NewOpenAIEmbedder(baseURL, apiKey, model string, batchSize int) *OpenAIEmbedder {
-	opts := []option.RequestOption{
+	var opts []option.RequestOption
+
+	opts = []option.RequestOption{
 		option.WithAPIKey(apiKey),
 		option.WithHTTPClient(&http.Client{Timeout: 60 * time.Second}),
 	}
@@ -39,18 +41,28 @@ func NewOpenAIEmbedder(baseURL, apiKey, model string, batchSize int) *OpenAIEmbe
 func (o *OpenAIEmbedder) Model() string { return o.model }
 
 func (o *OpenAIEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
-	embeddings, _, err := o.EmbedWithUsage(ctx, texts)
+	var (
+		embeddings [][]float32
+		err        error
+	)
+
+	embeddings, _, err = o.EmbedWithUsage(ctx, texts)
 	return embeddings, err
 }
 
 // EmbedWithUsage behaves like Embed but also returns the total tokens billed
 // across all batches, as reported by the provider's response.
 func (o *OpenAIEmbedder) EmbedWithUsage(ctx context.Context, texts []string) ([][]float32, int, error) {
+	var (
+		embeddings  [][]float32
+		totalTokens int
+	)
+
 	if len(texts) == 0 {
 		return nil, 0, nil
 	}
-	embeddings := make([][]float32, len(texts))
-	totalTokens := 0
+	embeddings = make([][]float32, len(texts))
+	totalTokens = 0
 	for _, batch := range embeddingBatches(texts, o.batchSize) {
 		resp, err := o.client.Embeddings.New(ctx, openai.EmbeddingNewParams{
 			Input: openai.EmbeddingNewParamsInputUnion{OfArrayOfStrings: batch.texts},
@@ -80,6 +92,8 @@ type embeddingBatch struct {
 }
 
 func embeddingBatches(texts []string, batchSize int) []embeddingBatch {
+	var batches []embeddingBatch
+
 	if len(texts) == 0 {
 		return nil
 	}
@@ -87,7 +101,7 @@ func embeddingBatches(texts []string, batchSize int) []embeddingBatch {
 		batchSize = len(texts)
 	}
 
-	batches := make([]embeddingBatch, 0, (len(texts)+batchSize-1)/batchSize)
+	batches = make([]embeddingBatch, 0, (len(texts)+batchSize-1)/batchSize)
 	for start := 0; start < len(texts); start += batchSize {
 		end := start + batchSize
 		if end > len(texts) {

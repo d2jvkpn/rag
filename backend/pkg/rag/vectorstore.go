@@ -106,7 +106,9 @@ func BuildRecords(
 	chunks []model.DocumentChunk,
 	embeddings [][]float32,
 ) []VectorRecord {
-	records := make([]VectorRecord, 0, len(chunks))
+	var records []VectorRecord
+
+	records = make([]VectorRecord, 0, len(chunks))
 	for i, c := range chunks {
 		if i >= len(embeddings) {
 			break

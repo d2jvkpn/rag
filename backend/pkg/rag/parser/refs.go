@@ -45,11 +45,18 @@ func isExternalURL(url string) bool {
 // parseOOXMLRels parses an OOXML .rels file and returns a map of rId → target URL
 // for hyperlink relationships only.
 func parseOOXMLRels(content string) map[string]string {
-	rels := map[string]string{}
+	var (
+		rels    map[string]string
+		idM     []string
+		targetM []string
+		typeM   []string
+	)
+
+	rels = map[string]string{}
 	for _, elem := range relsElemRe.FindAllString(content, -1) {
-		idM := relsIDRe.FindStringSubmatch(elem)
-		targetM := relsTargetRe.FindStringSubmatch(elem)
-		typeM := relsTypeRe.FindStringSubmatch(elem)
+		idM = relsIDRe.FindStringSubmatch(elem)
+		targetM = relsTargetRe.FindStringSubmatch(elem)
+		typeM = relsTypeRe.FindStringSubmatch(elem)
 		if idM == nil || targetM == nil || typeM == nil {
 			continue
 		}
@@ -65,16 +72,24 @@ func parseOOXMLRels(content string) map[string]string {
 // directory containing the rels file's parent (e.g. "word" for DOCX,
 // "ppt/slides" for PPTX) used to resolve relative targets.
 func parseOOXMLImageRels(content, baseDir string) map[string]string {
-	rels := map[string]string{}
+	var (
+		rels    map[string]string
+		idM     []string
+		targetM []string
+		typeM   []string
+		zipPath string
+	)
+
+	rels = map[string]string{}
 	for _, elem := range relsElemRe.FindAllString(content, -1) {
-		idM := relsIDRe.FindStringSubmatch(elem)
-		targetM := relsTargetRe.FindStringSubmatch(elem)
-		typeM := relsTypeRe.FindStringSubmatch(elem)
+		idM = relsIDRe.FindStringSubmatch(elem)
+		targetM = relsTargetRe.FindStringSubmatch(elem)
+		typeM = relsTypeRe.FindStringSubmatch(elem)
 		if idM == nil || targetM == nil || typeM == nil {
 			continue
 		}
 		if strings.Contains(typeM[1], "/image") {
-			zipPath := path.Join(baseDir, targetM[1])
+			zipPath = path.Join(baseDir, targetM[1])
 			rels[idM[1]] = zipPath
 		}
 	}
@@ -89,9 +104,16 @@ func extractMarkdownRefs(text string) (string, []model.ResourceRef) {
 
 	// images before links: image syntax is a superset of link syntax
 	text = mdImageRefRe.ReplaceAllStringFunc(text, func(match string) string {
-		m := mdImageRefRe.FindStringSubmatch(match)
-		alt, url := strings.TrimSpace(m[1]), strings.TrimSpace(m[2])
-		refID := uuid.Must(uuid.NewV7()).String()
+		var (
+			m     []string
+			alt   string
+			url   string
+			refID string
+		)
+
+		m = mdImageRefRe.FindStringSubmatch(match)
+		alt, url = strings.TrimSpace(m[1]), strings.TrimSpace(m[2])
+		refID = uuid.Must(uuid.NewV7()).String()
 		refs = append(refs, model.ResourceRef{
 			RefID:      refID,
 			RefType:    "image",
@@ -107,8 +129,14 @@ func extractMarkdownRefs(text string) (string, []model.ResourceRef) {
 
 	// links: keep anchor text, strip URL
 	text = mdLinkRefRe.ReplaceAllStringFunc(text, func(match string) string {
-		m := mdLinkRefRe.FindStringSubmatch(match)
-		anchor, url := strings.TrimSpace(m[1]), strings.TrimSpace(m[2])
+		var (
+			m      []string
+			anchor string
+			url    string
+		)
+
+		m = mdLinkRefRe.FindStringSubmatch(match)
+		anchor, url = strings.TrimSpace(m[1]), strings.TrimSpace(m[2])
 		refs = append(refs, model.ResourceRef{
 			RefID:      uuid.Must(uuid.NewV7()).String(),
 			RefType:    "link",
@@ -132,17 +160,29 @@ func extractDocxParaRefs(
 	rels map[string]string,
 	imageRels map[string]string,
 ) (imgPlaceholder string, refs []model.ResourceRef) {
+	var (
+		attrs        string
+		inner        string
+		url          string
+		parts        []string
+		anchor       string
+		placeholders []string
+		label        string
+		storePath    string
+		refID        string
+	)
+
 	for _, m := range docxHyperlinkRe.FindAllStringSubmatch(paraXML, -1) {
-		attrs, inner := m[1], m[2]
-		url := ""
+		attrs, inner = m[1], m[2]
+		url = ""
 		if rm := docxHyperlinkRidAttr.FindStringSubmatch(attrs); rm != nil && rels != nil {
 			url = rels[rm[1]]
 		}
-		var parts []string
+		parts = nil
 		for _, tm := range docxRunTextRe.FindAllStringSubmatch(inner, -1) {
 			parts = append(parts, tm[1])
 		}
-		anchor := strings.TrimSpace(strings.Join(parts, ""))
+		anchor = strings.TrimSpace(strings.Join(parts, ""))
 		if anchor == "" && url == "" {
 			continue
 		}
@@ -155,21 +195,20 @@ func extractDocxParaRefs(
 		})
 	}
 
-	var placeholders []string
 	for _, drawXML := range docxDrawingBlockRe.FindAllString(paraXML, -1) {
-		label := ""
+		label = ""
 		if m := docxDocPrDescrRe.FindStringSubmatch(drawXML); m != nil {
 			label = htmlUnescape(m[1])
 		} else if m := docxDocPrTitleRe.FindStringSubmatch(drawXML); m != nil {
 			label = htmlUnescape(m[1])
 		}
-		storePath := ""
+		storePath = ""
 		if imageRels != nil {
 			if bm := blipEmbedRe.FindStringSubmatch(drawXML); bm != nil {
 				storePath = imageRels[bm[1]]
 			}
 		}
-		refID := uuid.Must(uuid.NewV7()).String()
+		refID = uuid.Must(uuid.NewV7()).String()
 		refs = append(refs, model.ResourceRef{
 			RefID:       refID,
 			RefType:     "image",
@@ -194,23 +233,34 @@ func extractPptxSlideRefs(
 	rels map[string]string,
 	imageRels map[string]string,
 ) []model.ResourceRef {
-	var refs []model.ResourceRef
+	var (
+		refs        []model.ResourceRef
+		inner       string
+		hm          []string
+		url         string
+		parts       []string
+		anchor      string
+		label       string
+		externalURL string
+		v           string
+		storePath   string
+	)
 
 	for _, m := range pptxRunRe.FindAllStringSubmatch(slideXML, -1) {
-		inner := m[1]
-		hm := pptxHlinkClickRe.FindStringSubmatch(inner)
+		inner = m[1]
+		hm = pptxHlinkClickRe.FindStringSubmatch(inner)
 		if hm == nil {
 			continue
 		}
-		url := ""
+		url = ""
 		if rels != nil {
 			url = rels[hm[1]]
 		}
-		var parts []string
+		parts = nil
 		for _, tm := range pptxRunTextRe.FindAllStringSubmatch(inner, -1) {
 			parts = append(parts, tm[1])
 		}
-		anchor := strings.TrimSpace(strings.Join(parts, ""))
+		anchor = strings.TrimSpace(strings.Join(parts, ""))
 		if anchor == "" && url == "" {
 			continue
 		}
@@ -224,9 +274,9 @@ func extractPptxSlideRefs(
 	}
 
 	for _, picXML := range pptxPicRe.FindAllString(slideXML, -1) {
-		label, externalURL := "", ""
+		label, externalURL = "", ""
 		if m := pptxCNvPrDescrRe.FindStringSubmatch(picXML); m != nil {
-			v := htmlUnescape(m[1])
+			v = htmlUnescape(m[1])
 			if isExternalURL(v) {
 				externalURL = v
 			} else {
@@ -235,7 +285,7 @@ func extractPptxSlideRefs(
 		} else if m := pptxCNvPrNameRe.FindStringSubmatch(picXML); m != nil {
 			label = htmlUnescape(m[1])
 		}
-		storePath := ""
+		storePath = ""
 		if imageRels != nil {
 			if bm := blipEmbedRe.FindStringSubmatch(picXML); bm != nil {
 				storePath = imageRels[bm[1]]
@@ -257,6 +307,8 @@ func extractPptxSlideRefs(
 // slideNameFromRels derives the slide file path from its rels file path.
 // e.g. "ppt/slides/_rels/slide1.xml.rels" → "ppt/slides/slide1.xml"
 func slideNameFromRels(relsPath string) string {
-	s := strings.Replace(relsPath, "/_rels/", "/", 1)
+	var s string
+
+	s = strings.Replace(relsPath, "/_rels/", "/", 1)
 	return strings.TrimSuffix(s, ".rels")
 }

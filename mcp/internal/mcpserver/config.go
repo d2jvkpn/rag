@@ -19,7 +19,11 @@ type Collection struct {
 // do, so missing required fields are fatal at startup rather than degrading
 // silently.
 func LoadConfig(path string) (config *viper.Viper) {
-	var err error
+	var (
+		err         error
+		collections []Collection
+		seen        map[string]bool
+	)
 
 	config = viper.New()
 	config.SetConfigFile(path)
@@ -47,11 +51,11 @@ func LoadConfig(path string) (config *viper.Viper) {
 		log.Fatal("milvus.addr is required")
 	}
 
-	collections := Collections(config)
+	collections = Collections(config)
 	if len(collections) == 0 {
 		log.Fatal("milvus.collections must not be empty")
 	}
-	seen := make(map[string]bool, len(collections))
+	seen = make(map[string]bool, len(collections))
 	for _, c := range collections {
 		if c.Name == "" {
 			log.Fatal("milvus.collections entries must have a non-empty name")

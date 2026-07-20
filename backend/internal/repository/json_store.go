@@ -49,7 +49,13 @@ func (s *JSONStore) Close() error {
 }
 
 func NewJSONStore(path string, account InitAccount) (*JSONStore, AccountSyncResult, error) {
-	store := &JSONStore{
+	var (
+		store  *JSONStore
+		result AccountSyncResult
+		err    error
+	)
+
+	store = &JSONStore{
 		path: path,
 		data: State{
 			Users:          map[string]model.User{},
@@ -83,7 +89,7 @@ func NewJSONStore(path string, account InitAccount) (*JSONStore, AccountSyncResu
 		return nil, AccountSyncResult{}, err
 	}
 
-	result, err := store.ensureInitAccount(account)
+	result, err = store.ensureInitAccount(account)
 	if err != nil {
 		return nil, result, err
 	}
@@ -91,12 +97,17 @@ func NewJSONStore(path string, account InitAccount) (*JSONStore, AccountSyncResu
 }
 
 func (s *JSONStore) ensureInitAccount(account InitAccount) (AccountSyncResult, error) {
+	var (
+		now  time.Time
+		user model.User
+	)
+
 	if account.Username == "" || account.Password == "" || len(s.data.Users) > 0 {
 		return AccountSyncResult{Action: "skipped"}, nil
 	}
 
-	now := time.Now().UTC()
-	user := model.User{
+	now = time.Now().UTC()
+	user = model.User{
 		UserID:       uuid.Must(uuid.NewV7()).String(),
 		Username:     account.Username,
 		PasswordHash: resolvePasswordHash(account.Password),
@@ -113,9 +124,11 @@ func (s *JSONStore) ensureInitAccount(account InitAccount) (AccountSyncResult, e
 }
 
 func (s *JSONStore) EnsureKnowledgeBasesFromDocuments(dim int, embedderModel string) error {
+	var changed bool
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	changed := false
+	changed = false
 	for _, document := range s.data.Documents {
 		if document.KnowledgeBaseID == "" {
 			continue
@@ -161,9 +174,14 @@ func (s *JSONStore) CreateKnowledgeBase(kb model.KnowledgeBase) error {
 }
 
 func (s *JSONStore) GetKnowledgeBase(knowledgeBaseID string) (model.KnowledgeBase, error) {
+	var (
+		kb model.KnowledgeBase
+		ok bool
+	)
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	kb, ok := s.data.KnowledgeBases[knowledgeBaseID]
+	kb, ok = s.data.KnowledgeBases[knowledgeBaseID]
 	if !ok {
 		return model.KnowledgeBase{}, ErrNotFound
 	}
@@ -171,10 +189,15 @@ func (s *JSONStore) GetKnowledgeBase(knowledgeBaseID string) (model.KnowledgeBas
 }
 
 func (s *JSONStore) ListKnowledgeBases() []model.KnowledgeBase {
+	var (
+		items  []model.KnowledgeBase
+		counts map[string]int
+	)
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	items := make([]model.KnowledgeBase, 0, len(s.data.KnowledgeBases))
-	counts := make(map[string]int)
+	items = make([]model.KnowledgeBase, 0, len(s.data.KnowledgeBases))
+	counts = make(map[string]int)
 	for _, document := range s.data.Documents {
 		counts[document.KnowledgeBaseID]++
 	}
@@ -229,9 +252,14 @@ func (s *JSONStore) UpdateUser(user model.User) error {
 }
 
 func (s *JSONStore) GetUser(userID string) (model.User, error) {
+	var (
+		user model.User
+		ok   bool
+	)
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	user, ok := s.data.Users[userID]
+	user, ok = s.data.Users[userID]
 	if !ok {
 		return model.User{}, ErrNotFound
 	}
@@ -239,9 +267,11 @@ func (s *JSONStore) GetUser(userID string) (model.User, error) {
 }
 
 func (s *JSONStore) ListUsers() []model.User {
+	var users []model.User
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	users := make([]model.User, 0, len(s.data.Users))
+	users = make([]model.User, 0, len(s.data.Users))
 	for _, u := range s.data.Users {
 		users = append(users, u)
 	}
@@ -272,9 +302,14 @@ func (s *JSONStore) UpdateDocument(document model.Document) error {
 }
 
 func (s *JSONStore) GetDocument(documentID string) (model.Document, error) {
+	var (
+		document model.Document
+		ok       bool
+	)
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	document, ok := s.data.Documents[documentID]
+	document, ok = s.data.Documents[documentID]
 	if !ok {
 		return model.Document{}, ErrNotFound
 	}
@@ -282,9 +317,11 @@ func (s *JSONStore) GetDocument(documentID string) (model.Document, error) {
 }
 
 func (s *JSONStore) ListDocuments(knowledgeBaseID, tag string) ([]model.Document, error) {
+	var documents []model.Document
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	documents := s.filterDocumentsLocked(knowledgeBaseID, tag, "")
+	documents = s.filterDocumentsLocked(knowledgeBaseID, tag, "")
 	sortDocumentsByCreatedDesc(documents)
 	return documents, nil
 }
@@ -293,15 +330,19 @@ func (s *JSONStore) ListDocumentsPage(
 	knowledgeBaseID, tag, status string,
 	page, pageSize int,
 ) (model.DocumentPage, error) {
+	var documents []model.Document
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	documents := s.filterDocumentsLocked(knowledgeBaseID, tag, status)
+	documents = s.filterDocumentsLocked(knowledgeBaseID, tag, status)
 	sortDocumentsByCreatedDesc(documents)
 	return paginateDocuments(documents, page, pageSize), nil
 }
 
 func (s *JSONStore) filterDocumentsLocked(knowledgeBaseID, tag, status string) []model.Document {
-	documents := make([]model.Document, 0, len(s.data.Documents))
+	var documents []model.Document
+
+	documents = make([]model.Document, 0, len(s.data.Documents))
 	for _, document := range s.data.Documents {
 		if knowledgeBaseID != "" && document.KnowledgeBaseID != knowledgeBaseID {
 			continue
@@ -324,10 +365,15 @@ func sortDocumentsByCreatedDesc(documents []model.Document) {
 }
 
 func (s *JSONStore) ListDocumentTags(knowledgeBaseID string) ([]model.DocumentTagCount, error) {
+	var (
+		counts map[string]int
+		items  []model.DocumentTagCount
+	)
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	counts := make(map[string]int)
+	counts = make(map[string]int)
 	for _, document := range s.data.Documents {
 		if knowledgeBaseID != "" && document.KnowledgeBaseID != knowledgeBaseID {
 			continue
@@ -340,7 +386,7 @@ func (s *JSONStore) ListDocumentTags(knowledgeBaseID string) ([]model.DocumentTa
 		}
 	}
 
-	items := make([]model.DocumentTagCount, 0, len(counts))
+	items = make([]model.DocumentTagCount, 0, len(counts))
 	for tag, count := range counts {
 		items = append(items, model.DocumentTagCount{Tag: tag, Count: count})
 	}
@@ -365,13 +411,19 @@ func containsTag(tags []string, want string) bool {
 func (s *JSONStore) DeleteDocument(
 	documentID string,
 ) (model.Document, []model.DocumentChunk, error) {
+	var (
+		document model.Document
+		ok       bool
+		chunks   []model.DocumentChunk
+	)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	document, ok := s.data.Documents[documentID]
+	document, ok = s.data.Documents[documentID]
 	if !ok {
 		return model.Document{}, nil, ErrNotFound
 	}
-	chunks := s.data.Chunks[documentID]
+	chunks = s.data.Chunks[documentID]
 	delete(s.data.Documents, documentID)
 	delete(s.data.Chunks, documentID)
 	if err := s.persistLocked(); err != nil {
@@ -394,9 +446,14 @@ func (s *JSONStore) GetChunk(chunkID string) (model.DocumentChunk, error) {
 }
 
 func (s *JSONStore) UpdateChunk(chunk model.DocumentChunk) error {
+	var (
+		list []model.DocumentChunk
+		ok   bool
+	)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	list, ok := s.data.Chunks[chunk.DocumentID]
+	list, ok = s.data.Chunks[chunk.DocumentID]
 	if !ok {
 		return ErrNotFound
 	}
@@ -414,10 +471,12 @@ func (s *JSONStore) BulkUpdateChunks(chunks []model.DocumentChunk) error {
 	if len(chunks) == 0 {
 		return nil
 	}
+	var byDoc map[string]map[string]model.DocumentChunk
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// build per-document update maps to scan each list only once
-	byDoc := make(map[string]map[string]model.DocumentChunk, 1)
+	byDoc = make(map[string]map[string]model.DocumentChunk, 1)
 	for _, c := range chunks {
 		if byDoc[c.DocumentID] == nil {
 			byDoc[c.DocumentID] = make(map[string]model.DocumentChunk)
@@ -444,13 +503,19 @@ func (s *JSONStore) ReplaceChunks(documentID string, chunks []model.DocumentChun
 }
 
 func (s *JSONStore) GetChunks(documentID string) ([]model.DocumentChunk, error) {
+	var (
+		chunks []model.DocumentChunk
+		ok     bool
+		out    []model.DocumentChunk
+	)
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	chunks, ok := s.data.Chunks[documentID]
+	chunks, ok = s.data.Chunks[documentID]
 	if !ok {
 		return []model.DocumentChunk{}, nil
 	}
-	out := append([]model.DocumentChunk(nil), chunks...)
+	out = append([]model.DocumentChunk(nil), chunks...)
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].ChunkIndex < out[j].ChunkIndex
 	})
@@ -458,7 +523,12 @@ func (s *JSONStore) GetChunks(documentID string) ([]model.DocumentChunk, error) 
 }
 
 func (s *JSONStore) ListChunksPage(documentID string, page, pageSize int) (model.DocumentChunkPage, error) {
-	chunks, err := s.GetChunks(documentID)
+	var (
+		chunks []model.DocumentChunk
+		err    error
+	)
+
+	chunks, err = s.GetChunks(documentID)
 	if err != nil {
 		return model.DocumentChunkPage{}, err
 	}
@@ -466,8 +536,13 @@ func (s *JSONStore) ListChunksPage(documentID string, page, pageSize int) (model
 }
 
 func paginateChunks(chunks []model.DocumentChunk, page, pageSize int) model.DocumentChunkPage {
-	window := paginate(len(chunks), page, pageSize)
-	items := []model.DocumentChunk{}
+	var (
+		window pageWindow
+		items  []model.DocumentChunk
+	)
+
+	window = paginate(len(chunks), page, pageSize)
+	items = []model.DocumentChunk{}
 	if window.start < window.end {
 		items = append(items, chunks[window.start:window.end]...)
 	}
@@ -483,8 +558,13 @@ func paginateChunks(chunks []model.DocumentChunk, page, pageSize int) model.Docu
 }
 
 func paginateDocuments(documents []model.Document, page, pageSize int) model.DocumentPage {
-	window := paginate(len(documents), page, pageSize)
-	items := []model.Document{}
+	var (
+		window pageWindow
+		items  []model.Document
+	)
+
+	window = paginate(len(documents), page, pageSize)
+	items = []model.Document{}
 	if window.start < window.end {
 		items = append(items, documents[window.start:window.end]...)
 	}
@@ -510,18 +590,24 @@ type pageWindow struct {
 }
 
 func paginate(total, page, pageSize int) pageWindow {
-	totalPages := 0
+	var (
+		totalPages int
+		start      int
+		end        int
+	)
+
+	totalPages = 0
 	if total > 0 {
 		totalPages = (total + pageSize - 1) / pageSize
 	}
 	if totalPages > 0 && page > totalPages {
 		page = totalPages
 	}
-	start := (page - 1) * pageSize
+	start = (page - 1) * pageSize
 	if start > total {
 		start = total
 	}
-	end := start + pageSize
+	end = start + pageSize
 	if end > total {
 		end = total
 	}
@@ -537,7 +623,12 @@ func paginate(total, page, pageSize int) pageWindow {
 }
 
 func hashPassword(password string) string {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	var (
+		hash []byte
+		err  error
+	)
+
+	hash, err = bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		panic("bcrypt: " + err.Error())
 	}
@@ -557,7 +648,12 @@ func resolvePasswordHash(password string) string {
 }
 
 func (s *JSONStore) persistLocked() error {
-	raw, err := json.MarshalIndent(s.data, "", "  ")
+	var (
+		raw []byte
+		err error
+	)
+
+	raw, err = json.MarshalIndent(s.data, "", "  ")
 	if err != nil {
 		return err
 	}

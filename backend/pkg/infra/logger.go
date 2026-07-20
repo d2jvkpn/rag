@@ -25,16 +25,22 @@ var (
 // pre-serving log lines (including Fatal exits during init) reach the log
 // file. Call EnableFileLogging once the service is about to start serving.
 func Init(config *viper.Viper) {
-	level := zapcore.DebugLevel
+	var (
+		level      zapcore.Level
+		encoderCfg zapcore.EncoderConfig
+		fileWriter zapcore.WriteSyncer
+	)
+
+	level = zapcore.DebugLevel
 	if config.GetBool("app.release") {
 		level = zapcore.InfoLevel
 	}
 
-	encoderCfg := zap.NewProductionEncoderConfig()
+	encoderCfg = zap.NewProductionEncoderConfig()
 	encoderCfg.TimeKey = "ts"
 	encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
 
-	fileWriter := zapcore.AddSync(&lumberjack.Logger{
+	fileWriter = zapcore.AddSync(&lumberjack.Logger{
 		Filename:   config.GetString("logging.path"),
 		MaxSize:    config.GetInt("logging.max_size_mb"), // MB
 		MaxBackups: config.GetInt("logging.max_backups"),

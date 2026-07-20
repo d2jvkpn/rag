@@ -10,26 +10,37 @@ import (
 )
 
 func parseDocx(path, mediaDir string) (ParseResult, error) {
-	reader, err := zip.OpenReader(path)
+	var (
+		reader       *zip.ReadCloser
+		err          error
+		docContent   string
+		docRels      map[string]string
+		docImageRels map[string]string
+		content      []byte
+		readErr      error
+		s            string
+		blocks       []ParseBlock
+		texts        []string
+		text         string
+	)
+
+	reader, err = zip.OpenReader(path)
 	if err != nil {
 		return ParseResult{}, err
 	}
 	defer reader.Close()
 
-	var docContent string
-	var docRels map[string]string
-	var docImageRels map[string]string
 	for _, file := range reader.File {
 		switch file.Name {
 		case "word/_rels/document.xml.rels":
-			content, readErr := readZipFile(file)
+			content, readErr = readZipFile(file)
 			if readErr == nil {
-				s := string(content)
+				s = string(content)
 				docRels = parseOOXMLRels(s)
 				docImageRels = parseOOXMLImageRels(s, "word")
 			}
 		case "word/document.xml":
-			content, readErr := readZipFile(file)
+			content, readErr = readZipFile(file)
 			if readErr != nil {
 				return ParseResult{}, readErr
 			}
@@ -40,7 +51,7 @@ func parseDocx(path, mediaDir string) (ParseResult, error) {
 	if docContent == "" {
 		return ParseResult{}, errors.New("docx content is empty")
 	}
-	blocks := extractDocxBlocks(docContent, docRels, docImageRels)
+	blocks = extractDocxBlocks(docContent, docRels, docImageRels)
 	if mediaDir != "" {
 		resolveZIPMedia(&reader.Reader, blocks, mediaDir)
 	}
@@ -48,13 +59,13 @@ func parseDocx(path, mediaDir string) (ParseResult, error) {
 	if len(blocks) == 0 {
 		return ParseResult{}, errors.New("docx content is empty")
 	}
-	texts := make([]string, 0, len(blocks))
+	texts = make([]string, 0, len(blocks))
 	for _, b := range blocks {
 		if b.Text != "" {
 			texts = append(texts, b.Text)
 		}
 	}
-	text := strings.TrimSpace(strings.Join(texts, "\n\n"))
+	text = strings.TrimSpace(strings.Join(texts, "\n\n"))
 	if text == "" {
 		return ParseResult{}, errors.New("docx content is empty")
 	}
@@ -64,7 +75,9 @@ func parseDocx(path, mediaDir string) (ParseResult, error) {
 var docxHeadingStyleRe = regexp.MustCompile(`<w:pStyle\s[^>]*w:val="([^"]*)"`)
 
 func isDocxHeadingStyle(val string) bool {
-	lower := strings.ToLower(val)
+	var lower string
+
+	lower = strings.ToLower(val)
 	if strings.HasPrefix(lower, "heading") {
 		return true
 	}
@@ -87,39 +100,53 @@ func extractDocxBlocks(
 	rels map[string]string,
 	imageRels map[string]string,
 ) []ParseBlock {
-	blockRe := regexp.MustCompile(`(?s)<w:tbl[\s>].*?</w:tbl>|<w:p[\s>].*?</w:p>`)
-	tableStartRe := regexp.MustCompile(`(?s)^<w:tbl[\s>]`)
+	var (
+		blockRe        *regexp.Regexp
+		tableStartRe   *regexp.Regexp
+		rawBlocks      []string
+		items          []docItem
+		rows           [][]string
+		tableRefs      []model.ResourceRef
+		paraText       string
+		imgPlaceholder string
+		paraRefs       []model.ResourceRef
+		isHeading      bool
+		headingText    string
+		hasHeadings    bool
+		ooxmlItems     []ooxmlBlock
+		result         []ParseBlock
+		currentTitle   string
+		currentItems   []ooxmlBlock
+		flush          func()
+	)
 
-	rawBlocks := blockRe.FindAllString(content, -1)
+	blockRe = regexp.MustCompile(`(?s)<w:tbl[\s>].*?</w:tbl>|<w:p[\s>].*?</w:p>`)
+	tableStartRe = regexp.MustCompile(`(?s)^<w:tbl[\s>]`)
 
-	type docItem struct {
-		isHeading bool
-		heading   string
-		ob        ooxmlBlock
-	}
+	rawBlocks = blockRe.FindAllString(content, -1)
 
-	items := make([]docItem, 0, len(rawBlocks))
+	items = make([]docItem, 0, len(rawBlocks))
 	for _, raw := range rawBlocks {
 		raw = strings.TrimSpace(raw)
 		if raw == "" {
 			continue
 		}
 		if tableStartRe.MatchString(raw) {
-			rows, tableRefs := extractDocxTableRows(raw, rels, imageRels)
+			rows, tableRefs = extractDocxTableRows(raw, rels, imageRels)
 			if len(rows) > 0 {
 				items = append(items, docItem{ob: ooxmlBlock{kind: "table", rows: rows, refs: tableRefs}})
 			}
 			continue
 		}
-		paraText := extractParagraphText(raw, "w:p", "w:t")
-		imgPlaceholder, paraRefs := extractDocxParaRefs(raw, rels, imageRels)
+		paraText = extractParagraphText(raw, "w:p", "w:t")
+		imgPlaceholder, paraRefs = extractDocxParaRefs(raw, rels, imageRels)
 		if paraText == "" {
 			paraText = imgPlaceholder
 		} else if imgPlaceholder != "" {
 			paraText += "\n" + imgPlaceholder
 		}
-		isHeading := false
-		headingText := ""
+		isHeading = false
+		headingText = ""
 		if m := docxHeadingStyleRe.FindStringSubmatch(raw); m != nil && isDocxHeadingStyle(m[1]) {
 			isHeading = true
 			headingText = paraText
@@ -136,7 +163,7 @@ func extractDocxBlocks(
 		}
 	}
 
-	hasHeadings := false
+	hasHeadings = false
 	for _, it := range items {
 		if it.isHeading {
 			hasHeadings = true
@@ -144,24 +171,25 @@ func extractDocxBlocks(
 		}
 	}
 	if !hasHeadings {
-		ooxmlItems := make([]ooxmlBlock, 0, len(items))
+		ooxmlItems = make([]ooxmlBlock, 0, len(items))
 		for _, it := range items {
 			ooxmlItems = append(ooxmlItems, it.ob)
 		}
 		return buildDocxFallbackBlock(ooxmlItems)
 	}
 
-	var result []ParseBlock
-	var currentTitle string
-	var currentItems []ooxmlBlock
+	flush = func() {
+		var (
+			merged    []ooxmlBlock
+			lines     []string
+			blockRefs []model.ResourceRef
+		)
 
-	flush := func() {
 		if len(currentItems) == 0 {
 			return
 		}
-		merged := mergeAdjacentOOXMLTables(currentItems)
-		lines := make([]string, 0, len(merged))
-		var blockRefs []model.ResourceRef
+		merged = mergeAdjacentOOXMLTables(currentItems)
+		lines = make([]string, 0, len(merged))
 		for _, item := range merged {
 			blockRefs = append(blockRefs, item.refs...)
 			switch item.kind {
@@ -196,7 +224,7 @@ func extractDocxBlocks(
 	flush()
 
 	if len(result) == 0 {
-		ooxmlItems := make([]ooxmlBlock, 0, len(items))
+		ooxmlItems = make([]ooxmlBlock, 0, len(items))
 		for _, it := range items {
 			ooxmlItems = append(ooxmlItems, it.ob)
 		}
@@ -205,13 +233,25 @@ func extractDocxBlocks(
 	return result
 }
 
+type docItem struct {
+	isHeading bool
+	heading   string
+	ob        ooxmlBlock
+}
+
 // buildDocxFallbackBlock builds a single ParseBlock from pre-extracted ooxmlBlocks,
 // preserving image placeholder text and refs that extractOOXMLTextWithMarkdownTables
 // would otherwise lose.
 func buildDocxFallbackBlock(ooxmlItems []ooxmlBlock) []ParseBlock {
-	merged := mergeAdjacentOOXMLTables(ooxmlItems)
-	lines := make([]string, 0, len(merged))
-	var allRefs []model.ResourceRef
+	var (
+		merged  []ooxmlBlock
+		lines   []string
+		allRefs []model.ResourceRef
+		text    string
+	)
+
+	merged = mergeAdjacentOOXMLTables(ooxmlItems)
+	lines = make([]string, 0, len(merged))
 	for _, item := range merged {
 		allRefs = append(allRefs, item.refs...)
 		switch item.kind {
@@ -225,7 +265,7 @@ func buildDocxFallbackBlock(ooxmlItems []ooxmlBlock) []ParseBlock {
 			}
 		}
 	}
-	text := strings.TrimSpace(strings.Join(lines, "\n\n"))
+	text = strings.TrimSpace(strings.Join(lines, "\n\n"))
 	if text == "" {
 		return nil
 	}
@@ -240,30 +280,45 @@ func extractDocxTableRows(
 	content string,
 	rels, imageRels map[string]string,
 ) ([][]string, []model.ResourceRef) {
-	rowRe := regexp.MustCompile(`(?s)<w:tr[\s>].*?</w:tr>`)
-	cellRe := regexp.MustCompile(`(?s)<w:tc[\s>].*?</w:tc>`)
-	paraRe := regexp.MustCompile(`(?s)<w:p[\s>].*?</w:p>`)
+	var (
+		rowRe       *regexp.Regexp
+		cellRe      *regexp.Regexp
+		paraRe      *regexp.Regexp
+		rowMatches  []string
+		allRefs     []model.ResourceRef
+		rows        [][]string
+		maxCols     int
+		cellMatches []string
+		cells       []string
+		parts       []string
+		text        string
+		placeholder string
+		refs        []model.ResourceRef
+		cellText    string
+	)
 
-	rowMatches := rowRe.FindAllString(content, -1)
+	rowRe = regexp.MustCompile(`(?s)<w:tr[\s>].*?</w:tr>`)
+	cellRe = regexp.MustCompile(`(?s)<w:tc[\s>].*?</w:tc>`)
+	paraRe = regexp.MustCompile(`(?s)<w:p[\s>].*?</w:p>`)
+
+	rowMatches = rowRe.FindAllString(content, -1)
 	if len(rowMatches) == 0 {
 		return nil, nil
 	}
 
-	var allRefs []model.ResourceRef
-	var rows [][]string
-	maxCols := 0
+	maxCols = 0
 
 	for _, row := range rowMatches {
-		cellMatches := cellRe.FindAllString(row, -1)
+		cellMatches = cellRe.FindAllString(row, -1)
 		if len(cellMatches) == 0 {
 			continue
 		}
-		cells := make([]string, 0, len(cellMatches))
+		cells = make([]string, 0, len(cellMatches))
 		for _, cell := range cellMatches {
-			var parts []string
+			parts = nil
 			for _, para := range paraRe.FindAllString(cell, -1) {
-				text := extractParagraphText(para, "w:p", "w:t")
-				placeholder, refs := extractDocxParaRefs(para, rels, imageRels)
+				text = extractParagraphText(para, "w:p", "w:t")
+				placeholder, refs = extractDocxParaRefs(para, rels, imageRels)
 				allRefs = append(allRefs, refs...)
 				if text == "" {
 					text = placeholder
@@ -274,7 +329,7 @@ func extractDocxTableRows(
 					parts = append(parts, text)
 				}
 			}
-			cellText := strings.ReplaceAll(strings.Join(parts, "\n"), "\n", "<br>")
+			cellText = strings.ReplaceAll(strings.Join(parts, "\n"), "\n", "<br>")
 			cellText = strings.TrimSpace(cellText)
 			cellText = strings.ReplaceAll(cellText, "|", `\|`)
 			cells = append(cells, cellText)

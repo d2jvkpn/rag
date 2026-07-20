@@ -58,10 +58,14 @@ func Parse(path, sourceType, mediaDir string) (ParseResult, error) {
 }
 
 func CleanText(input string) string {
+	var (
+		builder   strings.Builder
+		lastBlank bool
+		cleaned   string
+	)
+
 	input = textNormalizer.Replace(input)
 
-	var builder strings.Builder
-	lastBlank := false
 	for _, line := range strings.Split(input, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
@@ -77,7 +81,7 @@ func CleanText(input string) string {
 		builder.WriteString("\n")
 	}
 
-	cleaned := strings.TrimSpace(builder.String())
+	cleaned = strings.TrimSpace(builder.String())
 	return strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) && r != '\n' && r != '\t' {
 			return -1

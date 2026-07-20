@@ -47,12 +47,18 @@ func ClampTopK(topK int) int {
 func Query(
 	ctx context.Context, embedder Embedder, store VectorStore, p QueryParams,
 ) (items []SearchResult, stats QueryStats, err error) {
-	mode := p.Mode
+	var (
+		mode        SearchMode
+		req         SearchRequest
+		searchStart time.Time
+	)
+
+	mode = p.Mode
 	if mode == "" {
 		mode = SearchModeDense
 	}
 
-	req := SearchRequest{
+	req = SearchRequest{
 		KnowledgeBaseID: p.KnowledgeBaseID,
 		Query:           p.Query,
 		TopK:            ClampTopK(p.TopK),
@@ -83,7 +89,7 @@ func Query(
 		req.Embedding = embeddings[0]
 	}
 
-	searchStart := time.Now()
+	searchStart = time.Now()
 	items, err = store.Search(ctx, req)
 	stats.SearchLatency = time.Since(searchStart)
 	if err != nil {

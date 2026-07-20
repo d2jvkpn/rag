@@ -12,15 +12,32 @@ import (
 )
 
 func parsePptx(path, mediaDir string) (ParseResult, error) {
-	reader, err := zip.OpenReader(path)
+	var (
+		reader         *zip.ReadCloser
+		err            error
+		rawSlides      map[string]string
+		rawNotes       map[string]string
+		rawRels        map[string]string
+		slideRels      map[string]map[string]string
+		slideImageRels map[string]map[string]string
+		slideText      map[string]string
+		slideRefs      map[string][]model.ResourceRef
+		noteText       map[string]string
+		slideNames     []string
+		blocks         []ParseBlock
+		slideTexts     []string
+		text           string
+	)
+
+	reader, err = zip.OpenReader(path)
 	if err != nil {
 		return ParseResult{}, err
 	}
 	defer reader.Close()
 
-	rawSlides := map[string]string{}
-	rawNotes := map[string]string{}
-	rawRels := map[string]string{}
+	rawSlides = map[string]string{}
+	rawNotes = map[string]string{}
+	rawRels = map[string]string{}
 
 	for _, file := range reader.File {
 		isSlide := strings.HasPrefix(file.Name, "ppt/slides/slide") &&
@@ -53,16 +70,16 @@ func parsePptx(path, mediaDir string) (ParseResult, error) {
 		return ParseResult{}, errors.New("pptx content is empty")
 	}
 
-	slideRels := map[string]map[string]string{}
-	slideImageRels := map[string]map[string]string{}
+	slideRels = map[string]map[string]string{}
+	slideImageRels = map[string]map[string]string{}
 	for relsName, content := range rawRels {
 		slideName := slideNameFromRels(relsName)
 		slideRels[slideName] = parseOOXMLRels(content)
 		slideImageRels[slideName] = parseOOXMLImageRels(content, "ppt/slides")
 	}
 
-	slideText := map[string]string{}
-	slideRefs := map[string][]model.ResourceRef{}
+	slideText = map[string]string{}
+	slideRefs = map[string][]model.ResourceRef{}
 	for slideName, content := range rawSlides {
 		slideText[slideName] = extractOOXMLTextWithMarkdownTables(
 			content,
@@ -80,18 +97,17 @@ func parsePptx(path, mediaDir string) (ParseResult, error) {
 		)
 	}
 
-	noteText := map[string]string{}
+	noteText = map[string]string{}
 	for noteName, content := range rawNotes {
 		noteText[noteName] = extractParagraphText(content, "a:p", "a:t")
 	}
 
-	slideNames := make([]string, 0, len(slideText))
+	slideNames = make([]string, 0, len(slideText))
 	for name := range slideText {
 		slideNames = append(slideNames, name)
 	}
 	sort.Strings(slideNames)
 
-	var blocks []ParseBlock
 	for idx, name := range slideNames {
 		section := strings.TrimSpace(slideText[name])
 		refs := slideRefs[name]
@@ -135,10 +151,10 @@ func parsePptx(path, mediaDir string) (ParseResult, error) {
 		resolveZIPMedia(&reader.Reader, blocks, mediaDir)
 	}
 
-	slideTexts := make([]string, 0, len(blocks))
+	slideTexts = make([]string, 0, len(blocks))
 	for _, b := range blocks {
 		slideTexts = append(slideTexts, b.Text)
 	}
-	text := strings.TrimSpace(strings.Join(slideTexts, "\n\n"))
+	text = strings.TrimSpace(strings.Join(slideTexts, "\n\n"))
 	return ParseResult{Text: text, PageCount: len(blocks), Blocks: blocks}, nil
 }

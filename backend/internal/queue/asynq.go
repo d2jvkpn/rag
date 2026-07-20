@@ -27,14 +27,23 @@ func NewAsynqQueue(
 	concurrency int,
 	handler func(documentID string, rechunk bool),
 ) (*AsynqQueue, error) {
-	opt, err := asynq.ParseRedisURI(redisDSN)
+	var (
+		opt    asynq.RedisConnOpt
+		err    error
+		client *asynq.Client
+		server *asynq.Server
+		mux    *asynq.ServeMux
+		q      *AsynqQueue
+	)
+
+	opt, err = asynq.ParseRedisURI(redisDSN)
 	if err != nil {
 		return nil, err
 	}
-	client := asynq.NewClient(opt)
-	server := asynq.NewServer(opt, asynq.Config{Concurrency: concurrency})
+	client = asynq.NewClient(opt)
+	server = asynq.NewServer(opt, asynq.Config{Concurrency: concurrency})
 
-	mux := asynq.NewServeMux()
+	mux = asynq.NewServeMux()
 	mux.HandleFunc(taskTypeProcess, func(_ context.Context, t *asynq.Task) error {
 		var p asynqPayload
 		if err := json.Unmarshal(t.Payload(), &p); err != nil {
@@ -44,7 +53,7 @@ func NewAsynqQueue(
 		return nil
 	})
 
-	q := &AsynqQueue{client: client, server: server}
+	q = &AsynqQueue{client: client, server: server}
 	q.wg.Add(1)
 	go func() {
 		defer q.wg.Done()
@@ -54,7 +63,12 @@ func NewAsynqQueue(
 }
 
 func (q *AsynqQueue) Enqueue(documentID string, rechunk bool) error {
-	payload, err := json.Marshal(asynqPayload{DocumentID: documentID, Rechunk: rechunk})
+	var (
+		payload []byte
+		err     error
+	)
+
+	payload, err = json.Marshal(asynqPayload{DocumentID: documentID, Rechunk: rechunk})
 	if err != nil {
 		return err
 	}
