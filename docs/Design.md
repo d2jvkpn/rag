@@ -24,12 +24,14 @@ uploaded
 
 状态转换规则：
 
-- **human_review=false**：切分完成后自动将所有 draft chunk 标记为 approved，跳过 `review_pending`，直接进入 embedding。注意此时 `approved` 为内部瞬时状态，外部可观测状态序列为 `uploaded → processing → indexed`。
+- **human_review=false**：切分完成后自动将所有 draft chunk 标记为 approved，跳过 `review_pending`，直接进入 embedding。注意此时
+  `approved` 为内部瞬时状态，外部可观测状态序列为 `uploaded → processing → indexed`。
 - **approve**：自动触发 indexing，没有独立的手动 index 步骤
 - **indexed**：文档不可再修改。rechunk 请求被阻止；如需重新处理，只能删除后重新上传
 - **failed**：可通过 `POST /api/documents/:id/index` 重试，无需重新上传文件
 
-`chunk_version` 在每次 `RechunkDocument` 时递增，embedding 成功后写入 `chunks-vN.json` 快照。快照用于 Milvus collection 重建时免重调 embedding API。
+`chunk_version` 在每次 `RechunkDocument` 时递增，embedding 成功后写入 `chunks-vN.json` 快照。快照用于 Milvus collection
+重建时免重调 embedding API。
 
 各阶段的业务处理细节（解析策略、清洗步骤、切分参数、删除操作）及 chunk 审核操作列表见 [流程与业务规则](./workflow.md)。
 
@@ -42,7 +44,9 @@ uploaded
 3. 检索时的过滤边界，阻止跨知识库召回
 4. 向量写入和删除时选择对应 Milvus collection
 
-`knowledge_base_id` 在上传时验证，必须匹配后端 Store 中已创建的知识库。知识库通过前端 UI 创建，并在创建时同步创建对应 Milvus collection。上传后不可修改。即使系统只有单一知识库，也必须保留此字段。
+`knowledge_base_id` 在上传时验证，必须匹配后端 Store 中已创建的知识库。知识库通过前端 UI
+创建，并在创建时同步创建对应 Milvus collection。上传后不可修改。
+即使系统只有单一知识库，也必须保留此字段。
 
 ## 数据查询行为
 
@@ -60,7 +64,8 @@ uploaded
 
 ## 外部组件装配（Noop 回落模式）
 
-`DocumentService` 通过 functional options 装配外部组件。未配置对应 DSN 或 base_url 时自动回落 Noop 实现，不需要改代码，也不会报错。这个设计保证了本地开发无需启动 Redis / Milvus / 外部 API 即可运行。
+`DocumentService` 通过 functional options 装配外部组件。未配置对应 DSN 或 base_url 时自动回落 Noop 实现，不需要改代码，也不会报错。
+这个设计保证了本地开发无需启动 Redis / Milvus / 外部 API 即可运行。
 
 | 组件 | 包 | 装配函数 | 激活条件 |
 |---|---|---|---|
@@ -70,7 +75,8 @@ uploaded
 
 **Embedder**：`batch_size` 默认 10，DashScope 兼容端点不支持更大批次，不要调大。
 
-**VectorStore** 接口方法：`ValidateKnowledgeBase`、`CreateKnowledgeBase`、`DeleteKnowledgeBase`、`Upsert`、`DeleteByDocument`、`Search(ctx, SearchRequest)`。
+**VectorStore** 接口方法：`ValidateKnowledgeBase`、`CreateKnowledgeBase`、`DeleteKnowledgeBase`、`Upsert`、
+`DeleteByDocument`、`Search(ctx, SearchRequest)`。
 
 **TaskQueue**：`GoroutineQueue` 是单 worker goroutine；生产环境建议配置 `AsynqQueue` 以支持进程重启后任务恢复。
 
@@ -84,17 +90,25 @@ uploaded
 | BM25 | `"bm25"` | 全文检索，跳过 Embedder，不需要 embedding 配置 |
 | Hybrid | `"hybrid"` | 使用 Milvus HybridSearch 两路并行后 RRF 重排，需要 Embedder；不直接混排原始分数 |
 
-`SearchRequest` 调参字段：`EF`（HNSW 搜索精度）、`DropRatio`（BM25 稀疏向量剪枝比例）、`RRFK`（Hybrid RRF k 值）。Dense 向量索引和查询均使用 Milvus `COSINE` metric。
+`SearchRequest` 调参字段：`EF`（HNSW 搜索精度）、`DropRatio`（BM25 稀疏向量剪枝比例）、`RRFK`（Hybrid RRF k 值）。Dense
+向量索引和查询均使用 Milvus `COSINE` metric。
 
-dense / hybrid 模式未配置 Embedder 时返回 500（NoopEmbedder 返回空向量，Query 检测后返回 `"embedder returned no vector for query"` 错误）；BM25 模式无此限制，可在 Noop Embedder 下使用。
+dense / hybrid 模式未配置 Embedder 时返回 500（NoopEmbedder 返回空向量，Query 检测后返回
+`"embedder returned no vector for query"` 错误）；BM25 模式无此限制，可在 Noop Embedder 下使用。
 
 ## 解析与切分接口
 
-**Parser**：`Parse()` 返回 `ParseResult{Text, PageCount, Blocks}`。`Blocks []ParseBlock` 携带结构化单元（`Text`、`SectionTitle`、`PageStart`）；无 blocks 时回落到 flat `Text` 字段。`processDocument` 对每个 block 调用 `CleanText`，再整体传入 `BuildChunks`。
+**Parser**：`Parse()` 返回 `ParseResult{Text, PageCount, Blocks}`。`Blocks []ParseBlock` 携带结构化单元（`Text`、
+`SectionTitle`、`PageStart`）；无 blocks 时回落到 flat `Text` 字段。`processDocument` 对每个 block 调用 `CleanText`，
+再整体传入 `BuildChunks`。
 
-**Chunker**：`BuildChunks(documentID, filename string, blocks []ParseBlock, ...)` 逐 block 调用 `splitByLength`，每个 chunk 继承所在 block 的 `SectionTitle` / `PageStart`。切分完成后，若总 chunk 数 ≤ `min_chunks`，将整篇合并为一个 chunk。
+**Chunker**：`BuildChunks(documentID, filename string, blocks []ParseBlock, ...)` 逐 block 调用
+`splitByLength`，每个 chunk 继承所在 block 的 `SectionTitle` / `PageStart`。切分完成后，若总 chunk 数 ≤ `min_chunks`，
+将整篇合并为一个 chunk。
 
-`splitByLength` 细节：以 `\n\n` 为段落边界累积；代码围栏（`` ``` `` / `~~~`）内部的空行受保护；Markdown 表格按数据行拆分（表头重复）；普通超长段落用 `splitRunes` 按字符滑动窗口切分，cut 点向前搜索最近句末标点对齐；`overlapTail` 让 overlap 从句末之后开始，避免从句子中段携带上文。
+`splitByLength` 细节：以 `\n\n` 为段落边界累积；代码围栏（`` ``` `` / `~~~`）内部的空行受保护；
+Markdown 表格按数据行拆分（表头重复）；普通超长段落用 `splitRunes` 按字符滑动窗口切分，
+cut 点向前搜索最近句末标点对齐；`overlapTail` 让 overlap 从句末之后开始，避免从句子中段携带上文。
 
 各文件类型的 block 结构详见 [后端架构与技术方案](./backend.md)。
 
@@ -124,11 +138,13 @@ dense / hybrid 模式未配置 Embedder 时返回 500（NoopEmbedder 返回空�
 
 **状态映射**
 
-`utils/status.js` 是文档状态的唯一来源：`STATUS_LABEL`（状态 → 文案）、`STATUS_TYPE`（状态 → Naive UI tag type）、`isTerminal(status)`（是否为终态）。组件中不重复定义这些映射。
+`utils/status.js` 是文档状态的唯一来源：`STATUS_LABEL`（状态 → 文案）、`STATUS_TYPE`（状态 → Naive UI tag type）、
+`isTerminal(status)`（是否为终态）。组件中不重复定义这些映射。
 
 **Services 封装**
 
-所有接口请求经 `services/http.js` 封装的 fetch 客户端发出（`credentials: 'include'`），错误统一抛出为 `HttpError`。不在组件内直接调用 `fetch`。
+所有接口请求经 `services/http.js` 封装的 fetch 客户端发出（`credentials: 'include'`），错误统一抛出为 `HttpError`。不在组件内直接调用
+`fetch`。
 
 ## 测试约定
 
@@ -141,12 +157,20 @@ dense / hybrid 模式未配置 Embedder 时返回 500（NoopEmbedder 返回空�
 
 **请求日志**
 
-`infra.RequestLogger`（`internal/infra/middleware.go`）在 `c.Next()` 完成后输出请求日志，按 HTTP status 分级：≥500 → Error，≥400 → Warn，其余 → Info。
+`infra.RequestLogger`（`internal/infra/middleware.go`）在 `c.Next()` 完成后输出请求日志，按 HTTP status 分级：≥500 →
+Error，≥400 → Warn，其余 → Info。
 
-字段：`ip`、`method`、`path`（路由模板，404 时回落 `URL.Path`）、`status`、`latency`；非空时追加 `params`、`query`；4xx/5xx 时追加 `err_origin`、`err_code`、`err_message`。
+字段：`ip`、`method`、`path`（路由模板，404 时回落 `URL.Path`）、`status`、`latency`；非空时追加 `params`、`query`；4xx/5xx
+时追加 `err_origin`、`err_code`、`err_message`。
 
-`writeError`（`internal/api/response.go`）通过 `runtime.Caller(1)` 捕获调用点（裁剪为 `internal/...`），通过 `c.Set(...)` 传递给中间件，handler 无需主动调日志 API。
+`writeError`（`internal/api/response.go`）通过 `runtime.Caller(1)` 捕获调用点（裁剪为 `internal/...`），通过
+`c.Set(...)` 传递给中间件，handler 无需主动调日志 API。
 
 **全局 logger**
 
-`infra.L` 包级变量默认 `zap.NewNop()`，保证未调用 `Init()` 的测试不会 panic。正式运行分两阶段：`main.go` 中 `Init(config)` 只构建控制台 core 并赋给 `L`（项目初始化、依赖装配期间的日志——包括各 backend 选型的 Info 日志、mcp 的 auth 未配置 Warn、以及这期间任何 `Fatal` 退出——只打印到终端，不写入日志文件）；确认服务即将开始对外提供服务（`server.Serve` 之前，紧邻 "server starting"/"mcp server starting" 日志之前）再调用 `EnableFileLogging()`，把 `L` 升级为 `zapcore.NewTee(consoleCore, fileCore)`，此后（含运行期与优雅关闭）日志同时写入 `backend/logs/app.log` 与控制台。
+`infra.L` 包级变量默认 `zap.NewNop()`，保证未调用 `Init()` 的测试不会 panic。正式运行分两阶段：`main.go` 中 `Init(config)`
+只构建控制台 core 并赋给 `L`（项目初始化、依赖装配期间的日志——包括各 backend 选型的 Info 日志、mcp 的 auth 未配置 Warn、以及这期间任何 `Fatal`
+退出——只打印到终端，不写入日志文件）；确认服务即将开始对外提供服务（`server.Serve`
+之前，紧邻 "server starting"/"mcp server starting" 日志之前）
+再调用 `EnableFileLogging()`，把 `L` 升级为 `zapcore.NewTee(consoleCore, fileCore)`，此后（含运行期与优雅关闭）日志同时写入
+`backend/logs/app.log` 与控制台。

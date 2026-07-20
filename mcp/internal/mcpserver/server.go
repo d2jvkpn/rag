@@ -152,7 +152,8 @@ func (s *Server) registerSearchTool() error {
 	}
 
 	var desc strings.Builder
-	desc.WriteString("Search a configured knowledge base collection using dense, bm25, or hybrid retrieval.\nAvailable collections:\n")
+	desc.WriteString("Search a configured knowledge base collection using dense, bm25, or hybrid retrieval.\n" +
+		"Available collections:\n")
 	names := make([]any, 0, len(s.collections))
 	for name, d := range s.collections {
 		names = append(names, name)

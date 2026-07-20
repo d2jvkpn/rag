@@ -33,7 +33,8 @@ gin router
 | `ChunkStore` | 6 | `DocumentService` |
 | `Store`（组合以上四个） | — | `app/`，两个实现 |
 
-`AuthService.store` 类型为 `UserStore`；`DocumentService.store` 为 service 包内的 unexported `docStore`（嵌入后三个接口），不依赖 `UserStore`。两个实现均满足组合接口 `Store`，传入时自动满足所有子接口。
+`AuthService.store` 类型为 `UserStore`；`DocumentService.store` 为 service 包内的 unexported
+`docStore`（嵌入后三个接口），不依赖 `UserStore`。两个实现均满足组合接口 `Store`，传入时自动满足所有子接口。
 
 - **JSONStore**：本地 JSON 文件，`database.dsn` 未配置时使用
 - **PostgresStore**：gorm + lib/pq，`database.dsn` 配置后使用
@@ -140,7 +141,8 @@ data/documents/{yyyy}/{mm}/{dd}/{yyyy-mm-dd}_{document_id}/chunks-vN.json
 - `users.permissions` 为 `NULL` 或空数组 → 无任何权限
 - `users.permissions` 非空 → 仅持有列表中明确列出的权限
 
-`init_account` 创建的账户在 DB 中显式写入全部 3 项权限（不依赖 NULL 推断）。通过 `POST /api/users` 创建的用户初始权限由创建时指定的列表决定。权限列表由 `repository.AllPermissions` 统一维护，是 service 层校验与 store 层初始化的唯一来源。
+`init_account` 创建的账户在 DB 中显式写入全部 3 项权限（不依赖 NULL 推断）。通过 `POST /api/users` 创建的用户初始权限由创建时指定的列表决定。权限列表由
+`repository.AllPermissions` 统一维护，是 service 层校验与 store 层初始化的唯一来源。
 
 ## 文档所有权
 
@@ -166,21 +168,26 @@ data/documents/{yyyy}/{mm}/{dd}/{yyyy-mm-dd}_{document_id}/chunks-vN.json
 
 列表接口始终返回 200 + `items: []`，不返回 404。
 
-错误码：`validation_error` / `unauthorized` / `forbidden` / `not_found` / `conflict` / `unsupported_file_type` / `processing_failed` / `internal_error`
+错误码：`validation_error` / `unauthorized` / `forbidden` / `not_found` / `conflict` /
+`unsupported_file_type` / `processing_failed` / `internal_error`
 
 ## Milvus / 向量存储
 
-每个知识库对应一个 Milvus collection。知识库元数据由后端 Store 持久化，并通过前端 UI 创建；`local.yaml` 中由 `embedder.dim` 配置 embedding 模型输出维度，并作为新建知识库的向量维度。
+每个知识库对应一个 Milvus collection。知识库元数据由后端 Store 持久化，并通过前端 UI 创建；`local.yaml` 中由 `embedder.dim` 配置
+embedding 模型输出维度，并作为新建知识库的向量维度。
 
 Collection schema：
 
-- `embedding`：dense float 向量（dim 来自创建知识库时的服务端 `embedder.dim`），HNSW 索引使用 `COSINE` metric，dense search 显式传 `metric_type=COSINE`
+- `embedding`：dense float 向量（dim 来自创建知识库时的服务端 `embedder.dim`），HNSW 索引使用 `COSINE` metric，dense search
+  显式传 `metric_type=COSINE`
 - `sparse`：BM25 稀疏向量，由 Milvus 内置 BM25 function 从 `text` 字段自动生成
 - `tags`：文档标签数组（Array\<VarChar(256)\>，max\_capacity=20）
 - `file_sha256`：文档原文 SHA-256（VarChar(64)）
 - 其余元数据字段（`chunk_id`、`document_id`、`knowledge_base_id`、`text` 等）
 
-创建知识库时后端会同步创建或加载对应 collection。`ensureCollection` 检查 schema，发现 `sparse`、`tags`、`file_sha256` 缺失或 `analyzer` 不匹配时 **drop + recreate**，数据丢失，需重新入库。dense index metric 从旧版本 `L2` 改为 `COSINE` 后，既有 collection 需要重建索引或重建 collection 后重新入库。完整 schema 见 [数据模型](./data-model.md)。
+创建知识库时后端会同步创建或加载对应 collection。`ensureCollection` 检查 schema，发现 `sparse`、`tags`、`file_sha256` 缺失或
+`analyzer` 不匹配时 **drop + recreate**，数据丢失，需重新入库。dense index metric 从旧版本 `L2` 改为 `COSINE` 后，既有
+collection 需要重建索引或重建 collection 后重新入库。完整 schema 见 [数据模型](./data-model.md)。
 
 ## 后端模块结构
 
@@ -235,9 +242,21 @@ backend/
     └── migrations/      # PostgreSQL 数据库迁移文件
 ```
 
-`pkg/rag` 从 `internal/rag` 迁出，是 Go 语言层面允许跨模块导入的前提（`internal/` 包只能被同一模块树内的代码导入）——`mcp/` 是独立 Go module，无法导入 `backend/internal/...`。`pkg/infra` 同理：`internal/infra` 中不依赖 gin、可被 mcp 复用的部分（zap + lumberjack 日志初始化、构建版本变量）迁到 `pkg/infra`。日志初始化（`Init`/`Sync`/`EnableFileLogging`/`L`）保留 `internal/infra/logger.go` 薄代理，backend 内部现有的 `infra.L`/`infra.Init(...)` 调用点无需改动；版本变量（`GitBranch`/`GitCommit`/`CommitTime`）没有保留代理——`backend/main.go`、`internal/api/handler.go` 改为直接以 `pkginfra` 别名导入 `backend/pkg/infra` 并引用 `pkginfra.GitBranch` 等，`internal/infra/version.go` 已删除。`mcp/` 直接导入 `backend/pkg/infra`，不再维护自己的一份拷贝。`middleware.go`（gin 请求日志中间件）和 `spa.go`（gin SPA 托管）依赖 `gin-gonic/gin` 且是 backend 独有的关注点，mcp 不使用 gin，因此不下沉，仍留在 `internal/infra`。
+`pkg/rag` 从 `internal/rag` 迁出，是 Go 语言层面允许跨模块导入的前提（`internal/`
+包只能被同一模块树内的代码导入）——`mcp/` 是独立 Go module，
+无法导入 `backend/internal/...`。`pkg/infra` 同理：`internal/infra` 中不依赖 gin、可被 mcp 复用的部分（zap + lumberjack
+日志初始化、构建版本变量）迁到 `pkg/infra`。日志初始化（`Init`/`Sync`/`EnableFileLogging`/`L`）保留
+`internal/infra/logger.go` 薄代理，backend 内部现有的 `infra.L`/`infra.Init(...)` 调用点无需改动；
+版本变量（`GitBranch`/`GitCommit`/`CommitTime`）没有保留代理——`backend/main.go`、`internal/api/handler.go` 改为直接以
+`pkginfra` 别名导入 `backend/pkg/infra` 并引用 `pkginfra.GitBranch` 等，`internal/infra/version.go` 已删除。
+`mcp/` 直接导入 `backend/pkg/infra`，不再维护自己的一份拷贝。`middleware.go`（gin 请求日志中间件）和 `spa.go`（gin SPA 托管）依赖
+`gin-gonic/gin` 且是 backend 独有的关注点，mcp 不使用 gin，因此不下沉，仍留在 `internal/infra`。
 
-`GitBranch`/`GitCommit`/`CommitTime` 通过 `-ldflags -X` 在构建时注入（见 [后端架构与技术方案](./backend.md)）；`backend/Makefile` 的 `version_pkg` 指向 `github.com/d2jvkpn/rag/backend/pkg/infra`（`-X` 只能对变量的真正声明处生效）。`mcp/Makefile` 的 `build`/`run` 目标同样以相同的 `version_pkg` 注入这三个变量——两个模块各自独立编译，`-X` 分别写入各自二进制里那份 `pkg/infra` 的数据，互不影响。
+`GitBranch`/`GitCommit`/`CommitTime` 通过 `-ldflags -X` 在构建时注入（见 [后端架构与技术方案](./backend.md)）；
+`backend/Makefile` 的 `version_pkg` 指向 `github.com/d2jvkpn/rag/backend/pkg/infra`
+（`-X` 只能对变量的真正声明处生效）。
+`mcp/Makefile` 的 `build`/`run` 目标同样以相同的 `version_pkg` 注入这三个变量——两个模块各自独立编译，`-X` 分别写入各自二进制里那份
+`pkg/infra` 的数据，互不影响。
 
 ## MCP 检索服务
 
@@ -360,7 +379,8 @@ frontend/src/
 
 ### 配置加载
 
-`main.js` 在 `mount()` 前调用 `loadConfig()`，失败则显示致命错误，不继续渲染。加载的文件名由构建时 `CONFIG` 环境变量决定（默认 `app.json`，本地开发为 `app.local.json`）。所有 service 模块在每次请求时调用 `getConfig()`，不缓存 base URL。
+`main.js` 在 `mount()` 前调用 `loadConfig()`，失败则显示致命错误，不继续渲染。加载的文件名由构建时 `CONFIG` 环境变量决定（默认 `app.json`，
+本地开发为 `app.local.json`）。所有 service 模块在每次请求时调用 `getConfig()`，不缓存 base URL。
 
 运行时配置字段（`frontend/public/app.json` / `app.local.json`）：
 
@@ -375,7 +395,8 @@ Loader 将 snake_case 字段规范化为 camelCase。
 
 ### 状态轮询
 
-`DocumentDetailPage` 在 `status` 不属于 `['indexed', 'failed', 'review_pending']` 时持续轮询 `GET /api/documents/:id`，间隔为 `pollIntervalMs`。组件 `onUnmounted` 时清除定时器。
+`DocumentDetailPage` 在 `status` 不属于 `['indexed', 'failed', 'review_pending']` 时持续轮询
+`GET /api/documents/:id`，间隔为 `pollIntervalMs`。组件 `onUnmounted` 时清除定时器。
 
 ### 状态映射
 
@@ -389,7 +410,8 @@ Loader 将 snake_case 字段规范化为 camelCase。
 
 ## 配置参考
 
-默认配置路径为 `backend/configs/local.yaml`；仓库提供示例配置 `backend/examples/local.yaml`，通过 `--config` 指定后由 viper 加载。
+默认配置路径为 `backend/configs/local.yaml`；仓库提供示例配置 `backend/examples/local.yaml`，通过 `--config` 指定后由 viper
+加载。
 
 | 键 | 默认值 | 说明 |
 |---|---|---|
@@ -418,6 +440,12 @@ Loader 将 snake_case 字段规范化为 camelCase。
 | `logging.max_age_days` | `0` | 历史日志文件的最大保留天数 |
 | `logging.compress` | `false` | 是否 gzip 压缩切割后的历史日志文件 |
 
-未配置 `database.dsn` 时使用 JSONStore；未配置 `redis.dsn` 时使用 GoroutineQueue 和 MemoryBlacklist；`embedder.dim` 必填；未配置 `embedder.base_url` / `embedder.api_key`、`milvus.addr` 时对应外部组件回落 Noop 实现。日志输出到控制台和 `logging.path` 两处（服务启动运行后；初始化阶段仅输出到控制台，见"全局 logger"/"日志"小节）；控制台/文件日志级别由 `--release` 决定（未开启为 debug，开启后为 info），配置文件中没有单独的日志级别开关。
+未配置 `database.dsn` 时使用 JSONStore；未配置 `redis.dsn` 时使用 GoroutineQueue 和 MemoryBlacklist；`embedder.dim`
+必填；未配置 `embedder.base_url` / `embedder.api_key`、`milvus.addr` 时对应外部组件回落 Noop 实现。日志输出到控制台和
+`logging.path` 两处（服务启动运行后；初始化阶段仅输出到控制台，见"全局 logger"/"日志"小节）；控制台/文件日志级别由 `--release` 决定（未开启为 debug，
+开启后为 info），配置文件中没有单独的日志级别开关。
 
-后端运行目录存在 `target/ui/index.html` 时自动托管前端 SPA：`/ui` 为前端入口，`/` 和 `/index.html` 重定向到 `/ui/index.html`；`/api`、`/healthz`、`/static` 保持后端路由，其中 `/static` 服务 `{app.data_dir}/static`。静态资源缓存策略：`index.html` 和 `app.json` 返回 `Cache-Control: no-store`；`assets/` 下带 hash 的 JS/CSS 返回 `Cache-Control: public, max-age=31536000, immutable`；其余文件走默认协商缓存（ETag/Last-Modified）。
+后端运行目录存在 `target/ui/index.html` 时自动托管前端 SPA：`/ui` 为前端入口，`/` 和 `/index.html` 重定向到 `/ui/index.html`；
+`/api`、`/healthz`、`/static` 保持后端路由，其中 `/static` 服务 `{app.data_dir}/static`。静态资源缓存策略：`index.html` 和
+`app.json` 返回 `Cache-Control: no-store`；`assets/` 下带 hash 的 JS/CSS 返回
+`Cache-Control: public, max-age=31536000, immutable`；其余文件走默认协商缓存（ETag/Last-Modified）。

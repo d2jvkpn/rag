@@ -221,7 +221,8 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 - `knowledge_base_id`：必填，须匹配配置中的 collection
 - `title`：可选
 - `tags`：可选，可重复字段
-- `human_review`：可选；`true` 时切分完成后进入 `review_pending`，需人工审核通过后才会 embedding 和入库；`false` 或省略时自动将切分结果标记为 `approved` 并立即进入 embedding / 入库
+- `human_review`：可选；`true` 时切分完成后进入 `review_pending`，需人工审核通过后才会 embedding 和入库；`false` 或省略时自动将切分结果标记为
+  `approved` 并立即进入 embedding / 入库
 
 当前 Web 前端上传时固定提交 `human_review=true`，因此页面上的标准流程为“上传 -> 切分 -> 审核 -> embedding -> Milvus 入库”。
 
@@ -253,7 +254,8 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 - 支持 `tag` 精确过滤，匹配 `documents.tags` 中的单个标签
 - 支持 `status` 精确过滤
 - 支持 `page` / `page_size`，默认 `page=1&page_size=20`，`page_size` 最大 `200`
-- `items` 固定按 `created_at desc` 排序；响应 `data` 包含 `items`、`page`、`page_size`、`total`、`total_pages`、`has_next`、`has_prev`
+- `items` 固定按 `created_at desc` 排序；响应 `data` 包含 `items`、`page`、`page_size`、`total`、`total_pages`、
+  `has_next`、`has_prev`
 
 ### `GET /api/document-tags`
 
@@ -432,7 +434,8 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 
 - 输入查询文本，在指定知识库中检索相似 chunk
 - 不支持跨知识库检索，`knowledge_base_id` 为必填项
-- `search_mode` 为 `"dense"` 或空字符串时使用 dense（纯向量语义搜索，Milvus `COSINE` metric）；`bm25` 时跳过 Embedder，仅做全文检索；`hybrid` 时使用 Milvus HybridSearch 两路并行后 RRF 重排，不直接混排原始分数
+- `search_mode` 为 `"dense"` 或空字符串时使用 dense（纯向量语义搜索，Milvus `COSINE` metric）；`bm25` 时跳过 Embedder，
+  仅做全文检索；`hybrid` 时使用 Milvus HybridSearch 两路并行后 RRF 重排，不直接混排原始分数
 
 请求字段：
 
@@ -502,7 +505,8 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 - `page`：页码，默认 `1`
 - `page_size`：每页数量，默认 `50`，最大 `200`
 
-响应 `data` 包含 `items`、`page`、`page_size`、`total`、`total_pages`、`has_next`、`has_prev`。`items` 固定按 `chunk_index asc` 排序。
+响应 `data` 包含 `items`、`page`、`page_size`、`total`、`total_pages`、`has_next`、`has_prev`。`items` 固定按
+`chunk_index asc` 排序。
 
 单条 chunk 建议至少包含：
 

@@ -40,9 +40,7 @@ func New(v *viper.Viper) (*App, error) {
 		handler         *api.Handler
 	)
 
-	if initAccount, err = readInitAccount(v); err != nil {
-		return nil, err
-	}
+	initAccount = readInitAccount(v)
 
 	if store, syncResult, err = initStore(v, initAccount); err != nil {
 		return nil, err
@@ -113,12 +111,11 @@ func (a *App) Shutdown(ctx context.Context) (err error) {
 	return err
 }
 
-func readInitAccount(v *viper.Viper) (repository.InitAccount, error) {
-	var account repository.InitAccount
-	if err := v.UnmarshalKey("init_account", &account); err != nil {
-		return repository.InitAccount{}, err
+func readInitAccount(v *viper.Viper) repository.InitAccount {
+	return repository.InitAccount{
+		Username: v.GetString("init_account.username"),
+		Password: v.GetString("init_account.password"),
 	}
-	return account, nil
 }
 
 func initStore(v *viper.Viper, account repository.InitAccount) (repository.Store, repository.AccountSyncResult, error) {

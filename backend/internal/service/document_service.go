@@ -317,7 +317,9 @@ func (s *DocumentService) ListAvailableKnowledgeBases() []model.KnowledgeBase {
 }
 
 var ErrKnowledgeBaseExists = errors.New("knowledge base already exists")
-var ErrKnowledgeBaseNotEmpty = errors.New("knowledge base still has documents; delete all documents before deleting the knowledge base")
+var ErrKnowledgeBaseNotEmpty = errors.New(
+	"knowledge base still has documents; delete all documents before deleting the knowledge base",
+)
 
 func (s *DocumentService) DeleteKnowledgeBase(kbID string) error {
 	if _, err := s.store.GetKnowledgeBase(kbID); err != nil {

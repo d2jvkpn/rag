@@ -39,7 +39,8 @@
 前端构建产物目录约定：
 
 - 前端打包文件输出到 `frontend/target/dist`
-- 前端打包 base 由 `BASE_PATH` 环境变量控制；`make build` 使用 `/ui/`，容器镜像将 `target/dist` 复制到后端运行目录 `target/ui`，后端检测到该目录时提供 `/ui` 路由；`/static` 仍由后端业务静态文件路由提供
+- 前端打包 base 由 `BASE_PATH` 环境变量控制；`make build` 使用 `/ui/`，容器镜像将 `target/dist` 复制到后端运行目录 `target/ui`，
+  后端检测到该目录时提供 `/ui` 路由；`/static` 仍由后端业务静态文件路由提供
 
 ### 构建时版本注入
 
@@ -51,7 +52,8 @@
 | `__GIT_COMMIT__` | 环境变量 `GIT_COMMIT`，否则执行 `git rev-parse HEAD` |
 | `__COMMIT_TIME__` | 环境变量 `COMMIT_TIME`，否则执行 `git log -1 --format=%cI` |
 
-容器构建时由顶层 `Makefile` 通过 `--build-arg` 传入，确保镜像中的前端与后端显示一致的版本信息。本地 `npm run dev` 不设置环境变量时，vite 自动执行 git 命令获取当前值。
+容器构建时由顶层 `Makefile` 通过 `--build-arg` 传入，确保镜像中的前端与后端显示一致的版本信息。本地 `npm run dev` 不设置环境变量时，vite 自动执行 git
+命令获取当前值。
 
 ## 前端分层建议
 
@@ -134,7 +136,8 @@
 - `chunks.js`：chunk 列表、重切分、合并、编辑、拒绝、恢复、审核
 - `users.js`：用户列表、启用、禁用
 - `knowledge-bases.js`：知识库列表、创建、删除（`GET/POST/DELETE /api/knowledge-bases`）
-- `search.js`：语义检索（`POST /api/knowledge-bases/query`）、可用 collection 配置（`GET /api/knowledge-bases/available`）、知识库列表（供检索页下拉使用）
+- `search.js`：语义检索（`POST /api/knowledge-bases/query`）、可用 collection
+  配置（`GET /api/knowledge-bases/available`）、知识库列表（供检索页下拉使用）
 
 实现约定：
 
@@ -161,7 +164,8 @@
 - `poll_interval_ms`：详情页轮询处理中文档的间隔，默认 3000
 
 > 上传流程统一进入人工审核；前端不再提供 `human_review` 开关，并在提交时固定发送 `human_review=true`。
-> 上传弹窗中，选择知识库后应立即清除对应的必填校验提示，并展示该 collection 参数。知识库由”知识库管理”页创建；页面对登录用户可见，创建/删除按钮仅对具备 `manage_knowledge_bases` 权限的用户显示。
+> 上传弹窗中，选择知识库后应立即清除对应的必填校验提示，并展示该 collection 参数。知识库由”知识库管理”页创建；页面对登录用户可见，创建/删除按钮仅对具备
+> `manage_knowledge_bases` 权限的用户显示。
 
 设计要求：
 
@@ -240,7 +244,11 @@
 
 ## Chunk 审核页交互约定
 
-`/documents/:documentId/chunks` 左侧 chunk 列表按 `page/page_size` 分页渐进加载，默认每页 50 条；首屏加载第一页，滚动到底加载下一页，点击“跳到最后”直接加载最后一页，随后滚动到顶部可加载上一页。列表头展示当前已加载的 chunk index 范围和总数。右侧详情区优先展示 chunk 正文和清洗后文本。chunk metadata 与 `resource_refs` 不直接铺在正文区，通过详情头部的 `Details ({n})` / `详情 ({n})` 按钮打开合并弹窗查看，按钮中的 `n` 为当前 chunk 的 `resource_refs` 数量；左侧 chunk 列表对有引用的 chunk 显示引用数量标签。`resource_refs` 区域在无引用时显示空态，有引用时展示类型、标签、页码、caption、锚文本、URL、资源路径和外部资源标识。
+`/documents/:documentId/chunks` 左侧 chunk 列表按 `page/page_size` 分页渐进加载，默认每页 50 条；首屏加载第一页，滚动到底加载下一页，
+点击“跳到最后”直接加载最后一页，随后滚动到顶部可加载上一页。列表头展示当前已加载的 chunk index 范围和总数。右侧详情区优先展示 chunk 正文和清洗后文本。chunk metadata
+与 `resource_refs` 不直接铺在正文区，通过详情头部的 `Details ({n})` / `详情 ({n})` 按钮打开合并弹窗查看，按钮中的 `n` 为当前 chunk 的
+`resource_refs` 数量；左侧 chunk 列表对有引用的 chunk 显示引用数量标签。`resource_refs` 区域在无引用时显示空态，有引用时展示类型、标签、页码、
+caption、锚文本、URL、资源路径和外部资源标识。
 
 ## 前端上传约定
 
@@ -346,7 +354,8 @@ frontend/
     dist/
 ```
 
-> 历史 `frontend.md` 中的 `components/{layout,documents,chunks,common}/` 分组未落地，当前所有组件归于 `components/AppLayout.vue` 一个文件；新组件按需新增即可。
+> 历史 `frontend.md` 中的 `components/{layout,documents,chunks,common}/` 分组未落地，当前所有组件归于
+> `components/AppLayout.vue` 一个文件；新组件按需新增即可。
 
 ## 前端实现原则
 

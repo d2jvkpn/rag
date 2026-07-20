@@ -105,7 +105,8 @@
 - `text` 中的链接优先保留锚文本，必要时保留简短可读 URL，不要把过长链接参数直接灌进正文
 - `resource_refs` 中保存结构化引用，不要只把资源引用内嵌到纯文本
 - `ref_type` 第一版可先支持 `image`、`table` 和 `link`
-- `storage_path` 可指向抽取出的图片文件、表格 JSON 或其他派生资源；当前实现保存为相对 `{app.data_dir}/static` 的路径，前端用 `static_base` 拼接访问
+- `storage_path` 可指向抽取出的图片文件、表格 JSON 或其他派生资源；当前实现保存为相对 `{app.data_dir}/static` 的路径，前端用 `static_base`
+  拼接访问
 - `url` 用于保存链接类引用的完整地址
 - 如果第一版不落独立资源表，`ref_id` 只需在单文档范围内唯一
 
@@ -126,7 +127,8 @@
 - `last_login_at`：最近一次登录时间，从未登录时为 null
 - `totp_secret`：TOTP 密钥，未启用时为空
 - `totp_enabled`：`true` 时登录需附加 6 位动态码
-- `permissions`：`TEXT[]`，零权限默认模型：`NULL` 和空数组均表示无任何权限；非空时仅持有列表中明确列出的权限。合法值：`manage_users` / `manage_knowledge_bases` / `manage_documents`
+- `permissions`：`TEXT[]`，零权限默认模型：`NULL` 和空数组均表示无任何权限；非空时仅持有列表中明确列出的权限。合法值：`manage_users` /
+  `manage_knowledge_bases` / `manage_documents`
 
 建议约束：
 
@@ -170,10 +172,12 @@
 - `tags`：文档标签数组（来自 `documents.tags`），Array\<VarChar(256)\>，max\_capacity=20
 - `text`：chunk 原文，用于 BM25 检索和结果展示
 - `embedding`：稠密向量，dim 由 `knowledge_bases.dim` 决定，HNSW index 使用 `COSINE` metric
-- `sparse`：BM25 稀疏向量，由 Milvus 内置 BM25 function 从 `text` 自动生成（基于 collection 配置的 `analyzer`，默认 `chinese`）
+- `sparse`：BM25 稀疏向量，由 Milvus 内置 BM25 function 从 `text` 自动生成（基于 collection 配置的 `analyzer`，默认
+  `chinese`）
 
 说明：
 
 - 删除按 `knowledge_base_id + document_id` 条件执行
 - Milvus 存向量和检索元数据，chunk 全文也存在 Milvus（用于 BM25 / 检索结果展示）；关系库保留完整原文，是真源
-- 创建知识库时 `ensureCollection` 检测 schema：发现 `sparse`、`tags`、`file_sha256` 缺失或 `analyzer` 不匹配会**drop + recreate collection**（数据丢失，需要重新入库）
+- 创建知识库时 `ensureCollection` 检测 schema：发现 `sparse`、`tags`、`file_sha256` 缺失或 `analyzer` 不匹配会**drop +
+  recreate collection**（数据丢失，需要重新入库）

@@ -35,7 +35,8 @@
 输入：
 
 - 文件二进制
-- `knowledge_base_id`（必填，文档归属边界，用于 collection 校验、chunk 参数选择和检索过滤，详见 [设计决策与关键约定](./Design.md#知识库与-knowledge_base_id)）
+- `knowledge_base_id`（必填，文档归属边界，用于 collection 校验、chunk 参数选择和检索过滤，详见
+  [设计决策与关键约定](./Design.md#知识库与-knowledge_base_id)）
 - 可选：`doc_id`、`title`、`tags`
 
 落盘建议：
@@ -84,7 +85,8 @@
 
 - 以“单页幻灯片”为天然结构边界
 - 保留页序号，便于 chunk 审核和重排
-- 图片本体先不解析，只保留图注或相邻说明文本；正文占位符使用 `[Image:ref_id]` 或 `[Image:ref_id label]`，ref_id 与 `resource_refs` 精确绑定；若 `descr` 属性为外部 URL，存入 `ref.url` 而非 label
+- 图片本体先不解析，只保留图注或相邻说明文本；正文占位符使用 `[Image:ref_id]` 或 `[Image:ref_id label]`，ref_id 与 `resource_refs`
+  精确绑定；若 `descr` 属性为外部 URL，存入 `ref.url` 而非 label
 
 ### Markdown
 
@@ -106,7 +108,8 @@
 
 - `pdf`：通过 Python `pdfplumber` 提取可提取文本的 PDF，并尝试将页内表格转成 Markdown 表格文本
 - 扫描版 PDF：直接失败，不做 OCR
-- `docx`：解析正文、标题、表格；表格统一转成 Markdown 表格文本，相邻且列数一致的连续表会按续表合并并去掉重复表头；图片不做内容识别，但会在正文和表格单元格中插入 `[Image:ref_id label]` 占位符并写入 `resource_refs`；忽略批注、页眉页脚
+- `docx`：解析正文、标题、表格；表格统一转成 Markdown 表格文本，相邻且列数一致的连续表会按续表合并并去掉重复表头；图片不做内容识别，但会在正文和表格单元格中插入
+  `[Image:ref_id label]` 占位符并写入 `resource_refs`；忽略批注、页眉页脚
 - `pptx`：解析标题、文本框、备注区；原生表格统一转成 Markdown 表格文本，图片内容不做识别
 - `markdown`：解析标题、段落、列表、代码块、表格和链接；原有 Markdown 表格语法保持原样
 
@@ -124,7 +127,8 @@
 
 - 不要过度清洗，避免破坏原文语义
 - 表格先转成按行拼接的文本，后续再考虑结构化表格检索
-- 当前实现里 `docx/pptx` 直接转成 Markdown 表格文本；`pdf` 使用 `pdfplumber` 提取普通文本并尝试抽取页内表格，正文会尽量排除表格区域以减少重复，并会合并相邻页间列数一致的续页表，但复杂跨页表或扫描版仍可能退化或失败
+- 当前实现里 `docx/pptx` 直接转成 Markdown 表格文本；`pdf` 使用 `pdfplumber` 提取普通文本并尝试抽取页内表格，正文会尽量排除表格区域以减少重复，
+  并会合并相邻页间列数一致的续页表，但复杂跨页表或扫描版仍可能退化或失败
 
 ## Chunk 切分
 
@@ -145,7 +149,8 @@
 - chunk 大小：`400 ~ 800 tokens`
 - chunk overlap：`50 ~ 120 tokens`
 
-当前实现使用 `github.com/pkoukk/tiktoken-go`，默认编码 `cl100k_base`。可通过 `service.SetTokenEncoding(name)` 在启动时切换，切换后 `chunkConfigHash` 同步更新，旧快照不再复用。
+当前实现使用 `github.com/pkoukk/tiktoken-go`，默认编码 `cl100k_base`。可通过 `service.SetTokenEncoding(name)`
+在启动时切换，切换后 `chunkConfigHash` 同步更新，旧快照不再复用。
 
 第一版默认参数：
 
@@ -154,8 +159,10 @@
 
 短文档与小 block 合并规则：
 
-- 相邻小 block（合并后仍 ≤ `chunk_size`）由 `mergeSmallBlocks` 自动合并，避免产生大量细碎 chunk；合并后 `PageEnd` 取最后一个 block 的页码
-- 切分完成后，若最后一个 chunk 的文本长度 < `chunk_size / 2`，将其追加到倒数第二个 chunk，消除末尾碎片；合并后 `PageEnd` 取两者较大值，`resource_refs` 合并
+- 相邻小 block（合并后仍 ≤ `chunk_size`）由 `mergeSmallBlocks` 自动合并，避免产生大量细碎 chunk；合并后 `PageEnd` 取最后一个 block
+  的页码
+- 切分完成后，若最后一个 chunk 的文本长度 < `chunk_size / 2`，将其追加到倒数第二个 chunk，消除末尾碎片；合并后 `PageEnd` 取两者较大值，
+  `resource_refs` 合并
 - 全部 chunk 数 ≤ `min_chunks` 时，整篇合并为单一 chunk；合并保留 `PageStart`（首 block）和 `PageEnd`（末 block）
 - 即使不拆分，也保留 `resource_refs`
 

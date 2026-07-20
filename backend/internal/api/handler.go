@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -38,12 +39,23 @@ func NewHandler(
 }
 
 func (h *Handler) Routes() http.Handler {
-	router := gin.New()
+	var (
+		router        *gin.Engine
+		basePath      string
+		webDir        string
+		root          *gin.RouterGroup
+		staticDir     string
+		apiGroup      *gin.RouterGroup
+		documentOwner *gin.RouterGroup
+		manageUsers   *gin.RouterGroup
+	)
 
-	basePath := h.cfg.GetString("http.base_path")
+	router = gin.New()
+
+	basePath = h.cfg.GetString("http.base_path")
 	router.Use(gin.Recovery(), infra.RequestLogger(basePath, "/healthz", "/version", "/static/"), h.cors())
 
-	webDir := ""
+	webDir = ""
 	if _, err := os.Stat(filepath.Join("target", "ui", "index.html")); err == nil {
 		webDir = filepath.Join("target", "ui")
 	}
@@ -64,7 +76,7 @@ func (h *Handler) Routes() http.Handler {
 		writeError(c, 404, "route_not_found", "route not found", nil)
 	})
 
-	root := router.Group(basePath)
+	root = router.Group(basePath)
 
 	root.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -78,12 +90,12 @@ func (h *Handler) Routes() http.Handler {
 		})
 	})
 
-	staticDir := filepath.Join(h.cfg.GetString("app.data_dir"), "static")
+	staticDir = filepath.Join(h.cfg.GetString("app.data_dir"), "static")
 	root.Static("/static", staticDir)
 
 	root.POST("/api/login", h.handleLogin)
 
-	apiGroup := root.Group("/api", h.withAuth())
+	apiGroup = root.Group("/api", h.withAuth())
 	apiGroup.POST("/logout", h.handleLogout)
 
 	apiGroup.GET("/me", h.handleMe)
@@ -104,7 +116,7 @@ func (h *Handler) Routes() http.Handler {
 	)
 	apiGroup.GET("/documents/:document_id/chunks", h.handleGetChunks)
 
-	documentOwner := apiGroup.Group("/documents", h.withDocumentOwner())
+	documentOwner = apiGroup.Group("/documents", h.withDocumentOwner())
 	documentOwner.POST("/:document_id/chunks/rechunk", h.handleRechunk)
 	documentOwner.POST("/:document_id/chunks/approve", h.handleApproveChunks)
 	documentOwner.POST("/:document_id/chunks/merge", h.handleMergeChunks)
@@ -113,7 +125,7 @@ func (h *Handler) Routes() http.Handler {
 	documentOwner.POST("/:document_id/chunks/:chunk_id/restore", h.handleRestoreChunk)
 	documentOwner.POST("/:document_id/index", h.handleIndexDocument)
 
-	manageUsers := apiGroup.Group("/users", h.withPermission("manage_users"))
+	manageUsers = apiGroup.Group("/users", h.withPermission("manage_users"))
 	manageUsers.GET("", h.handleListUsers)
 	manageUsers.POST("", h.handleCreateUser)
 	manageUsers.POST("/:user_id/disable", h.handleDisableUser)
@@ -139,11 +151,16 @@ func (h *Handler) Routes() http.Handler {
 }
 
 func (h *Handler) handleLogin(c *gin.Context) {
-	var request struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-		TOTPCode string `json:"totp_code"`
-	}
+	var (
+		request struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+			TOTPCode string `json:"totp_code"`
+		}
+		user  model.User
+		token string
+		err   error
+	)
 
 	if err := json.NewDecoder(c.Request.Body).Decode(&request); err != nil {
 		writeError(c, 400, "validation_error", "invalid request body", nil)
@@ -158,7 +175,7 @@ func (h *Handler) handleLogin(c *gin.Context) {
 		return
 	}
 
-	user, token, err := h.authService.Login(request.Username, request.Password, request.TOTPCode)
+	user, token, err = h.authService.Login(request.Username, request.Password, request.TOTPCode)
 	if err != nil {
 		if errors.Is(err, service.ErrTOTPRequired) {
 			writeData(c, 200, map[string]any{"totp_required": true})
@@ -188,7 +205,12 @@ func (h *Handler) handleLogin(c *gin.Context) {
 }
 
 func (h *Handler) handleLogout(c *gin.Context) {
-	cookie, err := c.Request.Cookie(h.cfg.GetString("http.session_cookie"))
+	var (
+		cookie *http.Cookie
+		err    error
+	)
+
+	cookie, err = c.Request.Cookie(h.cfg.GetString("http.session_cookie"))
 	if err == nil {
 		_ = h.authService.Logout(cookie.Value)
 	}
@@ -208,13 +230,20 @@ func (h *Handler) handleLogout(c *gin.Context) {
 }
 
 func (h *Handler) handleMe(c *gin.Context) {
-	user := c.MustGet("current_user").(model.User)
+	var user model.User
+
+	user = c.MustGet("current_user").(model.User)
 	writeData(c, 200, h.sanitizeUser(user))
 }
 
 func (h *Handler) handleListUsers(c *gin.Context) {
-	users := h.authService.ListUsers()
-	items := make([]map[string]any, len(users))
+	var (
+		users []model.User
+		items []map[string]any
+	)
+
+	users = h.authService.ListUsers()
+	items = make([]map[string]any, len(users))
 	for i, u := range users {
 		items[i] = h.sanitizeUser(u)
 	}
@@ -222,7 +251,9 @@ func (h *Handler) handleListUsers(c *gin.Context) {
 }
 
 func (h *Handler) handleDisableUser(c *gin.Context) {
-	actor := c.MustGet("current_user").(model.User)
+	var actor model.User
+
+	actor = c.MustGet("current_user").(model.User)
 
 	if err := h.authService.SetUserStatus(actor, c.Param("user_id"), "disabled"); err != nil {
 		h.writeActionError(c, err)
@@ -233,7 +264,9 @@ func (h *Handler) handleDisableUser(c *gin.Context) {
 }
 
 func (h *Handler) handleEnableUser(c *gin.Context) {
-	actor := c.MustGet("current_user").(model.User)
+	var actor model.User
+
+	actor = c.MustGet("current_user").(model.User)
 	if err := h.authService.SetUserStatus(actor, c.Param("user_id"), "active"); err != nil {
 		h.writeActionError(c, err)
 		return
@@ -242,16 +275,21 @@ func (h *Handler) handleEnableUser(c *gin.Context) {
 }
 
 func (h *Handler) handleChangePassword(c *gin.Context) {
-	user := c.MustGet("current_user").(model.User)
-	var body struct {
-		OldPassword string `json:"old_password"`
-		NewPassword string `json:"new_password"`
-	}
+	var (
+		user model.User
+		body struct {
+			OldPassword string `json:"old_password"`
+			NewPassword string `json:"new_password"`
+		}
+		errs []fieldError
+		err  error
+	)
+
+	user = c.MustGet("current_user").(model.User)
 	if err := json.NewDecoder(c.Request.Body).Decode(&body); err != nil {
 		writeError(c, 400, "validation_error", "invalid request body", nil)
 		return
 	}
-	var errs []fieldError
 	if strings.TrimSpace(body.OldPassword) == "" {
 		errs = append(errs, fieldError{Field: "old_password", Reason: "required"})
 	}
@@ -263,7 +301,7 @@ func (h *Handler) handleChangePassword(c *gin.Context) {
 		return
 	}
 
-	err := h.authService.ChangePassword(user.UserID, body.OldPassword, body.NewPassword)
+	err = h.authService.ChangePassword(user.UserID, body.OldPassword, body.NewPassword)
 	if err != nil {
 		if err.Error() == "incorrect current password" {
 			writeError(
@@ -282,12 +320,22 @@ func (h *Handler) handleChangePassword(c *gin.Context) {
 }
 
 func (h *Handler) handleCreateDocument(c *gin.Context) {
+	var (
+		file            multipart.File
+		header          *multipart.FileHeader
+		err             error
+		knowledgeBaseID string
+		humanReview     bool
+		uploader        model.User
+		document        model.Document
+	)
+
 	if err := c.Request.ParseMultipartForm(64 << 20); err != nil {
 		writeError(c, 400, "validation_error", "invalid multipart form: "+err.Error(), nil)
 		return
 	}
 
-	file, header, err := c.Request.FormFile("file")
+	file, header, err = c.Request.FormFile("file")
 	if err != nil {
 		writeError(
 			c,
@@ -300,7 +348,7 @@ func (h *Handler) handleCreateDocument(c *gin.Context) {
 	}
 	defer file.Close()
 
-	knowledgeBaseID := strings.TrimSpace(c.Request.FormValue("knowledge_base_id"))
+	knowledgeBaseID = strings.TrimSpace(c.Request.FormValue("knowledge_base_id"))
 	if knowledgeBaseID == "" {
 		writeError(
 			c,
@@ -312,9 +360,9 @@ func (h *Handler) handleCreateDocument(c *gin.Context) {
 		return
 	}
 
-	humanReview := c.Request.FormValue("human_review") == "true"
-	uploader := c.MustGet("current_user").(model.User)
-	document, err := h.documentService.CreateDocument(
+	humanReview = c.Request.FormValue("human_review") == "true"
+	uploader = c.MustGet("current_user").(model.User)
+	document, err = h.documentService.CreateDocument(
 		file,
 		header,
 		knowledgeBaseID,
@@ -343,12 +391,22 @@ func (h *Handler) handleCreateDocument(c *gin.Context) {
 }
 
 func (h *Handler) handleListDocuments(c *gin.Context) {
-	kb := strings.TrimSpace(c.Query("knowledge_base_id"))
-	tag := strings.TrimSpace(c.Query("tag"))
-	status := strings.TrimSpace(c.Query("status"))
-	page, pageSize := parsePageQueryWithDefault(c, 20, 200)
+	var (
+		kb           string
+		tag          string
+		status       string
+		page         int
+		pageSize     int
+		documentPage model.DocumentPage
+		err          error
+	)
 
-	documentPage, err := h.documentService.ListDocumentsPage(kb, tag, status, page, pageSize)
+	kb = strings.TrimSpace(c.Query("knowledge_base_id"))
+	tag = strings.TrimSpace(c.Query("tag"))
+	status = strings.TrimSpace(c.Query("status"))
+	page, pageSize = parsePageQueryWithDefault(c, 20, 200)
+
+	documentPage, err = h.documentService.ListDocumentsPage(kb, tag, status, page, pageSize)
 	if err != nil {
 		h.writeStoreError(c, err)
 		return
@@ -361,8 +419,14 @@ func (h *Handler) handleListDocuments(c *gin.Context) {
 }
 
 func (h *Handler) handleGetDocument(c *gin.Context) {
-	documentID := c.Param("document_id")
-	document, err := h.documentService.GetDocument(documentID)
+	var (
+		documentID string
+		document   model.Document
+		err        error
+	)
+
+	documentID = c.Param("document_id")
+	document, err = h.documentService.GetDocument(documentID)
 	if err != nil {
 		h.writeStoreError(c, err)
 		return
@@ -371,8 +435,14 @@ func (h *Handler) handleGetDocument(c *gin.Context) {
 }
 
 func (h *Handler) handleListDocumentTags(c *gin.Context) {
-	kb := strings.TrimSpace(c.Query("knowledge_base_id"))
-	items, err := h.documentService.ListDocumentTags(kb)
+	var (
+		kb    string
+		items []model.DocumentTagCount
+		err   error
+	)
+
+	kb = strings.TrimSpace(c.Query("knowledge_base_id"))
+	items, err = h.documentService.ListDocumentTags(kb)
 	if err != nil {
 		h.writeStoreError(c, err)
 		return
@@ -381,7 +451,9 @@ func (h *Handler) handleListDocumentTags(c *gin.Context) {
 }
 
 func (h *Handler) handleDeleteDocument(c *gin.Context) {
-	documentID := c.Param("document_id")
+	var documentID string
+
+	documentID = c.Param("document_id")
 	if err := h.documentService.DeleteDocument(documentID); err != nil {
 		h.writeStoreError(c, err)
 		return
@@ -390,9 +462,17 @@ func (h *Handler) handleDeleteDocument(c *gin.Context) {
 }
 
 func (h *Handler) handleGetChunks(c *gin.Context) {
-	documentID := c.Param("document_id")
-	page, pageSize := parsePageQuery(c)
-	chunkPage, err := h.documentService.ListChunksPage(documentID, page, pageSize)
+	var (
+		documentID string
+		page       int
+		pageSize   int
+		chunkPage  model.DocumentChunkPage
+		err        error
+	)
+
+	documentID = c.Param("document_id")
+	page, pageSize = parsePageQuery(c)
+	chunkPage, err = h.documentService.ListChunksPage(documentID, page, pageSize)
 	if err != nil {
 		h.writeStoreError(c, err)
 		return
@@ -408,8 +488,13 @@ func parsePageQuery(c *gin.Context) (int, int) {
 }
 
 func parsePageQueryWithDefault(c *gin.Context, defaultPageSize, maxPageSize int) (int, int) {
-	page := 1
-	pageSize := defaultPageSize
+	var (
+		page     int
+		pageSize int
+	)
+
+	page = 1
+	pageSize = defaultPageSize
 	if raw := strings.TrimSpace(c.Query("page")); raw != "" {
 		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
 			page = n
@@ -427,7 +512,9 @@ func parsePageQueryWithDefault(c *gin.Context, defaultPageSize, maxPageSize int)
 }
 
 func (h *Handler) handleRechunk(c *gin.Context) {
-	documentID := c.Param("document_id")
+	var documentID string
+
+	documentID = c.Param("document_id")
 	if err := h.documentService.RechunkDocument(documentID); err != nil {
 		h.writeStoreError(c, err)
 		return
@@ -436,7 +523,9 @@ func (h *Handler) handleRechunk(c *gin.Context) {
 }
 
 func (h *Handler) handleApproveChunks(c *gin.Context) {
-	documentID := c.Param("document_id")
+	var documentID string
+
+	documentID = c.Param("document_id")
 	if err := h.documentService.ApproveChunks(documentID); err != nil {
 		h.writeStoreError(c, err)
 		return
@@ -445,11 +534,16 @@ func (h *Handler) handleApproveChunks(c *gin.Context) {
 }
 
 func (h *Handler) handleEditChunk(c *gin.Context) {
-	documentID := c.Param("document_id")
-	chunkID := c.Param("chunk_id")
-	var body struct {
-		Text string `json:"text"`
-	}
+	var (
+		documentID string
+		chunkID    string
+		body       struct {
+			Text string `json:"text"`
+		}
+	)
+
+	documentID = c.Param("document_id")
+	chunkID = c.Param("chunk_id")
 	if err := json.NewDecoder(c.Request.Body).Decode(&body); err != nil {
 		writeError(c, 400, "validation_error", "invalid request body", nil)
 		return
@@ -462,8 +556,13 @@ func (h *Handler) handleEditChunk(c *gin.Context) {
 }
 
 func (h *Handler) handleRejectChunk(c *gin.Context) {
-	documentID := c.Param("document_id")
-	chunkID := c.Param("chunk_id")
+	var (
+		documentID string
+		chunkID    string
+	)
+
+	documentID = c.Param("document_id")
+	chunkID = c.Param("chunk_id")
 	if err := h.documentService.RejectChunk(documentID, chunkID); err != nil {
 		h.writeStoreError(c, err)
 		return
@@ -472,8 +571,13 @@ func (h *Handler) handleRejectChunk(c *gin.Context) {
 }
 
 func (h *Handler) handleRestoreChunk(c *gin.Context) {
-	documentID := c.Param("document_id")
-	chunkID := c.Param("chunk_id")
+	var (
+		documentID string
+		chunkID    string
+	)
+
+	documentID = c.Param("document_id")
+	chunkID = c.Param("chunk_id")
 	if err := h.documentService.RestoreChunk(documentID, chunkID); err != nil {
 		h.writeStoreError(c, err)
 		return
@@ -482,10 +586,14 @@ func (h *Handler) handleRestoreChunk(c *gin.Context) {
 }
 
 func (h *Handler) handleMergeChunks(c *gin.Context) {
-	documentID := c.Param("document_id")
-	var body struct {
-		ChunkIDs []string `json:"chunk_ids"`
-	}
+	var (
+		documentID string
+		body       struct {
+			ChunkIDs []string `json:"chunk_ids"`
+		}
+	)
+
+	documentID = c.Param("document_id")
 	if err := json.NewDecoder(c.Request.Body).Decode(&body); err != nil || len(body.ChunkIDs) < 2 {
 		writeError(c, 400, "validation_error", "chunk_ids must contain at least 2 IDs", nil)
 		return
@@ -498,7 +606,9 @@ func (h *Handler) handleMergeChunks(c *gin.Context) {
 }
 
 func (h *Handler) handleIndexDocument(c *gin.Context) {
-	documentID := c.Param("document_id")
+	var documentID string
+
+	documentID = c.Param("document_id")
 	if err := h.documentService.IndexDocument(documentID); err != nil {
 		h.writeStoreError(c, err)
 		return
@@ -507,7 +617,9 @@ func (h *Handler) handleIndexDocument(c *gin.Context) {
 }
 
 func (h *Handler) handleListKnowledgeBases(c *gin.Context) {
-	items := h.documentService.ListKnowledgeBases()
+	var items []model.KnowledgeBase
+
+	items = h.documentService.ListKnowledgeBases()
 	writeData(c, 200, map[string]any{
 		"items":         items,
 		"total":         len(items),

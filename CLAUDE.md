@@ -40,9 +40,11 @@ npm run build  # production build → frontend/target/dist/
 
 ## Doc formatting
 
-Prose and list items in doc files wrap at 100 characters per line; continuation lines under a list
-item are indented 2 spaces. Markdown table rows and shell/code blocks are exempt — they must stay
-on one physical line to remain valid and copy-pasteable, even when doing so exceeds the limit.
+Prose and list items in this file, and in the harness docs listed in the table below, wrap at 100
+characters per line; continuation lines under a list item are indented 2 spaces past the item's own
+marker. Markdown table rows and fenced code blocks (e.g. the `make` targets above, package-layout
+diagrams) are exempt — they must stay on one physical line, or as literal content, to remain valid
+and copy-pasteable, even when doing so exceeds the limit.
 
 ## Docs maintenance
 
@@ -61,6 +63,7 @@ on one physical line to remain valid and copy-pasteable, even when doing so exce
 
 @docs/Architecture.md
 @docs/Design.md
+@docs/Golang-Coding-Style.md
 
 - **IMPORTANT: Sync docs only when a change would make the existing docs misleading or wrong** —
   e.g. a behavior change, API contract change, config field, or architectural decision. This
