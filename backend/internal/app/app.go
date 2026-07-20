@@ -142,7 +142,7 @@ func initBlacklist(v *viper.Viper) (blacklist service.TokenBlacklist, err error)
 	)
 
 	if str = v.GetString("redis.dsn"); str != "" {
-		infra.L.Info("token blacklist: redis", zap.String("dsn", str))
+		infra.L.Info("token blacklist: redis", zap.String("dsn", infra.RedactDSN(str)))
 		if opts, err = redis.ParseURL(str); err != nil {
 			// infra.L.Fatal("parse redis dsn", zap.Error(err))
 			return nil, fmt.Errorf("parse redis dsn: %w", err)

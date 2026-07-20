@@ -84,7 +84,7 @@ func NewDocumentService(
 	}
 	if svc.taskQueue == nil {
 		if redisDSN := cfg.GetString("redis.dsn"); redisDSN != "" {
-			infra.L.Info("task queue: asynq", zap.String("redis", redisDSN))
+			infra.L.Info("task queue: asynq", zap.String("redis", infra.RedactDSN(redisDSN)))
 			tq, err := queue.NewAsynqQueue(redisDSN, 2, svc.processDocument)
 			if err != nil {
 				return nil, err
