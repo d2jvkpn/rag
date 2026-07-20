@@ -135,7 +135,7 @@ dense / hybrid 模式未配置 Embedder 时返回 500（NoopEmbedder 返回空�
 - 测试使用 `t.TempDir()` + `JSONStore`，不 mock 数据库
 - 测试不依赖任何外部服务（Redis、Milvus、embedding API）
 - `infra.L` 默认 `zap.NewNop()`，测试跳过 `infra.Init()` 不会 panic
-- `Init()` 仅在 `main.go` 中调用
+- `Init()` 仅在 `main.go` 中调用，`EnableFileLogging()` 同样仅在 `main.go` 中、紧邻服务启动前调用一次
 
 ## 可观测性约定
 
@@ -149,4 +149,4 @@ dense / hybrid 模式未配置 Embedder 时返回 500（NoopEmbedder 返回空�
 
 **全局 logger**
 
-`infra.L` 包级变量默认 `zap.NewNop()`，保证未调用 `Init()` 的测试不会 panic。正式运行时 `Init()` 写入 `backend/logs/app.log`（zap + lumberjack 轮转），同时保留控制台输出。
+`infra.L` 包级变量默认 `zap.NewNop()`，保证未调用 `Init()` 的测试不会 panic。正式运行分两阶段：`main.go` 中 `Init(config)` 只构建控制台 core 并赋给 `L`（项目初始化、依赖装配期间的日志——包括各 backend 选型的 Info 日志、mcp 的 auth 未配置 Warn、以及这期间任何 `Fatal` 退出——只打印到终端，不写入日志文件）；确认服务即将开始对外提供服务（`server.Serve` 之前，紧邻 "server starting"/"mcp server starting" 日志之前）再调用 `EnableFileLogging()`，把 `L` 升级为 `zapcore.NewTee(consoleCore, fileCore)`，此后（含运行期与优雅关闭）日志同时写入 `backend/logs/app.log` 与控制台。

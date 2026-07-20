@@ -186,19 +186,25 @@ Collection schema：
 
 ```
 backend/
-├── cmd/server/          # 启动入口，flag 解析，调用 app.Run()
+├── main.go              # 启动入口，flag 解析，调用 app.Run()
 ├── configs/             # 本地运行配置（local.yaml，不入库）
 ├── examples/            # 示例配置文件
 ├── scripts/             # 辅助脚本（如 PDF 解析 Python 脚本）
 ├── tests/               # 集成测试
 ├── pkg/
-│   └── rag/             # RAG 核心组件（导出包，供 mcp/ 模块复用，见下）
-│       ├── parser/      # 文件解析器（PDF / DOCX / PPTX / Markdown / 媒体）
-│       ├── embedder.go          # Embedder 接口
-│       ├── openai_embed.go      # OpenAI-compatible Embedding 实现
-│       ├── vectorstore.go       # VectorStore 接口
-│       ├── milvus.go            # Milvus VectorStore 实现
-│       └── llm.go               # LLM 接口（预留）
+│   ├── rag/             # RAG 核心组件（导出包，供 mcp/ 模块复用，见下）
+│   │   ├── parser/      # 文件解析器（PDF / DOCX / PPTX / Markdown / 媒体）
+│   │   ├── embedder.go          # Embedder 接口
+│   │   ├── openai_embed.go      # OpenAI-compatible Embedding 实现
+│   │   ├── vectorstore.go       # VectorStore 接口
+│   │   ├── milvus.go            # Milvus VectorStore 实现
+│   │   ├── query.go             # 共享的 Query 辅助函数（topK 截断、search_mode 默认值、
+│   │   │                        # embed-unless-bm25 调度），供 DocumentService.Query 和
+│   │   │                        # mcp 的 search 工具共用
+│   │   └── llm.go               # LLM 接口（预留）
+│   └── infra/           # zap + lumberjack 日志初始化 + 构建版本信息（导出包，供 mcp/ 模块复用）
+│       ├── logger.go
+│       └── version.go
 └── internal/
     ├── app/             # 应用初始化与依赖装配（wiring）
     │   ├── app.go       # 组装 Store/Queue/Service/Router，启动 HTTP Server
@@ -222,15 +228,16 @@ backend/
     │   └── asynq.go             # AsynqQueue（Redis + hibiken/asynq）
     ├── model/           # 数据模型定义（DB + 业务结构体）
     │   └── models.go
-    ├── infra/           # 基础设施工具
-    │   ├── logger.go            # zap + lumberjack 日志初始化
-    │   ├── middleware.go        # gin 通用中间件（请求日志等）
-    │   ├── spa.go               # SPA 静态文件托管
-    │   └── version.go           # 构建版本信息
+    ├── infra/           # 基础设施工具（logger.go 是 pkg/infra 的薄代理，见下）
+    │   ├── logger.go            # 转发到 pkg/infra.Init/Sync/EnableFileLogging，保持 infra.L 包级变量不变
+    │   ├── middleware.go        # gin 通用中间件（请求日志等，依赖 gin，不下沉到 pkg/infra）
+    │   └── spa.go               # SPA 静态文件托管（依赖 gin，backend 独有，不下沉到 pkg/infra）
     └── migrations/      # PostgreSQL 数据库迁移文件
 ```
 
-`pkg/rag` 从 `internal/rag` 迁出，是 Go 语言层面允许跨模块导入的前提（`internal/` 包只能被同一模块树内的代码导入）——`mcp/` 是独立 Go module，无法导入 `backend/internal/...`。
+`pkg/rag` 从 `internal/rag` 迁出，是 Go 语言层面允许跨模块导入的前提（`internal/` 包只能被同一模块树内的代码导入）——`mcp/` 是独立 Go module，无法导入 `backend/internal/...`。`pkg/infra` 同理：`internal/infra` 中不依赖 gin、可被 mcp 复用的部分（zap + lumberjack 日志初始化、构建版本变量）迁到 `pkg/infra`。日志初始化（`Init`/`Sync`/`EnableFileLogging`/`L`）保留 `internal/infra/logger.go` 薄代理，backend 内部现有的 `infra.L`/`infra.Init(...)` 调用点无需改动；版本变量（`GitBranch`/`GitCommit`/`CommitTime`）没有保留代理——`backend/main.go`、`internal/api/handler.go` 改为直接以 `pkginfra` 别名导入 `backend/pkg/infra` 并引用 `pkginfra.GitBranch` 等，`internal/infra/version.go` 已删除。`mcp/` 直接导入 `backend/pkg/infra`，不再维护自己的一份拷贝。`middleware.go`（gin 请求日志中间件）和 `spa.go`（gin SPA 托管）依赖 `gin-gonic/gin` 且是 backend 独有的关注点，mcp 不使用 gin，因此不下沉，仍留在 `internal/infra`。
+
+`GitBranch`/`GitCommit`/`CommitTime` 通过 `-ldflags -X` 在构建时注入（见 [后端架构与技术方案](./backend.md)）；`backend/Makefile` 的 `version_pkg` 指向 `github.com/d2jvkpn/rag/backend/pkg/infra`（`-X` 只能对变量的真正声明处生效）。`mcp/Makefile` 的 `build`/`run` 目标同样以相同的 `version_pkg` 注入这三个变量——两个模块各自独立编译，`-X` 分别写入各自二进制里那份 `pkg/infra` 的数据，互不影响。
 
 ## MCP 检索服务
 
@@ -252,31 +259,39 @@ BM25 / hybrid 检索。
   （name + description）；请求中 `collection` 不在该列表时直接拒绝，即使该 collection 在 Milvus 中真实存在。
 - **单一工具 `search`**：输入 `collection`（enum 为配置中的 collection 名）、`query`、`top_k`
   （默认 5，最大 50）、`search_mode`（`dense`/`bm25`/`hybrid`，默认 `dense`）、`document_ids`
-  （可选过滤）。校验逻辑与 `DocumentService.Query`（`docs/backend.md`）一致：dense/hybrid 模式先调用
-  Embedder 取 query 向量，bm25 跳过；再调用 `VectorStore.Search`。`collection` 的可选值及描述直接体现
-  在工具的 JSON Schema（`enum` + `description`），供 agent 发现，无需额外的 list-collections 工具。
+  （可选过滤）。校验与调度逻辑通过 `pkg/rag.Query`（`query.go`）与 `DocumentService.Query`
+  （`docs/backend.md`）共用同一份实现：dense/hybrid 模式先调用 Embedder 取 query 向量，bm25 跳过；
+  再调用 `VectorStore.Search`。`collection` 的可选值及描述直接体现在工具的 JSON Schema
+  （`enum` + `description`），供 agent 发现，无需额外的 list-collections 工具。启动时（`New()`）对
+  `milvus.collections` 中每个配置的 collection 调用一次 `ValidateKnowledgeBase`，配置有误（拼写错误、
+  Milvus 中不存在）时启动即失败，而不是等到第一次搜索请求才暴露；`LoadConfig` 同时校验
+  `milvus.collections` 内没有重复的 `name`。
 - **鉴权**：可选的共享密钥（`auth.api_key`），复用 `go-sdk` 自带的
   `github.com/modelcontextprotocol/go-sdk/auth` 包（`auth.RequireBearerToken` 中间件）包裹
   `StreamableHTTPHandler`。配置后请求须携带 `Authorization: Bearer <api_key>`，`token` 用
   `crypto/subtle.ConstantTimeCompare` 做常量时间比较；未配置时不鉴权，启动时打印一条 Warn 日志。没有
   用户身份或多租户概念，仅用于限制谁能调用这个只读检索接口。
-- **日志**：`internal/infra`（zap + lumberjack，与主后端 `backend/internal/infra` 同构，各自独立的包级
-  logger）。`--release` flag 控制日志级别（未开启为 debug，开启后为 info），未配置 `logging.path` 时
-  lumberjack 使用默认文件名。每次 `search` 工具调用在 `handleSearch` 返回前记一条日志（成功 Info /
-  失败 Warn），字段包括 `collection`、`query`、`search_mode`、`top_k`、`document_ids`（数量）、
-  `embedding_tokens`（embedder 上报的 token 消耗，仅当 embedder 实现 `rag.EmbedderWithUsage` 时非零）、
-  `embed_latency`、`milvus_latency`、`items`（返回条目数）、`latency`（总耗时），失败时追加 `error`。
+- **日志**：直接导入 `backend/pkg/infra`（zap + lumberjack），不维护独立的一份拷贝。`main.go` 中
+  `infra.Init(config)` 只构建控制台 core（`New()` 内部的 auth 未配置 Warn 等初始化期日志因此只打印到终端），
+  紧邻 "mcp server starting" 日志前调用 `infra.EnableFileLogging()` 升级为控制台+文件双写，此后（含每次
+  `search` 请求日志）同时写入两处。`--release` flag
+  控制日志级别（未开启为 debug，开启后为 info），未配置 `logging.path` 时 lumberjack 使用默认文件名。
+  每次 `search` 工具调用在 `handleSearch` 返回前记一条日志（成功 Info / 失败 Warn），字段包括
+  `collection`、`query`、`search_mode`、`top_k`、`document_ids`（数量）、`embedding_tokens`（embedder
+  上报的 token 消耗，仅当 embedder 实现 `rag.EmbedderWithUsage` 时非零）、`embed_latency`、
+  `milvus_latency`、`items`（返回条目数）、`latency`（总耗时），失败时追加 `error`。"mcp server starting"
+  日志同样包含 `git_branch`、`git_commit`、`commit_time` 三个字段（与 backend 的 "server starting" 一致），
+  由 `mcp/Makefile` 的 `-ldflags` 注入。
 
 ```
 mcp/
 ├── go.mod                       # module github.com/d2jvkpn/rag/mcp
-├── Makefile                     # check / build / run
-├── main.go                      # 启动入口：flag、监听、优雅关闭（与 backend/cmd/server 同构）
+├── Makefile                     # check / build / run（build/run 通过 -ldflags 注入版本字段，与 backend/Makefile 同构）
+├── main.go                      # 启动入口：flag、监听、优雅关闭（与 backend/main.go 同构）
 ├── configs/mcp.yaml             # 本地运行配置（不入库）
 ├── examples/mcp.yaml            # 示例配置
 ├── tests/                       # 手动 HTTP smoke-test 客户端（非 go test，go run 直接调用）
 └── internal/
-    ├── infra/logger.go           # zap + lumberjack 日志初始化（与 backend/internal/infra 同构）
     └── mcpserver/
         ├── config.go             # viper 配置加载与校验
         └── server.go              # mcp.Server 构建、search 工具注册与实现（含请求日志）
@@ -403,6 +418,6 @@ Loader 将 snake_case 字段规范化为 camelCase。
 | `logging.max_age_days` | `0` | 历史日志文件的最大保留天数 |
 | `logging.compress` | `false` | 是否 gzip 压缩切割后的历史日志文件 |
 
-未配置 `database.dsn` 时使用 JSONStore；未配置 `redis.dsn` 时使用 GoroutineQueue 和 MemoryBlacklist；`embedder.dim` 必填；未配置 `embedder.base_url` / `embedder.api_key`、`milvus.addr` 时对应外部组件回落 Noop 实现。日志输出到控制台和 `logging.path` 两处；控制台/文件日志级别由 `--release` 决定（未开启为 debug，开启后为 info），配置文件中没有单独的日志级别开关。
+未配置 `database.dsn` 时使用 JSONStore；未配置 `redis.dsn` 时使用 GoroutineQueue 和 MemoryBlacklist；`embedder.dim` 必填；未配置 `embedder.base_url` / `embedder.api_key`、`milvus.addr` 时对应外部组件回落 Noop 实现。日志输出到控制台和 `logging.path` 两处（服务启动运行后；初始化阶段仅输出到控制台，见"全局 logger"/"日志"小节）；控制台/文件日志级别由 `--release` 决定（未开启为 debug，开启后为 info），配置文件中没有单独的日志级别开关。
 
 后端运行目录存在 `target/ui/index.html` 时自动托管前端 SPA：`/ui` 为前端入口，`/` 和 `/index.html` 重定向到 `/ui/index.html`；`/api`、`/healthz`、`/static` 保持后端路由，其中 `/static` 服务 `{app.data_dir}/static`。静态资源缓存策略：`index.html` 和 `app.json` 返回 `Cache-Control: no-store`；`assets/` 下带 hash 的 JS/CSS 返回 `Cache-Control: public, max-age=31536000, immutable`；其余文件走默认协商缓存（ETag/Last-Modified）。

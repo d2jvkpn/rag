@@ -36,7 +36,6 @@ type SearchResult struct {
 	FileSHA256      string   `json:"file_sha256,omitempty"`
 	Text            string   `json:"text"`
 	Score           float32  `json:"score"`
-
 }
 
 // SearchMode selects which retrieval method to use.

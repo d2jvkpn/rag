@@ -16,6 +16,7 @@ import (
 	"github.com/d2jvkpn/rag/backend/internal/model"
 	"github.com/d2jvkpn/rag/backend/internal/repository"
 	"github.com/d2jvkpn/rag/backend/internal/service"
+	pkginfra "github.com/d2jvkpn/rag/backend/pkg/infra"
 )
 
 type Handler struct {
@@ -71,9 +72,9 @@ func (h *Handler) Routes() http.Handler {
 
 	root.GET("/version", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"git_branch":  infra.GitBranch,
-			"git_commit":  infra.GitCommit,
-			"commit_time": infra.CommitTime,
+			"git_branch":  pkginfra.GitBranch,
+			"git_commit":  pkginfra.GitCommit,
+			"commit_time": pkginfra.CommitTime,
 		})
 	})
 

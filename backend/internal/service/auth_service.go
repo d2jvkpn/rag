@@ -21,7 +21,6 @@ var ErrCannotChangeOwnStatus = errors.New("cannot change your own status")
 var ErrUsernameExists = errors.New("username already exists")
 var ErrCannotResetOwnPassword = errors.New("cannot reset your own password")
 
-
 type claims struct {
 	UserID string `json:"user_id"`
 	jwt.RegisteredClaims
@@ -352,4 +351,3 @@ func ensureUserActive(user model.User) error {
 	}
 	return fmt.Errorf("user status %q is not allowed", user.Status)
 }
-

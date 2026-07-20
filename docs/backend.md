@@ -124,7 +124,9 @@
 
 ## 版本注入约定
 
-后端在 `internal/infra/version.go` 声明三个包级变量，默认值为 `"unknown"`：
+后端在 `pkg/infra/version.go` 声明三个包级变量，默认值为 `"unknown"`；`backend/main.go` 与
+`internal/api/handler.go` 以 `pkginfra` 别名直接导入 `backend/pkg/infra` 并引用
+`pkginfra.GitBranch`/`GitCommit`/`CommitTime`，没有保留 `internal/infra` 代理：
 
 ```go
 var (
@@ -142,8 +144,9 @@ ldflags := -X '$(version_pkg).GitBranch=$(git_branch)' \
            -X '$(version_pkg).CommitTime=$(commit_time)'
 ```
 
-- `backend/Makefile` 的 `build` 和 `run` 目标均通过 `-ldflags` 注入版本字段
-- 直接使用 `go run ./cmd/server`（不带 `-ldflags`）时变量保持 `"unknown"`
+- `backend/Makefile` 的 `build` 和 `run` 目标均通过 `-ldflags` 注入版本字段，`version_pkg` 指向
+  `github.com/d2jvkpn/rag/backend/pkg/infra`（`-X` 只能对变量的真正声明处生效）
+- 直接使用 `go run .`（不带 `-ldflags`）时变量保持 `"unknown"`
 - `GET /version` 接口直接读取这三个变量返回，无需登录
 - 服务启动日志也会输出这三个字段
 
@@ -157,10 +160,14 @@ ldflags := -X '$(version_pkg).GitBranch=$(git_branch)' \
 约定：
 
 - 日志文件写入 `backend/logs/app.log`
-- 同时保留控制台输出和文件输出
+- 服务运行期间同时保留控制台输出和文件输出；`main.go` 中项目初始化到服务开始监听前的这段日志（依赖装配的
+  backend 选型 Info 日志、初始化失败的 Fatal 等）只打印到控制台，不写入日志文件，见下方 `Init()` /
+  `EnableFileLogging()` 说明
 - worker 和 API 进程使用统一日志格式
 - 不自行实现日志切片和归档逻辑，直接复用 `lumberjack`
-- 全局 logger `infra.L` 默认 `zap.NewNop()`；`infra.Init()` 只在 `main.go` 中调用
+- 全局 logger `infra.L` 默认 `zap.NewNop()`；`infra.Init(config)` 只在 `main.go` 中调用，只构建控制台 core；
+  `infra.EnableFileLogging()` 同样只在 `main.go` 中调用，紧邻 "server starting" 日志前执行一次，把 `L`
+  升级为控制台+文件双写
 
 ### 请求日志中间件
 
@@ -403,12 +410,13 @@ backend/
 ```text
 backend/
   Makefile
-  cmd/server/                # 入口
+  main.go                    # 入口
   examples/local.yaml         # 示例配置
   data/                      # 文档/快照（gitignore）
   logs/                      # 运行日志（gitignore）
   pkg/
     rag/                     # Embedder、VectorStore (Milvus)、parser；导出包，供 mcp/ 模块复用
+    infra/                   # 全局 logger、构建版本变量；导出包，供 mcp/ 模块复用
   internal/
     migrations/sql/         # numbered up/down SQL
     api/                     # gin handler、middleware、response

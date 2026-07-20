@@ -13,8 +13,8 @@ go build ./...                          # compile check
 go test ./...                           # all tests
 go test ./internal/api/...              # single package
 go test -run TestDocumentLifecycle ./internal/api/  # single test
-go run cmd/server/main.go               # dev server (defaults to configs/local.yaml)
-go run cmd/server/main.go --addr :9000  # override port
+go run .                                # dev server (defaults to configs/local.yaml)
+go run . --addr :9000                   # override port
 ```
 
 ### MCP retrieval server

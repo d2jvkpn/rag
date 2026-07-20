@@ -3,7 +3,7 @@
 git_branch := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
 git_commit := $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 commit_time := $(shell git log -1 --format=%cI 2>/dev/null || echo unknown)
-version_pkg := github.com/d2jvkpn/rag/backend/internal/infra
+version_pkg := github.com/d2jvkpn/rag/backend/pkg/infra
 ldflags := -X '$(version_pkg).GitBranch=$(git_branch)' -X '$(version_pkg).GitCommit=$(git_commit)' -X '$(version_pkg).CommitTime=$(commit_time)'
 
 check:
@@ -11,7 +11,7 @@ check:
 	go test ./...
 
 build:
-	go build -ldflags "$(ldflags)" -o target/server ./cmd/server
+	go build -ldflags "$(ldflags)" -o target/server .
 
 run:
-	go run -ldflags "$(ldflags)" ./cmd/server/ --config=configs/local.yaml --addr=:3061
+	go run -ldflags "$(ldflags)" . --config=configs/local.yaml --addr=:3061

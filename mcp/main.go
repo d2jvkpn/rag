@@ -14,7 +14,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/d2jvkpn/rag/mcp/internal/infra"
+	"github.com/d2jvkpn/rag/backend/pkg/infra"
 	"github.com/d2jvkpn/rag/mcp/internal/mcpserver"
 )
 
@@ -47,14 +47,12 @@ func main() {
 	defer infra.Sync()
 
 	if listener, err = net.Listen("tcp", addr); err != nil {
-		infra.L.Error("listen tcp", zap.String("addr", addr), zap.Error(err))
-		os.Exit(1)
+		infra.L.Fatal("listen tcp", zap.String("addr", addr), zap.Error(err))
 	}
 
 	application, err := mcpserver.New(config)
 	if err != nil {
-		infra.L.Error("init mcp server", zap.Error(err))
-		os.Exit(1)
+		infra.L.Fatal("init mcp server", zap.Error(err))
 	}
 
 	server = &http.Server{
@@ -76,7 +74,16 @@ func main() {
 		}
 	}()
 
-	infra.L.Info("mcp server starting", zap.Bool("release", release), zap.String("addr", addr), zap.String("config", configPath))
+	infra.EnableFileLogging()
+	infra.L.Info(
+		"mcp server starting",
+		zap.Bool("release", release),
+		zap.String("addr", addr),
+		zap.String("config", configPath),
+		zap.String("git_branch", infra.GitBranch),
+		zap.String("git_commit", infra.GitCommit),
+		zap.String("commit_time", infra.CommitTime),
+	)
 	if err = server.Serve(listener); err != nil && err != http.ErrServerClosed {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		if shutdownErr := application.Shutdown(shutdownCtx); shutdownErr != nil {

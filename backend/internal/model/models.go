@@ -7,26 +7,26 @@ type User struct {
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 	Username     string     `json:"username"`
-	PasswordHash string     `json:"password_hash"`        // bcrypt hash; never exposed in API responses
-	Status       string     `json:"status"`               // active | disabled
+	PasswordHash string     `json:"password_hash"` // bcrypt hash; never exposed in API responses
+	Status       string     `json:"status"`        // active | disabled
 	LastLoginAt  *time.Time `json:"last_login_at,omitempty"`
 	TOTPSecret   string     `json:"totp_secret,omitempty"` // base32-encoded TOTP seed; omitted when TOTP is not enabled
 	TOTPEnabled  bool       `json:"totp_enabled"`
 	// nil = derive permissions from config; non-nil (including empty) = DB-driven
-	Permissions  []string   `json:"permissions"`
+	Permissions []string `json:"permissions"`
 }
 
 type KnowledgeBase struct {
 	KnowledgeBaseID string    `json:"knowledge_base_id"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
-	CreatedBy       string    `json:"created_by,omitempty"` // username of the creator
-	Dim             int       `json:"dim"`                  // embedding vector dimension; must match the configured embedder
-	Model           string    `json:"model"`                // embedding model name used for this collection
-	Analyzer        string    `json:"analyzer"`             // BM25 text analyzer (e.g. "chinese")
-	ChunkSize       int       `json:"chunk_size"`           // target token count per chunk
-	ChunkOverlap    int       `json:"chunk_overlap"`        // overlap token count between adjacent chunks
-	MinChunks       int       `json:"min_chunks"`           // minimum chunk count before merging the whole document into one chunk
+	CreatedBy       string    `json:"created_by,omitempty"`     // username of the creator
+	Dim             int       `json:"dim"`                      // embedding vector dimension; must match the configured embedder
+	Model           string    `json:"model"`                    // embedding model name used for this collection
+	Analyzer        string    `json:"analyzer"`                 // BM25 text analyzer (e.g. "chinese")
+	ChunkSize       int       `json:"chunk_size"`               // target token count per chunk
+	ChunkOverlap    int       `json:"chunk_overlap"`            // overlap token count between adjacent chunks
+	MinChunks       int       `json:"min_chunks"`               // minimum chunk count before merging the whole document into one chunk
 	DocumentCount   int       `json:"document_count,omitempty"` // denormalized count; computed at query time, not stored
 }
 
@@ -68,15 +68,15 @@ type DocumentPage struct {
 }
 
 type ResourceRef struct {
-	RefID       string `json:"ref_id"`                  // stable identifier within the document (e.g. "img-3")
-	RefType     string `json:"ref_type"`                // image | table | link
-	Label       string `json:"label,omitempty"`         // alt text or short description
-	Caption     string `json:"caption,omitempty"`       // figure/table caption extracted from the source
-	Page        int    `json:"page,omitempty"`          // 1-based page number where the resource appears
-	AnchorText  string `json:"anchor_text,omitempty"`   // surrounding inline text that references this resource
+	RefID       string `json:"ref_id"`                 // stable identifier within the document (e.g. "img-3")
+	RefType     string `json:"ref_type"`               // image | table | link
+	Label       string `json:"label,omitempty"`        // alt text or short description
+	Caption     string `json:"caption,omitempty"`      // figure/table caption extracted from the source
+	Page        int    `json:"page,omitempty"`         // 1-based page number where the resource appears
+	AnchorText  string `json:"anchor_text,omitempty"`  // surrounding inline text that references this resource
 	StoragePath string `json:"storage_path,omitempty"` // relative path under the static directory for local assets
-	URL         string `json:"url,omitempty"`           // original URL for external resources
-	IsExternal  bool   `json:"is_external,omitempty"`   // true when the resource is hosted externally
+	URL         string `json:"url,omitempty"`          // original URL for external resources
+	IsExternal  bool   `json:"is_external,omitempty"`  // true when the resource is hosted externally
 }
 
 type DocumentChunk struct {
@@ -84,19 +84,19 @@ type DocumentChunk struct {
 	CreatedAt      time.Time     `json:"created_at"`
 	UpdatedAt      time.Time     `json:"updated_at"`
 	DocumentID     string        `json:"document_id"`
-	ChunkIndex     int           `json:"chunk_index"`            // 0-based position within the document's current chunk list
-	SectionTitle   string        `json:"section_title,omitempty"` // nearest heading above this chunk, if any
-	PageStart      int           `json:"page_start,omitempty"`   // first page covered by this chunk (1-based)
-	PageEnd        int           `json:"page_end,omitempty"`     // last page covered by this chunk (1-based)
-	Text           string        `json:"text"`                   // raw chunk text as stored and indexed
-	NormalizedText string        `json:"normalized_text"`        // lightly cleaned text used for display during review
-	Status         string        `json:"status"`                 // draft | approved | rejected
-	ChunkVersion   int           `json:"chunk_version"`          // matches Document.ChunkVersion; stale chunks have a lower value
-	Source         string        `json:"source"`                 // auto | manual — manual when the chunk was edited or created by a reviewer
-	IsCurrent      bool          `json:"is_current"`             // false for rejected chunks and chunks superseded by a rechunk
+	ChunkIndex     int           `json:"chunk_index"`               // 0-based position within the document's current chunk list
+	SectionTitle   string        `json:"section_title,omitempty"`   // nearest heading above this chunk, if any
+	PageStart      int           `json:"page_start,omitempty"`      // first page covered by this chunk (1-based)
+	PageEnd        int           `json:"page_end,omitempty"`        // last page covered by this chunk (1-based)
+	Text           string        `json:"text"`                      // raw chunk text as stored and indexed
+	NormalizedText string        `json:"normalized_text"`           // lightly cleaned text used for display during review
+	Status         string        `json:"status"`                    // draft | approved | rejected
+	ChunkVersion   int           `json:"chunk_version"`             // matches Document.ChunkVersion; stale chunks have a lower value
+	Source         string        `json:"source"`                    // auto | manual — manual when the chunk was edited or created by a reviewer
+	IsCurrent      bool          `json:"is_current"`                // false for rejected chunks and chunks superseded by a rechunk
 	EmbeddingModel string        `json:"embedding_model,omitempty"` // model name written after embedding; empty until indexed
-	Embedding      []float32     `json:"embedding,omitempty"`    // vector; present in snapshots, omitted from API responses
-	ResourceRefs   []ResourceRef `json:"resource_refs"`          // structured references to images, tables, and links within this chunk
+	Embedding      []float32     `json:"embedding,omitempty"`       // vector; present in snapshots, omitted from API responses
+	ResourceRefs   []ResourceRef `json:"resource_refs"`             // structured references to images, tables, and links within this chunk
 }
 
 type DocumentChunkPage struct {
@@ -112,9 +112,9 @@ type DocumentChunkPage struct {
 type ChunkSnapshot struct {
 	DocumentID      string          `json:"document_id"`
 	KnowledgeBaseID string          `json:"knowledge_base_id"`
-	ChunkVersion    int             `json:"chunk_version"`    // version of the chunk set captured in this snapshot
-	Filename        string          `json:"filename"`         // original filename of the source document
-	FileSHA256      string          `json:"file_sha256"`      // SHA-256 of the source file; verifies which file version produced these chunks
+	ChunkVersion    int             `json:"chunk_version"`     // version of the chunk set captured in this snapshot
+	Filename        string          `json:"filename"`          // original filename of the source document
+	FileSHA256      string          `json:"file_sha256"`       // SHA-256 of the source file; verifies which file version produced these chunks
 	ChunkConfigHash string          `json:"chunk_config_hash"` // hash of chunking parameters; detects config drift between snapshot and current settings
 	CreatedAt       time.Time       `json:"created_at"`
 	Chunks          []DocumentChunk `json:"chunks"` // full chunk list including embeddings; self-contained for offline audit

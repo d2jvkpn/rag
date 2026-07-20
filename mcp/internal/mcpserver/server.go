@@ -14,8 +14,8 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 
+	"github.com/d2jvkpn/rag/backend/pkg/infra"
 	"github.com/d2jvkpn/rag/backend/pkg/rag"
-	"github.com/d2jvkpn/rag/mcp/internal/infra"
 )
 
 // Server is a standalone MCP server exposing semantic/BM25/hybrid search over
@@ -50,6 +50,12 @@ func New(v *viper.Viper) (*Server, error) {
 	collections := make(map[string]string)
 	for _, c := range Collections(v) {
 		collections[c.Name] = c.Description
+	}
+	for name := range collections {
+		if err := milvus.ValidateKnowledgeBase(name); err != nil {
+			_ = milvus.Close(context.Background())
+			return nil, fmt.Errorf("configured collection %q: %w", name, err)
+		}
 	}
 
 	s, err := newServer(embedder, milvus, collections, v.GetString("mcp.description"))
@@ -171,24 +177,13 @@ func (s *Server) handleSearch(
 ) (result *mcp.CallToolResult, out SearchOutput, err error) {
 	start := time.Now()
 
-	topK := in.TopK
-	if topK <= 0 {
-		topK = 5
-	}
-	if topK > 50 {
-		topK = 50
-	}
-
+	topK := rag.ClampTopK(in.TopK)
 	searchMode := in.SearchMode
 	if searchMode == "" {
 		searchMode = rag.SearchModeDense
 	}
 
-	var (
-		embeddingTokens int
-		embedLatency    time.Duration
-		milvusLatency   time.Duration
-	)
+	var stats rag.QueryStats
 	defer func() {
 		fields := []zap.Field{
 			zap.String("collection", in.Collection),
@@ -196,9 +191,9 @@ func (s *Server) handleSearch(
 			zap.String("search_mode", searchMode),
 			zap.Int("top_k", topK),
 			zap.Int("document_ids", len(in.DocumentIDs)),
-			zap.Int("embedding_tokens", embeddingTokens),
-			zap.Duration("embed_latency", embedLatency.Truncate(time.Millisecond)),
-			zap.Duration("milvus_latency", milvusLatency.Truncate(time.Millisecond)),
+			zap.Int("embedding_tokens", stats.EmbeddingTokens),
+			zap.Duration("embed_latency", stats.EmbedLatency.Truncate(time.Millisecond)),
+			zap.Duration("milvus_latency", stats.SearchLatency.Truncate(time.Millisecond)),
 			zap.Int("items", len(out.Items)),
 			zap.Duration("latency", time.Since(start).Truncate(time.Millisecond)),
 		}
@@ -216,38 +211,14 @@ func (s *Server) handleSearch(
 		return nil, SearchOutput{}, fmt.Errorf("query is required")
 	}
 
-	req := rag.SearchRequest{
+	items, stats, err := rag.Query(ctx, s.embedder, s.vectorStore, rag.QueryParams{
 		KnowledgeBaseID: in.Collection,
 		Query:           in.Query,
 		TopK:            topK,
-		DocumentIDs:     in.DocumentIDs,
 		Mode:            searchMode,
-	}
-
-	if searchMode != rag.SearchModeBM25 {
-		embedStart := time.Now()
-		var embeddings [][]float32
-		if ue, ok := s.embedder.(rag.EmbedderWithUsage); ok {
-			embeddings, embeddingTokens, err = ue.EmbedWithUsage(ctx, []string{in.Query})
-		} else {
-			embeddings, err = s.embedder.Embed(ctx, []string{in.Query})
-		}
-		embedLatency = time.Since(embedStart)
-		if err != nil {
-			return nil, SearchOutput{}, fmt.Errorf("embed query: %w", err)
-		}
-		if len(embeddings) == 0 || len(embeddings[0]) == 0 {
-			err = fmt.Errorf("embedder returned no vector for query")
-			return nil, SearchOutput{}, err
-		}
-		req.Embedding = embeddings[0]
-	}
-
-	milvusStart := time.Now()
-	items, searchErr := s.vectorStore.Search(ctx, req)
-	milvusLatency = time.Since(milvusStart)
-	if searchErr != nil {
-		err = fmt.Errorf("vector search: %w", searchErr)
+		DocumentIDs:     in.DocumentIDs,
+	})
+	if err != nil {
 		return nil, SearchOutput{}, err
 	}
 

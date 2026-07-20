@@ -25,7 +25,7 @@ cd backend && pip install -r scripts/parse_pdf.pip.txt
 ```bash
 # terminal 1: backend (listens on :3061)
 cd backend
-go run ./cmd/server --config examples/local.yaml
+go run . --config examples/local.yaml
 
 # terminal 2: frontend dev server
 cd frontend

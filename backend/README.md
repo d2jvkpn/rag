@@ -13,7 +13,7 @@
 
 ```bash
 cd backend
-go run ./cmd/server --config examples/local.yaml
+go run . --config examples/local.yaml
 ```
 
 可用命令行参数：

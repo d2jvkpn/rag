@@ -51,10 +51,15 @@ func LoadConfig(path string) (config *viper.Viper) {
 	if len(collections) == 0 {
 		log.Fatal("milvus.collections must not be empty")
 	}
+	seen := make(map[string]bool, len(collections))
 	for _, c := range collections {
 		if c.Name == "" {
 			log.Fatal("milvus.collections entries must have a non-empty name")
 		}
+		if seen[c.Name] {
+			log.Fatalf("milvus.collections has a duplicate name %q", c.Name)
+		}
+		seen[c.Name] = true
 	}
 
 	return config

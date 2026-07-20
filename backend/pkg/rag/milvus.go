@@ -16,17 +16,17 @@ import (
 // searchOutputFields lists the Milvus fields returned on every search.
 // caller use without a second lookup.
 var searchOutputFields = []string{
-	"document_id",      // parent document UUID
-	"filename",         // original upload filename
-	"file_sha256",      // SHA-256 of the source file
+	"document_id",       // parent document UUID
+	"filename",          // original upload filename
+	"file_sha256",       // SHA-256 of the source file
 	"knowledge_base_id", // collection the chunk belongs to
 
-	"chunk_id",         // uuidv7 identifying this chunk
-	"chunk_index",      // position of this chunk within the document
-	"section_title",    // heading under which the chunk falls
-	"page_start",       // first page number of the chunk (1-based)
-	"page_end",         // last page number of the chunk (inclusive)
-	"tags",             // user-supplied labels (array, max 20)
+	"chunk_id",      // uuidv7 identifying this chunk
+	"chunk_index",   // position of this chunk within the document
+	"section_title", // heading under which the chunk falls
+	"page_start",    // first page number of the chunk (1-based)
+	"page_end",      // last page number of the chunk (inclusive)
+	"tags",          // user-supplied labels (array, max 20)
 
 	"text", // raw chunk content used for display and BM25
 }
@@ -166,7 +166,7 @@ func (m *Milvus) DeleteByDocument(ctx context.Context, knowledgeBaseID, document
 	}
 	_, err := m.client.Delete(ctx,
 		milvusclient.NewDeleteOption(knowledgeBaseID).
-		WithExpr(fmt.Sprintf(`document_id == "%s"`, escapeFilterString(documentID))),
+			WithExpr(fmt.Sprintf(`document_id == "%s"`, escapeFilterString(documentID))),
 	)
 	return err
 }
@@ -345,8 +345,8 @@ func parseResults(rs milvusclient.ResultSet) []SearchResult {
 			Tags:            colStrArray(rs, "tags", i),
 			FileSHA256:      colStr(rs, "file_sha256", i),
 
-			Text:            colStr(rs, "text", i),
-			Score:           score,
+			Text:  colStr(rs, "text", i),
+			Score: score,
 		})
 	}
 	return results

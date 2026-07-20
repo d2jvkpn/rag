@@ -13,9 +13,9 @@ import (
 
 	"github.com/d2jvkpn/rag/backend/internal/api"
 	"github.com/d2jvkpn/rag/backend/internal/infra"
-	"github.com/d2jvkpn/rag/backend/pkg/rag"
 	"github.com/d2jvkpn/rag/backend/internal/repository"
 	"github.com/d2jvkpn/rag/backend/internal/service"
+	"github.com/d2jvkpn/rag/backend/pkg/rag"
 )
 
 type App struct {
@@ -137,7 +137,6 @@ func initStore(v *viper.Viper, account repository.InitAccount) (repository.Store
 
 	return repository.NewJSONStore(str, account)
 }
-
 
 func initBlacklist(v *viper.Viper) (blacklist service.TokenBlacklist, err error) {
 	var (
