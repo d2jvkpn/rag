@@ -438,7 +438,7 @@ backend/
 - `backend/configs/`: 后端配置文件目录
 - `backend/data/`: 后端数据目录，包含文档原文件、chunk 快照、派生资源等
 - `backend/logs/`: 后端日志目录
-- `backend/target/`: 后端编译产物目录
+- `backend/target/`: 服务端和 SPA 构建产物目录；SPA 按 `spa/{route}/` 分目录存放
 - `backend/internal/migrations/sql/`: SQL migration 文件目录
 
 当前实际目录结构：
@@ -450,6 +450,8 @@ backend/
   examples/local.yaml         # 示例配置
   data/                      # 文档/快照（gitignore）
   logs/                      # 运行日志（gitignore）
+  target/                    # 构建产物（gitignore）
+    spa/{route}/             # 每个目录一个 SPA；目录名映射 HTTP 路由
   pkg/
     rag/                     # Embedder、VectorStore (Milvus)、parser；导出包，供 mcp/ 模块复用
     infra/                   # logger、版本变量、Gin SPA 托管；导出包，可供外部模块复用

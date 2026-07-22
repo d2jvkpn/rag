@@ -155,6 +155,8 @@ data/documents/{yyyy}/{mm}/{dd}/{yyyy-mm-dd}_{document_id}/chunks-vN.json
 
 ## API 响应规范
 
+业务 API 使用以下统一结构；`/healthz`、`/version`、静态文件和 SPA 响应不包裹 `data`。
+
 ```jsonc
 // 成功
 {"data": <payload>}

@@ -24,7 +24,7 @@
 
 - 静态资源访问路径，不需要登录
 - 文件根目录为 `{app.data_dir}/static`
-- 若配置了 `http.base_path`，该前缀同样作用于 `/healthz`、`/static`、`/ui` 和所有 `/api` 路由
+- 若配置了 `http.base_path`，该前缀同样作用于 `/healthz`、`/version`、`/static`、所有 SPA 和 `/api` 路由
 
 ### `GET /<spa>/*filepath`
 
@@ -39,7 +39,7 @@
 ### `GET /version`
 
 - 版本信息接口，不需要登录
-- 响应字段由构建时 ldflags（后端）和 vite `define`（前端）注入，开发模式下均为 `"unknown"`
+- 响应字段由后端构建时的 ldflags 注入；直接 `go run .` 时为 `"unknown"`
 - 响应：
 
 ```json
@@ -52,7 +52,7 @@
 
 ## 统一响应格式
 
-成功返回统一使用：
+业务 API 成功返回统一使用以下结构；`/healthz`、`/version`、静态文件和 SPA 响应除外：
 
 ```json
 {
@@ -223,7 +223,7 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 - `file`：必填
 - `knowledge_base_id`：必填，须匹配配置中的 collection
 - `title`：可选
-- `tags`：可选，可重复字段
+- `tags`：可选，可重复字段；服务端去除首尾空白、转小写并去重，最多 20 个，每项最长 64 字符
 - `human_review`：可选；`true` 时切分完成后进入 `review_pending`，需人工审核通过后才会 embedding 和入库；`false` 或省略时自动将切分结果标记为
   `approved` 并立即进入 embedding / 入库
 
