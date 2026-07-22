@@ -532,17 +532,25 @@ func (m *Milvus) ensureCollection(ctx context.Context, cfg CollectionConfig) err
 		}
 		schemaOK := hasSparse && hasTags && hasFileSHA256 &&
 			(existingAnalyzer == "" || analyzerType(existingAnalyzer) == analyzer)
-		if schemaOK {
-			task, err := m.client.LoadCollection(ctx, milvusclient.NewLoadCollectionOption(name))
-			if err != nil {
-				return fmt.Errorf("milvus load_collection %q: %w", name, err)
-			}
-			return task.Await(ctx)
+		if !schemaOK {
+			// Schema mismatch (missing sparse/tags/file_sha256, or a different
+			// analyzer) used to be "fixed" by silently dropping and recreating
+			// the collection, destroying every vector in it. Fail loudly
+			// instead and require an operator to explicitly drop (and
+			// re-upsert from the chunk snapshots, see docs/Architecture.md)
+			// before retrying.
+			return fmt.Errorf(
+				"milvus collection %q schema is out of date (requires sparse+tags+file_sha256 fields "+
+					"and analyzer=%q); auto drop-and-recreate is disabled to avoid silent data loss — "+
+					"drop the collection manually and re-upsert from chunk snapshots, then retry",
+				name, analyzer,
+			)
 		}
-		// Schema mismatch (missing sparse or different analyzer) — drop and recreate
-		if err := m.client.DropCollection(ctx, milvusclient.NewDropCollectionOption(name)); err != nil {
-			return fmt.Errorf("milvus drop_collection %q: %w", name, err)
+		task, err := m.client.LoadCollection(ctx, milvusclient.NewLoadCollectionOption(name))
+		if err != nil {
+			return fmt.Errorf("milvus load_collection %q: %w", name, err)
 		}
+		return task.Await(ctx)
 	}
 
 	textField = entity.NewField().

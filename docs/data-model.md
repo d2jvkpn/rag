@@ -13,10 +13,11 @@
 字段：
 
 - `document_id`：文档唯一标识，uuidv7 主键
+- `created_at`、`updated_at`：创建时间和最近更新时间
 - `knowledge_base_id`：所属知识库，关联 `knowledge_bases.knowledge_base_id`
 - `filename`：原始上传文件名（经 sanitize 处理，空格替换为下划线）
 - `title`：文档标题，未填时为空字符串
-- `tags`：文档标签，`TEXT[]`，最多 20 个，每个最长 64 字符
+- `tags`：文档标签，`TEXT[]`；上传时去除首尾空白、转小写并去重，最多 20 个，每个最长 64 字符
 - `file_type`：文件类型，`pdf / docx / pptx / md`，由上传文件扩展名决定
 - `storage_path`：原始上传文件在 `backend/data` 下的本地路径
 - `chunk_snapshot_path`：当前生效的 chunk JSON 快照路径，为空表示尚未生成
@@ -46,6 +47,7 @@
 字段：
 
 - `chunk_id`：chunk 唯一标识，uuidv7 主键
+- `created_at`、`updated_at`：创建时间和最近更新时间
 - `document_id`：所属文档，关联 `documents.document_id`
 - `chunk_index`：chunk 在文档中的顺序位置（0-based）
 - `section_title`：chunk 所属章节标题，未识别时为空
@@ -121,6 +123,7 @@
 字段：
 
 - `user_id`：用户唯一标识，uuidv7 主键
+- `created_at`、`updated_at`：创建时间和最近更新时间
 - `username`：登录用户名，唯一约束
 - `password_hash`：bcrypt（`golang.org/x/crypto/bcrypt`，`DefaultCost`）
 - `status`：运行时状态，`active / disabled`
@@ -148,13 +151,15 @@
 知识库元数据是真源，用于校验 `knowledge_base_id`、展示 UI 下拉项，并保存 collection 创建参数。字段：
 
 - `knowledge_base_id`：主键，等于 Milvus collection 名
+- `created_at`、`updated_at`：创建时间和最近更新时间
 - `dim`：向量维度，来自创建时的 `embedder.dim`
 - `model`：embedding 模型名，来自创建时的 `embedder.model`
 - `analyzer`：BM25 分词器，`chinese / english / standard`
 - `chunk_size`：切分目标 token 数
 - `chunk_overlap`：相邻 chunk 重叠 token 数
-- `min_chunks`：文档切分后允许的最少 chunk 数，低于此值时触发告警或拒绝入库
+- `min_chunks`：文档切分后的最少 chunk 数；结果少于此值时将整篇合并为单一 chunk
 - `created_by`：创建该知识库的用户名（username），非外键，冗余存储便于展示，可为空
+- `document_count`：API 查询时计算的文档数量，不落库
 
 ## Milvus Schema
 
@@ -179,5 +184,6 @@
 
 - 删除按 `knowledge_base_id + document_id` 条件执行
 - Milvus 存向量和检索元数据，chunk 全文也存在 Milvus（用于 BM25 / 检索结果展示）；关系库保留完整原文，是真源
-- 创建知识库时 `ensureCollection` 检测 schema：发现 `sparse`、`tags`、`file_sha256` 缺失或 `analyzer` 不匹配会**drop +
-  recreate collection**（数据丢失，需要重新入库）
+- 创建或加载知识库时，`ensureCollection` 检测 `sparse`、`tags`、`file_sha256` 和 `analyzer`
+- schema 不匹配时直接返回错误，不会自动 drop + recreate；运维需人工确认后删除 collection，并从对应
+  `chunks-vN.json` 快照重新 upsert

@@ -6,7 +6,7 @@ PGID ?= 1000
 git_branch := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
 git_commit := $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 commit_time := $(shell git log -1 --format=%cI 2>/dev/null || echo unknown)
-version_pkg := github.com/d2jvkpn/rag/backend/internal/infra
+version_pkg := github.com/d2jvkpn/rag/backend/pkg/infra
 
 backend_check:
 	$(MAKE) -C backend check

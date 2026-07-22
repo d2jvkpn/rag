@@ -168,8 +168,8 @@ data/documents/{yyyy}/{mm}/{dd}/{yyyy-mm-dd}_{document_id}/chunks-vN.json
 
 列表接口始终返回 200 + `items: []`，不返回 404。
 
-错误码：`validation_error` / `unauthorized` / `forbidden` / `not_found` / `conflict` /
-`unsupported_file_type` / `processing_failed` / `internal_error`
+错误码：`validation_error` / `unauthorized` / `forbidden` / `not_found` / `route_not_found` /
+`conflict` / `unsupported_file_type` / `internal_error`
 
 ## Milvus / 向量存储
 
@@ -186,8 +186,10 @@ Collection schema：
 - 其余元数据字段（`chunk_id`、`document_id`、`knowledge_base_id`、`text` 等）
 
 创建知识库时后端会同步创建或加载对应 collection。`ensureCollection` 检查 schema，发现 `sparse`、`tags`、`file_sha256` 缺失或
-`analyzer` 不匹配时 **drop + recreate**，数据丢失，需重新入库。dense index metric 从旧版本 `L2` 改为 `COSINE` 后，既有
-collection 需要重建索引或重建 collection 后重新入库。完整 schema 见 [数据模型](./data-model.md)。
+`analyzer` 不匹配时**直接返回错误**，不会自动 drop + recreate（避免静默丢失该 collection 的全部向量）；创建知识库或应用启动时
+hydrate 已有知识库都会因此失败并要求人工介入——运维需手动确认后 drop 该 collection，再从对应文档的 [chunk 快照](#chunk-快照)
+（`chunks-vN.json`）重新 upsert，而不需要重调 embedding API。dense index metric 从旧版本 `L2` 改为
+`COSINE` 后，既有 collection 同样需要人工重建索引或重建 collection 后重新入库。完整 schema 见 [数据模型](./data-model.md)。
 
 ## 后端模块结构
 
@@ -209,8 +211,9 @@ backend/
 │   │   │                        # embed-unless-bm25 调度），供 DocumentService.Query 和
 │   │   │                        # mcp 的 search 工具共用
 │   │   └── llm.go               # LLM 接口（预留）
-│   └── infra/           # zap + lumberjack 日志初始化 + 构建版本信息（导出包，供 mcp/ 模块复用）
+│   └── infra/           # 日志、版本信息与 Gin SPA 托管（导出包，可供外部模块复用）
 │       ├── logger.go
+│       ├── spa.go
 │       └── version.go
 └── internal/
     ├── app/             # 应用初始化与依赖装配（wiring）
@@ -235,22 +238,21 @@ backend/
     │   └── asynq.go             # AsynqQueue（Redis + hibiken/asynq）
     ├── model/           # 数据模型定义（DB + 业务结构体）
     │   └── models.go
-    ├── infra/           # 基础设施工具（logger.go 是 pkg/infra 的薄代理，见下）
+    ├── infra/           # backend 内部基础设施（logger.go 是 pkg/infra 的薄代理，见下）
     │   ├── logger.go            # 转发到 pkg/infra.Init/Sync/EnableFileLogging，保持 infra.L 包级变量不变
-    │   ├── middleware.go        # gin 通用中间件（请求日志等，依赖 gin，不下沉到 pkg/infra）
-    │   └── spa.go               # SPA 静态文件托管（依赖 gin，backend 独有，不下沉到 pkg/infra）
+    │   └── middleware.go        # backend 请求日志中间件
     └── migrations/      # PostgreSQL 数据库迁移文件
 ```
 
 `pkg/rag` 从 `internal/rag` 迁出，是 Go 语言层面允许跨模块导入的前提（`internal/`
 包只能被同一模块树内的代码导入）——`mcp/` 是独立 Go module，
-无法导入 `backend/internal/...`。`pkg/infra` 同理：`internal/infra` 中不依赖 gin、可被 mcp 复用的部分（zap + lumberjack
-日志初始化、构建版本变量）迁到 `pkg/infra`。日志初始化（`Init`/`Sync`/`EnableFileLogging`/`L`）保留
+无法导入 `backend/internal/...`。`pkg/infra` 同理：日志初始化、构建版本变量和通用 Gin SPA 静态托管均位于
+`pkg/infra`，可被外部模块直接导入。日志初始化（`Init`/`Sync`/`EnableFileLogging`/`L`）保留
 `internal/infra/logger.go` 薄代理，backend 内部现有的 `infra.L`/`infra.Init(...)` 调用点无需改动；
-版本变量（`GitBranch`/`GitCommit`/`CommitTime`）没有保留代理——`backend/main.go`、`internal/api/handler.go` 改为直接以
-`pkginfra` 别名导入 `backend/pkg/infra` 并引用 `pkginfra.GitBranch` 等，`internal/infra/version.go` 已删除。
-`mcp/` 直接导入 `backend/pkg/infra`，不再维护自己的一份拷贝。`middleware.go`（gin 请求日志中间件）和 `spa.go`（gin SPA 托管）依赖
-`gin-gonic/gin` 且是 backend 独有的关注点，mcp 不使用 gin，因此不下沉，仍留在 `internal/infra`。
+版本变量（`GitBranch`/`GitCommit`/`CommitTime`）和 `GinSPA` 没有保留代理——`backend/main.go`、
+`internal/api/handler.go` 按需以 `pkginfra` 别名导入 `backend/pkg/infra` 并直接使用。`mcp/` 同样直接导入
+`backend/pkg/infra`，不再维护自己的日志实现。`middleware.go` 是 backend 专用请求日志中间件，仍留在
+`internal/infra`。
 
 `GitBranch`/`GitCommit`/`CommitTime` 通过 `-ldflags -X` 在构建时注入（见 [后端架构与技术方案](./backend.md)）；
 `backend/Makefile` 的 `version_pkg` 指向 `github.com/d2jvkpn/rag/backend/pkg/infra`
@@ -355,9 +357,10 @@ frontend/src/
 │   ├── SearchPage.vue
 │   └── UsersPage.vue
 ├── components/
-│   └── AppLayout.vue    # 全局布局（导航栏、侧边栏）
+│   ├── AppLayout.vue    # 全局布局（导航栏、侧边栏）
+│   └── TotpCodeInput.vue # TOTP 六位验证码输入框（补全后触发 complete 事件）
 ├── services/            # HTTP 请求封装（对应后端各资源端点）
-│   ├── http.js          # axios 实例 + 拦截器
+│   ├── http.js          # fetch 客户端封装，统一抛出 HttpError
 │   ├── auth.js
 │   ├── documents.js
 │   ├── chunks.js
@@ -416,9 +419,9 @@ Loader 将 snake_case 字段规范化为 camelCase。
 | 键 | 默认值 | 说明 |
 |---|---|---|
 | `http.base_path` | `""` | 所有路由的 URL 前缀，如 `"/rag"` |
-| `http.jwt_secret` | — | JWT 签名密钥（必填） |
+| `http.jwt_secret` | `change-me-in-production` | JWT 签名密钥；生产环境必须覆盖默认值 |
 | `http.jwt_token_ttl` | `8h` | Token 有效期，支持 `time.ParseDuration` 格式 |
-| `http.session_cookie` | — | HttpOnly Cookie 名称（示例配置使用 `rag`，必填） |
+| `http.session_cookie` | `rag` | HttpOnly Cookie 名称 |
 | `http.allow_origins` | `["*"]` | CORS 允许的 Origin 列表，不能为空 |
 | `app.data_dir` | `data` | 数据根目录（文档文件、快照、静态资源） |
 | `app.state_path` | — | JSONStore 文件路径，默认 `{data_dir}/app-state.json` |
@@ -428,7 +431,7 @@ Loader 将 snake_case 字段规范化为 camelCase。
 | `init_account.password` | — | 明文或 bcrypt hash（`$2a$`/`$2b$`/`$2y$` 前缀）；该账户自动拥有全部权限 |
 | `embedder.base_url` | — | OpenAI-compatible Embedding 端点 |
 | `embedder.api_key` | — | Embedding API Key |
-| `embedder.model` | `text-embedding-3-small` | Embedding 模型名 |
+| `embedder.model` | `text-embedding-v3` | Embedding 模型名 |
 | `embedder.batch_size` | `10` | 每次请求的最大 input 条数 |
 | `milvus.addr` | — | Milvus gRPC 地址 |
 | `milvus.db` | — | Milvus 数据库名 |
@@ -441,11 +444,16 @@ Loader 将 snake_case 字段规范化为 camelCase。
 | `logging.compress` | `false` | 是否 gzip 压缩切割后的历史日志文件 |
 
 未配置 `database.dsn` 时使用 JSONStore；未配置 `redis.dsn` 时使用 GoroutineQueue 和 MemoryBlacklist；`embedder.dim`
-必填；未配置 `embedder.base_url` / `embedder.api_key`、`milvus.addr` 时对应外部组件回落 Noop 实现。日志输出到控制台和
+必填；未配置 `embedder.base_url` / `embedder.api_key`、`milvus.addr` 时对应外部组件回落 Noop 实现。真实 Embedder
+返回空向量或同批次向量维度不一致时索引失败，不会继续写入 Milvus。日志输出到控制台和
 `logging.path` 两处（服务启动运行后；初始化阶段仅输出到控制台，见"全局 logger"/"日志"小节）；控制台/文件日志级别由 `--release` 决定（未开启为 debug，
 开启后为 info），配置文件中没有单独的日志级别开关。
 
-后端运行目录存在 `target/ui/index.html` 时自动托管前端 SPA：`/ui` 为前端入口，`/` 和 `/index.html` 重定向到 `/ui/index.html`；
-`/api`、`/healthz`、`/static` 保持后端路由，其中 `/static` 服务 `{app.data_dir}/static`。静态资源缓存策略：`index.html` 和
-`app.json` 返回 `Cache-Control: no-store`；`assets/` 下带 hash 的 JS/CSS 返回
-`Cache-Control: public, max-age=31536000, immutable`；其余文件走默认协商缓存（ETag/Last-Modified）。
+后端启动时通过 `pkg/infra.ScanSPAs` 扫描 `target/spa/*/index.html`。每个目录名直接映射为 SPA
+路由，例如 `target/spa/ui`、`target/spa/h5`、`target/spa/web` 分别对应 `/ui/*`、`/h5/*`、
+`/web/*`；真实文件未命中时，由 `GinSPA` fallback 到对应应用的 `index.html`。仅当 `ui` 应用存在时，
+`/` 和 `/index.html` 重定向到 `/ui/index.html`。`http.base_path` 会统一加到这些路由之前。
+`/api`、`/healthz`、`/static` 保持后端路由，其中 `/static` 服务 `{app.data_dir}/static`。静态资源
+缓存策略：`index.html` 和 `app.json` 返回 `Cache-Control: no-store`；`assets/` 下带 hash 的 JS/CSS
+返回 `Cache-Control: public, max-age=31536000, immutable`；其余文件走默认协商缓存
+（ETag/Last-Modified）。

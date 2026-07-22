@@ -248,8 +248,8 @@
 支持的操作：
 
 - 合并相邻 chunk
-- 删除 chunk
-- 标记忽略入库
+- 编辑 chunk 正文
+- 标记忽略入库（reject）或恢复已拒绝 chunk（restore）
 - 审核通过
 - 重新切分整个文档
 
@@ -303,9 +303,10 @@
 - 顶部参数区（卡片内）：知识库选择 → 文档筛选按钮（显示已选/总数） → Top K → 搜索模式 → 高级参数收起/展开；选择知识库后不展开显示 dim / analyzer 等
   collection 参数。
 - 中部输入区：查询文本框与搜索按钮在同一行并顶部对齐，下载按钮位于搜索按钮下方。
-- 下方结果区：逐条展示命中 chunk，头部格式为 `{index}/{total}. {filename}`，并展示类型、页码、相关度分值和正文预览；每条 footer
-  以浅色标签化元信息展示知识库、Chunk 序号和文档 ID，并提供独立"查看文档"按钮。完成查询后支持通过 icon + "下载"按钮下载 YAML 结果文件，文件名格式为
-  `rag_query--test_01.yyyy-dd-mm-timestamp.yaml`，内容包含当前网址 site、本次查询参数快照、AI 回答和命中 chunk 列表。
+- 下方结果区：逐条展示命中 chunk，头部格式为 `{index}/{total}. {filename}`，并展示页码、相关度分值和正文预览；每条 footer
+  以浅色标签化元信息展示知识库、Chunk 序号和文档 ID，并提供独立"查看文档"按钮。完成查询后支持通过 icon + "下载"按钮下载 YAML 结果文件，
+  文件名格式为 `rag_query--test_01.yyyy-dd-mm-timestamp.yaml`，内容包含当前网址 site、本次查询参数快照、预留的 answer 字段
+  （当前后端不生成回答）和命中 chunk 列表。
 
 关键交互设计：
 
@@ -386,9 +387,9 @@
 ### 流程三：重切分
 
 1. 用户在列表页、详情页或审核页触发 `rechunk`
-2. 系统忽略当前快照，生成新的 `chunk_version`
-3. 新版本 chunk JSON 快照落盘
-4. 页面刷新后展示最新 chunk 列表
+2. 系统忽略当前快照，生成新的 `chunk_version` 和数据库 chunk 列表
+3. 页面刷新后展示最新 chunk 列表并等待审核
+4. 审核通过并完成 embedding 后，新版本 chunk JSON 快照才会落盘
 
 ### 流程四：删除文档
 

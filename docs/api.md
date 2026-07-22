@@ -26,11 +26,15 @@
 - 文件根目录为 `{app.data_dir}/static`
 - 若配置了 `http.base_path`，该前缀同样作用于 `/healthz`、`/static`、`/ui` 和所有 `/api` 路由
 
-### `GET /ui/*filepath`
+### `GET /<spa>/*filepath`
 
-- 后端运行目录存在 `target/ui/index.html` 时启用，用于托管前端 SPA
-- `/ui` 重定向到 `/ui/`，`/ui/*` 优先返回 `target/ui` 下的真实文件，未命中时 fallback 到 `target/ui/index.html`
-- `/` 和 `/index.html` 重定向到 `/ui/index.html`
+- 后端启动时扫描 `target/spa` 下含 `index.html` 的直接子目录，每个目录作为独立 SPA
+- 目录名直接映射为路由；例如 `target/spa/ui`、`target/spa/h5`、`target/spa/web` 分别通过
+  `/ui/*`、`/h5/*`、`/web/*` 访问
+- 请求优先返回对应 SPA 目录下的真实文件，未命中时 fallback 到该目录的 `index.html`
+- SPA 根路径重定向到带尾斜杠的路径，例如 `/ui` 重定向到 `/ui/`
+- 存在 `target/spa/ui/index.html` 时，`/` 和 `/index.html` 重定向到 `/ui/index.html`
+- 配置 `http.base_path` 后，该前缀同样应用于所有 SPA 路由
 
 ### `GET /version`
 
@@ -121,7 +125,6 @@
 - `conflict`
 - `unsupported_file_type`
 - `route_not_found`
-- `processing_failed`
 - `internal_error`
 
 ## HTTP 状态码约定
@@ -331,8 +334,9 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
 
 ### `POST /api/documents/:document_id/chunks/rechunk`
 
-- 重新自动切分整个文档
-- 忽略当前 chunk 快照，强制生成新的 chunk 版本和 JSON 快照
+- 重新自动切分整个文档，`chunk_version` 递增
+- 忽略当前 chunk 快照并生成新的数据库 chunk 版本；JSON 快照要等该版本完成 embedding 后、写入
+  Milvus 前才落盘
 
 ### `POST /api/documents/:document_id/chunks/merge`
 
@@ -467,6 +471,8 @@ HTTP 状态码仍为 `200`，不设置 Cookie。
         "page_start": 3,
         "page_end": 4,
         "chunk_index": 2,
+        "tags": ["policy"],
+        "file_sha256": "...",
         "text": "...",
         "score": 0.92
       }

@@ -1,5 +1,4 @@
 app:
-  name: rag
   data_dir: "data"
   # Used only by the local JSON store when database.dsn is empty.
   # If omitted, the service falls back to {app.data_dir}/app-state.json.

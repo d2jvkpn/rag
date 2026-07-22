@@ -35,3 +35,26 @@ func TestEmbeddingBatchesInvalidSizeFallsBack(t *testing.T) {
 		t.Fatalf("expected single batch when batch size <= 0, got %d", len(batches))
 	}
 }
+
+func TestValidateEmbeddingsAcceptsConsistentDims(t *testing.T) {
+	err := validateEmbeddings([][]float32{{1, 2, 3}, {4, 5, 6}})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+}
+
+func TestValidateEmbeddingsRejectsNilVector(t *testing.T) {
+	// A nil/empty slot happens when the provider skips an index in its
+	// response (e.g. a truncated batch); this must not reach Milvus silently.
+	err := validateEmbeddings([][]float32{{1, 2, 3}, nil})
+	if err == nil {
+		t.Fatal("expected error for missing vector, got nil")
+	}
+}
+
+func TestValidateEmbeddingsRejectsDimensionMismatch(t *testing.T) {
+	err := validateEmbeddings([][]float32{{1, 2, 3}, {4, 5}})
+	if err == nil {
+		t.Fatal("expected error for dimension mismatch, got nil")
+	}
+}

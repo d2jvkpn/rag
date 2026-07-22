@@ -21,6 +21,7 @@ var ErrUserDisabled = errors.New("user_disabled")
 var ErrCannotChangeOwnStatus = errors.New("cannot change your own status")
 var ErrUsernameExists = errors.New("username already exists")
 var ErrCannotResetOwnPassword = errors.New("cannot reset your own password")
+var ErrIncorrectPassword = errors.New("incorrect current password")
 
 type claims struct {
 	UserID string `json:"user_id"`
@@ -204,7 +205,7 @@ func (s *AuthService) ChangePassword(userID, oldPassword, newPassword string) er
 	if err := bcrypt.CompareHashAndPassword(
 		[]byte(user.PasswordHash), []byte(oldPassword),
 	); err != nil {
-		return errors.New("incorrect current password")
+		return ErrIncorrectPassword
 	}
 	hash, err = bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {

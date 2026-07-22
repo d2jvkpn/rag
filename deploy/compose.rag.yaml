@@ -11,7 +11,7 @@ services:
     user: 1000:1000
     volumes:
     - ./configs:/app/configs
-    #- ./configs/app.json:/app/target/ui/app.json
+    #- ./configs/app.json:/app/target/spa/ui/app.json
     - ./data/documents:/app/data/documents
     - ./data/static:/app/data/static
     - ./logs:/app/logs

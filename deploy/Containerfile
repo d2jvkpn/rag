@@ -45,14 +45,15 @@ ARG no_proxy
 ARG git_branch=unknown
 ARG git_commit=unknown
 ARG commit_time=unknown
-ARG version_pkg=github.com/d2jvkpn/rag/backend/internal/infra
+ARG version_pkg=github.com/d2jvkpn/rag/backend/pkg/infra
 
 ENV http_proxy="$http_proxy" https_proxy="$https_proxy" no_proxy="$no_proxy"
 
 WORKDIR /app
 ADD backend/go.mod backend/go.sum ./
-COPY backend/cmd ./cmd
+COPY backend/main.go ./
 COPY backend/internal ./internal
+COPY backend/pkg ./pkg
 
 RUN if [ "$build_region" == "cn" ]; then \
         go env -w GOPROXY=https://goproxy.cn,direct; \
@@ -61,7 +62,7 @@ RUN if [ "$build_region" == "cn" ]; then \
 RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags \
       "-s -w -X '${version_pkg}.GitBranch=${git_branch}' -X '${version_pkg}.GitCommit=${git_commit}' -X '${version_pkg}.CommitTime=${commit_time}'" \
-      -o target/server ./cmd/server
+      -o target/server .
 
 #### Stage 3
 FROM python:${python_tag} AS runtime
@@ -95,11 +96,13 @@ RUN addgroup -g "$PGID" appuser && \
     chown -R appuser:appuser /app
 
 COPY --from=backend-build /app/target /app/target
-COPY --from=frontend-build /app/target/dist /app/target/ui
-#RUN sed -i 's/:3061/:3060/' /app/target/ui/app.json
+COPY --from=frontend-build /app/target/dist /app/target/spa/ui
+#RUN sed -i 's/:3061/:3060/' /app/target/spa/ui/app.json
 
 COPY backend/examples/local.yaml /app/configs/local.yaml
 COPY backend/scripts /app/scripts
+
+ENV PDF_PARSER_SCRIPT=/app/scripts/parse_pdf.py
 
 USER appuser:appuser
 
@@ -111,7 +114,7 @@ RUN if [ "$build_region" == "cn" ]; then \
 RUN pip3 install --upgrade pip && \
     pip3 install -r scripts/parse_pdf.pip.txt
 
-ENV FRONTEND_CONFIG=/app/target/ui/app.json
+ENV FRONTEND_CONFIG=/app/target/spa/ui/app.json
 
 EXPOSE 3060
 ENV http_proxy="" https_proxy="" no_proxy=""

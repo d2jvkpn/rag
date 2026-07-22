@@ -27,7 +27,7 @@ go run . --config examples/local.yaml
 - 使用 `--addr` 命令行参数
 - 未传时使用代码默认值 `:3061`
 
-默认账号来自配置文件 `accounts[]`。示例配置提供：
+初始 admin 账号来自配置文件 `init_account`（仅在 `users` 表为空时生效一次），自动拥有全部权限。示例配置提供：
 
 - `admin`
 - `admin123`
@@ -55,9 +55,8 @@ go run . --config examples/local.yaml
 - `http.allow_origins`
 - `app.data_dir`
 - `app.state_path`
-- `accounts[].username`
-- `accounts[].password`
-- `accounts[].permissions`
+- `init_account.username`
+- `init_account.password`
 - `database.dsn`
 - `redis.dsn`
 - `embedder.base_url`

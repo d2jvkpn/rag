@@ -214,6 +214,186 @@ func TestCreateKnowledgeBaseEndpoint(t *testing.T) {
 	}
 }
 
+// TestCreateDocumentUnsupportedFileTypeReturns415 locks in the
+// unsupported_file_type response contract now that the handler classifies
+// this via errors.Is(service.ErrUnsupportedFileType) instead of matching the
+// error message text.
+func TestCreateDocumentUnsupportedFileTypeReturns415(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	v := testConfig(tmpDir)
+	initAccount := repository.InitAccount{Username: "admin", Password: "admin123"}
+	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), initAccount)
+	if err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+	documentService, err := service.NewDocumentService(v, store)
+	if err != nil {
+		t.Fatalf("init document service: %v", err)
+	}
+	defer documentService.Close()
+	createKnowledgeBaseForAPITest(t, documentService, "kb-1")
+
+	authService := service.NewAuthService(store, "test-secret", time.Hour)
+	handler := NewHandler(v, authService, documentService).Routes()
+	sessionCookie := loginForTest(t, handler, "admin", "admin123")
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("knowledge_base_id", "kb-1"); err != nil {
+		t.Fatalf("write knowledge base field: %v", err)
+	}
+	fileWriter, err := writer.CreateFormFile("file", "sample.exe")
+	if err != nil {
+		t.Fatalf("create file field: %v", err)
+	}
+	if _, err := fileWriter.Write([]byte("binary content")); err != nil {
+		t.Fatalf("write file content: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close multipart writer: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/documents", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.AddCookie(sessionCookie)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Error.Code != "unsupported_file_type" {
+		t.Fatalf("expected code unsupported_file_type, got %q", response.Error.Code)
+	}
+}
+
+// TestCreateDocumentDuplicateReturns409 locks in the conflict response
+// contract now that the handler classifies this via
+// errors.Is(repository.ErrDocumentExists) instead of matching the error
+// message text.
+func TestCreateDocumentDuplicateReturns409(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	v := testConfig(tmpDir)
+	initAccount := repository.InitAccount{Username: "admin", Password: "admin123"}
+	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), initAccount)
+	if err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+	documentService, err := service.NewDocumentService(v, store)
+	if err != nil {
+		t.Fatalf("init document service: %v", err)
+	}
+	defer documentService.Close()
+	createKnowledgeBaseForAPITest(t, documentService, "kb-1")
+
+	authService := service.NewAuthService(store, "test-secret", time.Hour)
+	handler := NewHandler(v, authService, documentService).Routes()
+	sessionCookie := loginForTest(t, handler, "admin", "admin123")
+
+	createMarkdownDocumentForTestWithTagsAndContent(
+		t, handler, sessionCookie, "kb-1", nil, "same content",
+	)
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("knowledge_base_id", "kb-1"); err != nil {
+		t.Fatalf("write knowledge base field: %v", err)
+	}
+	fileWriter, err := writer.CreateFormFile("file", "sample.md")
+	if err != nil {
+		t.Fatalf("create file field: %v", err)
+	}
+	if _, err := fileWriter.Write([]byte("same content")); err != nil {
+		t.Fatalf("write file content: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close multipart writer: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/documents", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.AddCookie(sessionCookie)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Error.Code != "conflict" {
+		t.Fatalf("expected code conflict, got %q", response.Error.Code)
+	}
+}
+
+// TestChangePasswordIncorrectOldPasswordReturns400 locks in the
+// validation_error response contract now that the handler classifies this via
+// errors.Is(service.ErrIncorrectPassword) instead of matching the error
+// message text.
+func TestChangePasswordIncorrectOldPasswordReturns400(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	v := testConfig(tmpDir)
+	initAccount := repository.InitAccount{Username: "admin", Password: "admin123"}
+	store, _, err := repository.NewJSONStore(v.GetString("app.state_path"), initAccount)
+	if err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+	documentService, err := service.NewDocumentService(v, store)
+	if err != nil {
+		t.Fatalf("init document service: %v", err)
+	}
+	defer documentService.Close()
+
+	authService := service.NewAuthService(store, "test-secret", time.Hour)
+	handler := NewHandler(v, authService, documentService).Routes()
+	sessionCookie := loginForTest(t, handler, "admin", "admin123")
+
+	body := strings.NewReader(`{"old_password":"wrong","new_password":"newpass123"}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/me/password", body)
+	req.AddCookie(sessionCookie)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		Error struct {
+			Code    string       `json:"code"`
+			Details []fieldError `json:"details"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Error.Code != "validation_error" {
+		t.Fatalf("expected code validation_error, got %q", response.Error.Code)
+	}
+	if len(response.Error.Details) != 1 || response.Error.Details[0].Field != "old_password" {
+		t.Fatalf("expected old_password field error, got %+v", response.Error.Details)
+	}
+}
+
 func TestAuthRequired(t *testing.T) {
 	t.Parallel()
 
@@ -258,7 +438,7 @@ func TestTargetUIServesSPAWithoutCapturingBackendRoutes(t *testing.T) {
 		}
 	})
 
-	webDir := filepath.Join(tmpDir, "target", "ui")
+	webDir := filepath.Join(tmpDir, "target", "spa", "ui")
 	if err := os.MkdirAll(filepath.Join(webDir, "assets"), 0o755); err != nil {
 		t.Fatalf("create web dir: %v", err)
 	}

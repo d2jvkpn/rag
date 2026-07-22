@@ -354,6 +354,22 @@ func TestSplitMarkdownBlocksNoHeadings(t *testing.T) {
 	}
 }
 
+func TestParseDispatchesFileTypeMd(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sample.md")
+	if err := os.WriteFile(path, []byte("# Title\n\nBody text."), 0o644); err != nil {
+		t.Fatalf("write sample file: %v", err)
+	}
+	// document_service.detectFileType maps .md/.markdown uploads to file_type "md";
+	// Parse must accept that exact value or markdown uploads fail at parse time.
+	result, err := Parse(path, "md", "")
+	if err != nil {
+		t.Fatalf("Parse(%q) returned error: %v", "md", err)
+	}
+	if result.Text == "" {
+		t.Fatalf("expected non-empty parsed text")
+	}
+}
+
 func TestParsePptxReturnsBlocks(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "slides.pptx")
 	files := map[string]string{

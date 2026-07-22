@@ -38,9 +38,11 @@
 
 前端构建产物目录约定：
 
-- 前端打包文件输出到 `frontend/target/dist`
-- 前端打包 base 由 `BASE_PATH` 环境变量控制；`make build` 使用 `/ui/`，容器镜像将 `target/dist` 复制到后端运行目录 `target/ui`，
-  后端检测到该目录时提供 `/ui` 路由；`/static` 仍由后端业务静态文件路由提供
+- 直接运行 `npm run build` 时，前端打包文件默认输出到 `frontend/target/dist`
+- 前端打包 base 由 `BASE_PATH` 环境变量控制；`make build` 使用 `/ui/`，并通过 `OUT_DIR` 将产物输出到
+  `backend/target/spa/ui`
+- 后端扫描 `target/spa` 下的应用目录并按目录名挂载路由；例如构建 base 为 `/h5/` 和 `/web/` 的应用
+  可分别放入 `target/spa/h5` 和 `target/spa/web`；`/static` 仍由后端业务静态文件路由提供
 
 ### 构建时版本注入
 
@@ -88,6 +90,7 @@
 - `/documents/:documentId`
 - `/documents/:documentId/chunks`
 - `/search`：语义检索页（调用 `POST /api/knowledge-bases/query`）
+- `/knowledge-bases`：知识库管理页，登录用户可见，创建/删除按钮仅对具备 `manage_knowledge_bases` 权限的用户显示
 - `/users`（仅当当前用户具备 `manage_users` 权限时可访问）
 - `/` 重定向到 `/documents`
 
@@ -344,9 +347,11 @@ frontend/
       DocumentDetailPage.vue
       DocumentChunksPage.vue
       SearchPage.vue
+      KnowledgeBasesPage.vue
       UsersPage.vue
     components/
       AppLayout.vue
+      TotpCodeInput.vue
     utils/
       status.js
       format.js
@@ -354,8 +359,8 @@ frontend/
     dist/
 ```
 
-> 历史 `frontend.md` 中的 `components/{layout,documents,chunks,common}/` 分组未落地，当前所有组件归于
-> `components/AppLayout.vue` 一个文件；新组件按需新增即可。
+> 历史 `frontend.md` 中的 `components/{layout,documents,chunks,common}/` 分组未落地，当前组件均为
+> `components/` 下的扁平文件（`AppLayout.vue`、`TotpCodeInput.vue`）；新组件按需新增即可。
 
 ## 前端实现原则
 

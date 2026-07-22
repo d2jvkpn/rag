@@ -5,13 +5,14 @@ import (
 	"errors"
 	"mime/multipart"
 	"net/http"
-	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 
 	"github.com/d2jvkpn/rag/backend/internal/infra"
 	"github.com/d2jvkpn/rag/backend/internal/model"
@@ -42,7 +43,9 @@ func (h *Handler) Routes() http.Handler {
 	var (
 		router        *gin.Engine
 		basePath      string
-		webDir        string
+		spas          []pkginfra.SPA
+		hasDefaultUI  bool
+		err           error
 		root          *gin.RouterGroup
 		staticDir     string
 		apiGroup      *gin.RouterGroup
@@ -55,23 +58,32 @@ func (h *Handler) Routes() http.Handler {
 	basePath = h.cfg.GetString("http.base_path")
 	router.Use(gin.Recovery(), infra.RequestLogger(basePath, "/healthz", "/version", "/static/"), h.cors())
 
-	webDir = ""
-	if _, err := os.Stat(filepath.Join("target", "ui", "index.html")); err == nil {
-		webDir = filepath.Join("target", "ui")
+	spas, err = pkginfra.ScanSPAs(basePath)
+	if err != nil {
+		infra.L.Warn("scan SPAs", zap.Error(err))
+	}
+	hasDefaultUI = false
+	for _, spa := range spas {
+		if spa.Path == path.Join("/", basePath, "ui") {
+			hasDefaultUI = true
+			break
+		}
 	}
 
-	if webDir != "" {
+	if hasDefaultUI {
 		router.GET(basePath, func(c *gin.Context) {
-			c.Redirect(http.StatusMovedPermanently, basePath+"/ui/index.html")
+			c.Redirect(http.StatusMovedPermanently, path.Join("/", basePath, "ui/index.html"))
 		})
 		router.GET(basePath+"/index.html", func(c *gin.Context) {
-			c.Redirect(http.StatusMovedPermanently, basePath+"/ui/index.html")
+			c.Redirect(http.StatusMovedPermanently, path.Join("/", basePath, "ui/index.html"))
 		})
 	}
 
 	router.NoRoute(func(c *gin.Context) {
-		if webDir != "" && infra.GinSPA(c, filepath.Join(basePath, "/ui"), webDir) {
-			return
+		for _, spa := range spas {
+			if pkginfra.GinSPA(c, spa.Path, spa.WebDir) {
+				return
+			}
 		}
 		writeError(c, 404, "route_not_found", "route not found", nil)
 	})
@@ -303,7 +315,7 @@ func (h *Handler) handleChangePassword(c *gin.Context) {
 
 	err = h.authService.ChangePassword(user.UserID, body.OldPassword, body.NewPassword)
 	if err != nil {
-		if err.Error() == "incorrect current password" {
+		if errors.Is(err, service.ErrIncorrectPassword) {
 			writeError(
 				c,
 				400,
@@ -373,17 +385,14 @@ func (h *Handler) handleCreateDocument(c *gin.Context) {
 		uploader.Username,
 	)
 	if err != nil {
-		status := 400
-		code := "validation_error"
-		if strings.Contains(err.Error(), "unsupported file type") {
-			status = 415
-			code = "unsupported_file_type"
+		switch {
+		case errors.Is(err, service.ErrUnsupportedFileType):
+			writeError(c, 415, "unsupported_file_type", err.Error(), nil)
+		case errors.Is(err, repository.ErrDocumentExists):
+			writeError(c, 409, "conflict", err.Error(), nil)
+		default:
+			writeError(c, 400, "validation_error", err.Error(), nil)
 		}
-		if strings.Contains(err.Error(), "already exists") {
-			status = 409
-			code = "conflict"
-		}
-		writeError(c, status, code, err.Error(), nil)
 		return
 	}
 

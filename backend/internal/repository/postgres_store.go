@@ -311,13 +311,29 @@ func (s *PostgresStore) CreateDocument(document model.Document) error {
 		Where("knowledge_base_id = ? AND sha256 = ?", document.KnowledgeBaseID, document.SHA256).
 		Count(&count)
 	if count > 0 {
-		return errors.New("document already exists in knowledge base")
+		return ErrDocumentExists
 	}
 	return s.db.Create(documentToRow(document)).Error
 }
 
+// UpdateDocument performs a conditional UPDATE keyed on document_id rather than
+// gorm's Save() (which falls back to INSERT when zero rows match), so a
+// document deleted concurrently with an in-flight background update cannot be
+// resurrected.
 func (s *PostgresStore) UpdateDocument(document model.Document) error {
-	return s.db.Save(documentToRow(document)).Error
+	var result *gorm.DB
+
+	result = s.db.Model(&documentRow{}).
+		Where("document_id = ?", document.DocumentID).
+		Select("*").
+		Updates(documentToRow(document))
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *PostgresStore) GetDocument(documentID string) (model.Document, error) {

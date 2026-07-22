@@ -37,7 +37,7 @@
 - 文件二进制
 - `knowledge_base_id`（必填，文档归属边界，用于 collection 校验、chunk 参数选择和检索过滤，详见
   [设计决策与关键约定](./Design.md#知识库与-knowledge_base_id)）
-- 可选：`doc_id`、`title`、`tags`
+- 可选：`title`、`tags`、`human_review`
 
 落盘建议：
 
@@ -71,7 +71,8 @@
 - 标题层级
 - 表格文本
 
-建议先把图片、页眉页脚、批注忽略掉，先保证主文本可用。
+当前实现忽略页眉页脚和批注；图片不做内容识别，但会在正文或表格单元格中插入
+`[Image:ref_id label]` 占位符，并写入 `resource_refs`。
 
 ### PPTX
 
@@ -163,7 +164,8 @@
   的页码
 - 切分完成后，若最后一个 chunk 的文本长度 < `chunk_size / 2`，将其追加到倒数第二个 chunk，消除末尾碎片；合并后 `PageEnd` 取两者较大值，
   `resource_refs` 合并
-- 全部 chunk 数 ≤ `min_chunks` 时，整篇合并为单一 chunk；合并保留 `PageStart`（首 block）和 `PageEnd`（末 block）
+- 全部 chunk 数少于 `min_chunks` 时，整篇合并为单一 chunk；合并保留 `PageStart`（首 block）和
+  `PageEnd`（末 block）
 - 即使不拆分，也保留 `resource_refs`
 
 chunk 落盘和快照复用的具体实现约定，见 [后端架构与技术方案](./backend.md)。
@@ -213,6 +215,9 @@ chunk 状态（draft / approved / rejected）与文档生命周期完整定义�
 - `documents` 记录
 - `document_chunks` 记录
 - Milvus 中 `document_id = ?` 的所有向量
+
+删除可与异步解析或索引并发发生；后台阶段发现文档记录已不存在时立即终止，不再写入 orphan chunks，
+也不会把已删除文档的向量重新 upsert 到 Milvus。
 
 ### 更新文档
 

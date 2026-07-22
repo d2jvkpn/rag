@@ -2,6 +2,7 @@ package repository
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -108,6 +109,44 @@ func TestJSONStoreListDocumentsPage(t *testing.T) {
 	}
 	if last.Page != 2 || len(last.Items) != 1 || last.Items[0].DocumentID != "doc-a" || last.HasNext || !last.HasPrev {
 		t.Fatalf("unexpected last page: %+v", last)
+	}
+}
+
+// TestJSONStoreUpdateDocumentAfterDeleteReturnsNotFound guards against a
+// concurrent-delete race: a background task (embed/index) that started before
+// DeleteDocument ran must not be able to resurrect the row via UpdateDocument.
+func TestJSONStoreUpdateDocumentAfterDeleteReturnsNotFound(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "state.json")
+	store, _, err := NewJSONStore(path, InitAccount{})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+
+	now := time.Now().UTC()
+	document := model.Document{
+		DocumentID:      "doc-race",
+		KnowledgeBaseID: "kb-1",
+		CreatedAt:       now,
+		UpdatedAt:       now,
+		Status:          "processing",
+		SHA256:          "sha-race",
+	}
+	if err := store.CreateDocument(document); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	if _, _, err := store.DeleteDocument(document.DocumentID); err != nil {
+		t.Fatalf("delete document: %v", err)
+	}
+
+	document.Status = "indexed"
+	document.UpdatedAt = time.Now().UTC()
+	if err := store.UpdateDocument(document); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound after concurrent delete, got %v", err)
+	}
+	if _, err := store.GetDocument(document.DocumentID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected document to stay deleted, got %v", err)
 	}
 }
 

@@ -2,6 +2,7 @@ package rag
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -83,7 +84,34 @@ func (o *OpenAIEmbedder) EmbedWithUsage(ctx context.Context, texts []string) ([]
 			}
 		}
 	}
+	if err := validateEmbeddings(embeddings); err != nil {
+		return nil, 0, err
+	}
 	return embeddings, totalTokens, nil
+}
+
+// validateEmbeddings ensures the provider returned exactly one non-empty
+// vector per input text with a consistent dimension across the batch. A gap
+// here (e.g. a response index the provider skipped, or a truncated batch)
+// would otherwise flow silently into chunk storage and Milvus as a zero/nil
+// vector or a dimension mismatch.
+func validateEmbeddings(embeddings [][]float32) error {
+	dim := -1
+	for i, v := range embeddings {
+		if len(v) == 0 {
+			return fmt.Errorf("embedding provider returned no vector for input %d", i)
+		}
+		if dim == -1 {
+			dim = len(v)
+			continue
+		}
+		if len(v) != dim {
+			return fmt.Errorf(
+				"embedding dimension mismatch: input %d has dim %d, expected %d", i, len(v), dim,
+			)
+		}
+	}
+	return nil
 }
 
 type embeddingBatch struct {

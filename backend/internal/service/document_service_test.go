@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"io"
 	"mime/multipart"
 	"os"
@@ -156,6 +157,73 @@ func TestCreateDocumentWithoutHumanReviewAutoApprovesAndIndexes(t *testing.T) {
 	}
 }
 
+// TestRunIndexDoesNotReviveDeletedDocumentOrUpsertVectors reproduces the P0-5
+// delete/index race: DeleteDocument runs while an in-flight background stage
+// still holds a stale *model.Document loaded before the delete. The stage
+// must neither resurrect the row in the store nor upsert vectors for it.
+func TestRunIndexDoesNotReviveDeletedDocumentOrUpsertVectors(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	v := testConfig(tmpDir)
+	store, _, err := repository.NewJSONStore(
+		v.GetString("app.state_path"),
+		repository.InitAccount{Username: "admin", Password: "admin123"},
+	)
+	if err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+
+	vs := &trackingVectorStore{}
+	documentService, err := NewDocumentService(v, store, WithVectorStore(vs), WithEmbedder(fakeEmbedder{dim: 4}))
+	if err != nil {
+		t.Fatalf("init document service: %v", err)
+	}
+	defer documentService.Close()
+	createKnowledgeBaseForServiceTest(t, documentService, "kb-1")
+
+	now := time.Now().UTC()
+	document := model.Document{
+		DocumentID:      "doc-race-index",
+		KnowledgeBaseID: "kb-1",
+		CreatedAt:       now,
+		UpdatedAt:       now,
+		Status:          "processing",
+		Stage:           "embed",
+		SHA256:          "sha-race-index",
+	}
+	if err := store.CreateDocument(document); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	chunk := model.DocumentChunk{
+		ChunkID:        "chunk-race",
+		DocumentID:     document.DocumentID,
+		ChunkIndex:     0,
+		Text:           "hello",
+		NormalizedText: "hello",
+		Status:         "approved",
+		IsCurrent:      true,
+	}
+	if err := store.ReplaceChunks(document.DocumentID, []model.DocumentChunk{chunk}); err != nil {
+		t.Fatalf("replace chunks: %v", err)
+	}
+
+	// DeleteDocument races in after runIndex's caller already loaded
+	// `document`, but before runIndex itself does any work with it.
+	if _, _, err := store.DeleteDocument(document.DocumentID); err != nil {
+		t.Fatalf("delete document: %v", err)
+	}
+
+	documentService.runIndex(document)
+
+	if len(vs.upserted) != 0 {
+		t.Fatalf("expected no vectors upserted for a document deleted mid-flight, got %d", len(vs.upserted))
+	}
+	if _, err := store.GetDocument(document.DocumentID); !errors.Is(err, repository.ErrNotFound) {
+		t.Fatalf("expected document to remain deleted (not resurrected), got %v", err)
+	}
+}
+
 func createKnowledgeBaseForServiceTest(t *testing.T, svc *DocumentService, kbID string) {
 	t.Helper()
 	if _, err := svc.CreateKnowledgeBase(
@@ -299,10 +367,36 @@ func (f *memoryFile) String() string {
 
 type trackingVectorStore struct {
 	rag.NoopVectorStore
-	created []rag.CollectionConfig
+	created  []rag.CollectionConfig
+	upserted []rag.VectorRecord
 }
 
 func (s *trackingVectorStore) CreateKnowledgeBase(_ context.Context, cfg rag.CollectionConfig) error {
 	s.created = append(s.created, cfg)
 	return nil
 }
+
+func (s *trackingVectorStore) Upsert(_ context.Context, records []rag.VectorRecord) error {
+	s.upserted = append(s.upserted, records...)
+	return nil
+}
+
+// fakeEmbedder returns a fixed-dimension non-empty vector per input text, so
+// tests can drive documents through the embed stage without a real provider.
+type fakeEmbedder struct {
+	dim int
+}
+
+func (f fakeEmbedder) Embed(_ context.Context, texts []string) ([][]float32, error) {
+	out := make([][]float32, len(texts))
+	for i := range out {
+		vec := make([]float32, f.dim)
+		for j := range vec {
+			vec[j] = 0.1
+		}
+		out[i] = vec
+	}
+	return out, nil
+}
+
+func (f fakeEmbedder) Model() string { return "fake" }

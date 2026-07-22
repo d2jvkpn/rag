@@ -51,7 +51,8 @@
 - 配置读取使用 `viper`，统一通过 `viper.GetString/GetXX` 获取
 - 启动参数使用命令行 flag，不使用环境变量
 - 存储双实现：`JSONStore`（本地 JSON 文件，`state_path` 指定）和 `PostgresStore`（`gorm` + `lib/pq`），通过
-  `database.dsn` 配置自动选择；文档列表的 Postgres 查询使用 `5s` context timeout，超时或查询错误通过 API 返回 `store_error`
+  `database.dsn` 配置自动选择；文档列表的 Postgres 查询使用 `5s` context timeout，超时或查询错误通过 API 返回
+  `internal_error`
 - 异步处理支持进程内 goroutine 队列（channel 容量 32）和 Redis-backed Asynq，通过 `redis.dsn` 自动选择
 - 原始文件和 chunk 快照写入同一个 `backend/data/documents/{yyyy}/{mm}/{dd}/{yyyy-mm-dd}_{document_id}/` 目录
 
@@ -60,6 +61,7 @@
 - `--release bool`
 - `--addr string`
 - `--config string`（示例：`examples/local.yaml`）
+- `--base_path string`（覆盖配置文件中的 `http.base_path`）
 
 当前退出行为：
 
@@ -301,8 +303,8 @@ chunk 快照约定：
    `ResourceRefs` 合并
    - **image ref 过滤**：每个 chunk 只继承其文本中实际包含 `[Image:<ref_id>` 占位符的 image ref；link 等其他类型 ref
      仍全量继承（anchor text 无法精确定位到 segment）
-6. **min_chunks 合并**：全部 block 切分完成后，若总 chunk 数 ≤ `min_chunks`，将整篇合并为单一 chunk；此路径同样保留首 block 的
-   `PageStart` 和末 block 的 `PageEnd`
+6. **min_chunks 合并**：全部 block 切分完成后，若总 chunk 数少于 `min_chunks`，将整篇合并为单一 chunk；
+   此路径同样保留首 block 的 `PageStart` 和末 block 的 `PageEnd`
 
 **splitByLength 细节**
 
@@ -374,7 +376,8 @@ init_account:
 | TaskQueue | `internal/queue/` | `WithTaskQueue()` | `redis.dsn` 已配置（否则用 GoroutineQueue） |
 
 **Embedder** 实现：Noop（默认）和 OpenAI-compatible（`embedder.base_url` 指向任意兼容端点）。`batch_size` 默认 `10`，
-DashScope 兼容端点不支持更大批次，不要调大。
+DashScope 兼容端点不支持更大批次，不要调大。OpenAI-compatible 实现会在返回前校验每条 embedding 非空且
+维度一致；异常响应会终止当前索引并将文档标记为 `failed`。
 
 **VectorStore** 接口方法：`ValidateKnowledgeBase`、`CreateKnowledgeBase`、`DeleteKnowledgeBase`、`Upsert`、
 `DeleteByDocument`、`Search(ctx, SearchRequest)`。`SearchRequest` 携带 `KnowledgeBaseID`、`Embedding`、
@@ -387,8 +390,10 @@ dense/BM25 单路查询使用 Milvus Search；hybrid 使用 Milvus HybridSearch 
 `NewDocumentService` 内部。
 
 **Config 补充字段：** `http.base_path`（所有路由的 URL 前缀，默认 `""`，例如 `"/rag"`）；`milvus.api_key`（Milvus API key，
-默认 `""`）。后端运行目录存在 `target/ui/index.html` 时自动启用前端 SPA 托管，路径为 `/ui`，并将 `/` 和 `/index.html` 重定向到
-`/ui/index.html`；`/static` 仍只服务 `{app.data_dir}/static`。
+默认 `""`）。`pkg/infra.ScanSPAs` 在启动时扫描 `target/spa` 下含 `index.html` 的直接子目录，并按目录名
+挂载路由：`target/spa/ui`、`target/spa/h5`、`target/spa/web` 分别对应 `/ui/*`、`/h5/*`、
+`/web/*`。`GinSPA` 负责单个应用的真实文件响应和 `index.html` fallback。仅当 `ui` 应用存在时，`/` 和
+`/index.html` 重定向到 `/ui/index.html`；`/static` 仍只服务 `{app.data_dir}/static`。
 
 ## 推荐目录结构
 
@@ -447,12 +452,12 @@ backend/
   logs/                      # 运行日志（gitignore）
   pkg/
     rag/                     # Embedder、VectorStore (Milvus)、parser；导出包，供 mcp/ 模块复用
-    infra/                   # 全局 logger、构建版本变量；导出包，供 mcp/ 模块复用
+    infra/                   # logger、版本变量、Gin SPA 托管；导出包，可供外部模块复用
   internal/
     migrations/sql/         # numbered up/down SQL
     api/                     # gin handler、middleware、response
     app/                     # App 装配（store/embedder/queue/milvus 等）
-    infra/                   # 全局 logger、请求日志中间件
+    infra/                   # logger 薄代理、backend 请求日志中间件
     model/                   # 领域模型
     queue/                   # TaskQueue（GoroutineQueue / AsynqQueue）
     repository/              # UserStore/KnowledgeBaseStore/DocumentStore/ChunkStore 接口、Store 组合接口、JSONStore、PostgresStore

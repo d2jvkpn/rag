@@ -320,6 +320,7 @@ var ErrKnowledgeBaseExists = errors.New("knowledge base already exists")
 var ErrKnowledgeBaseNotEmpty = errors.New(
 	"knowledge base still has documents; delete all documents before deleting the knowledge base",
 )
+var ErrUnsupportedFileType = errors.New("unsupported file type")
 
 func (s *DocumentService) DeleteKnowledgeBase(kbID string) error {
 	if _, err := s.store.GetKnowledgeBase(kbID); err != nil {
@@ -725,6 +726,11 @@ func (s *DocumentService) runIndex(document model.Document) {
 	document.Stage = "index"
 	document.UpdatedAt = now
 	if err := s.store.UpdateDocument(document); err != nil {
+		if documentDeleted(err) {
+			infra.L.Info("document deleted during embedding, skipping vector upsert",
+				zap.String("document_id", document.DocumentID))
+			return
+		}
 		infra.L.Warn(
 			"failed to persist index stage",
 			zap.String("document_id", document.DocumentID),
@@ -744,11 +750,16 @@ func (s *DocumentService) runIndex(document model.Document) {
 	document.FinishedAt = &done
 	document.UpdatedAt = done
 	if err := s.store.UpdateDocument(document); err != nil {
-		infra.L.Warn(
-			"failed to persist indexed status",
-			zap.String("document_id", document.DocumentID),
-			zap.Error(err),
-		)
+		if documentDeleted(err) {
+			infra.L.Info("document deleted after vector upsert completed",
+				zap.String("document_id", document.DocumentID))
+		} else {
+			infra.L.Warn(
+				"failed to persist indexed status",
+				zap.String("document_id", document.DocumentID),
+				zap.Error(err),
+			)
+		}
 	}
 
 	infra.L.Info("document indexed",
@@ -798,6 +809,11 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 	document.UpdatedAt = now
 	document.ErrorMessage = ""
 	if err := s.store.UpdateDocument(document); err != nil {
+		if documentDeleted(err) {
+			infra.L.Info("document deleted before processing started",
+				zap.String("document_id", document.DocumentID))
+			return
+		}
 		infra.L.Warn(
 			"failed to persist processing status",
 			zap.String("document_id", document.DocumentID),
@@ -853,6 +869,11 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 	document.Stage = "chunk"
 	document.UpdatedAt = time.Now().UTC()
 	if err := s.store.UpdateDocument(document); err != nil {
+		if documentDeleted(err) {
+			infra.L.Info("document deleted during parsing, aborting",
+				zap.String("document_id", document.DocumentID))
+			return
+		}
 		infra.L.Warn(
 			"failed to persist chunk stage",
 			zap.String("document_id", document.DocumentID),
@@ -906,6 +927,11 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 	document.FinishedAt = &done
 	document.UpdatedAt = done
 	if err := s.store.UpdateDocument(document); err != nil {
+		if documentDeleted(err) {
+			infra.L.Info("document deleted during chunking, aborting",
+				zap.String("document_id", document.DocumentID))
+			return
+		}
 		infra.L.Warn(
 			"failed to persist processed status",
 			zap.String("document_id", document.DocumentID),
@@ -914,7 +940,7 @@ func (s *DocumentService) processDocument(documentID string, rechunk bool) {
 	}
 
 	if !document.HumanReview {
-		if err := s.IndexDocument(document.DocumentID); err != nil {
+		if err := s.IndexDocument(document.DocumentID); err != nil && !documentDeleted(err) {
 			s.failDocument(document, "embed", err)
 		}
 	}
@@ -1039,12 +1065,26 @@ func (s *DocumentService) failDocument(document model.Document, stage string, re
 	document.FinishedAt = &now
 	document.UpdatedAt = now
 	if err := s.store.UpdateDocument(document); err != nil {
-		infra.L.Warn(
-			"failed to persist failed status",
-			zap.String("document_id", document.DocumentID),
-			zap.Error(err),
-		)
+		if documentDeleted(err) {
+			infra.L.Info("document deleted before failure status could be persisted",
+				zap.String("document_id", document.DocumentID))
+		} else {
+			infra.L.Warn(
+				"failed to persist failed status",
+				zap.String("document_id", document.DocumentID),
+				zap.Error(err),
+			)
+		}
 	}
+}
+
+// documentDeleted reports whether err indicates the document row no longer
+// exists, e.g. because DeleteDocument ran while this background stage was
+// still in flight. Callers must abort rather than keep processing a document
+// that is gone, otherwise they'd write orphaned chunks or re-index deleted
+// vectors into Milvus.
+func documentDeleted(err error) bool {
+	return errors.Is(err, repository.ErrNotFound)
 }
 
 func detectFileType(filename string) (string, error) {
@@ -1058,7 +1098,7 @@ func detectFileType(filename string) (string, error) {
 	case ".pdf":
 		return "pdf", nil
 	default:
-		return "", errors.New("unsupported file type")
+		return "", ErrUnsupportedFileType
 	}
 }
 

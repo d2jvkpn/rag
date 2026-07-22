@@ -10,7 +10,8 @@ The first version focuses on the operational document workflow:
 - document upload, filtering, detail view, rechunk, ingest, and deletion
 - chunk review and chunk-level actions
 - semantic search page
-- user list page for accounts with `view_user_list`
+- knowledge base management page
+- user list page for accounts with `manage_users`
 
 The UI is an internal operations console. It prioritizes clear document state, visible processing errors, and predictable lifecycle actions over complex editing or analytics.
 
@@ -42,8 +43,8 @@ The frontend does not use `.env` files for runtime behavior. It loads public run
 
 Current fields:
 
-- `api_base`: backend API base URL
-- `static_base`: backend static asset base URL
+- `api_base_url`: backend API base URL
+- `static_base_url`: backend static asset base URL
 - `request_timeout_ms`: shared API request timeout in milliseconds, default `15000`
 - `poll_interval_ms`: polling interval for processing document detail pages
 
@@ -56,10 +57,11 @@ Do not put secrets in `app.json`; it is served as a public static file.
 - `/documents/:documentId`
 - `/documents/:documentId/chunks`
 - `/search`
+- `/knowledge-bases`
 - `/users`
 - `/` redirects to `/documents`
 
-Protected routes require the cookie-backed login session. `/users` additionally requires the `view_user_list` permission returned by `GET /api/me`.
+Protected routes require the cookie-backed login session. `/users` additionally requires the `manage_users` permission returned by `GET /api/me`.
 
 ## Project Structure
 

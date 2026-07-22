@@ -44,7 +44,7 @@ var textNormalizer = strings.NewReplacer(
 // image ResourceRefs will have StoragePath set to the written file path.
 func Parse(path, sourceType, mediaDir string) (ParseResult, error) {
 	switch sourceType {
-	case "markdown":
+	case "md":
 		return parseMarkdown(path)
 	case "docx":
 		return parseDocx(path, mediaDir)

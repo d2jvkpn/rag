@@ -103,8 +103,8 @@ dense / hybrid 模式未配置 Embedder 时返回 500（NoopEmbedder 返回空�
 再整体传入 `BuildChunks`。
 
 **Chunker**：`BuildChunks(documentID, filename string, blocks []ParseBlock, ...)` 逐 block 调用
-`splitByLength`，每个 chunk 继承所在 block 的 `SectionTitle` / `PageStart`。切分完成后，若总 chunk 数 ≤ `min_chunks`，
-将整篇合并为一个 chunk。
+`splitByLength`，每个 chunk 继承所在 block 的 `SectionTitle` / `PageStart`。切分完成后，若总 chunk 数少于
+`min_chunks`，将整篇合并为一个 chunk。
 
 `splitByLength` 细节：以 `\n\n` 为段落边界累积；代码围栏（`` ``` `` / `~~~`）内部的空行受保护；
 Markdown 表格按数据行拆分（表头重复）；普通超长段落用 `splitRunes` 按字符滑动窗口切分，

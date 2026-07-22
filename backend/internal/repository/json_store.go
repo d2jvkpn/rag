@@ -30,6 +30,7 @@ type AccountSyncResult struct {
 }
 
 var ErrNotFound = errors.New("not found")
+var ErrDocumentExists = errors.New("document already exists in knowledge base")
 
 type State struct {
 	Users          map[string]model.User            `json:"users"`
@@ -287,7 +288,7 @@ func (s *JSONStore) CreateDocument(document model.Document) error {
 	for _, existing := range s.data.Documents {
 		if existing.KnowledgeBaseID == document.KnowledgeBaseID &&
 			existing.SHA256 == document.SHA256 {
-			return errors.New("document already exists in knowledge base")
+			return ErrDocumentExists
 		}
 	}
 	s.data.Documents[document.DocumentID] = document
@@ -297,6 +298,9 @@ func (s *JSONStore) CreateDocument(document model.Document) error {
 func (s *JSONStore) UpdateDocument(document model.Document) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if _, ok := s.data.Documents[document.DocumentID]; !ok {
+		return ErrNotFound
+	}
 	s.data.Documents[document.DocumentID] = document
 	return s.persistLocked()
 }
@@ -647,15 +651,40 @@ func resolvePasswordHash(password string) string {
 	return hashPassword(password)
 }
 
+// persistLocked writes state as JSON, containing passwords hashes and TOTP
+// secrets, to a temp file in the same directory and renames it into place.
+// The rename is atomic on the same filesystem, so a crash or concurrent read
+// never observes a partially-written state file.
 func (s *JSONStore) persistLocked() error {
 	var (
-		raw []byte
-		err error
+		raw  []byte
+		err  error
+		tmp  *os.File
+		name string
 	)
 
 	raw, err = json.MarshalIndent(s.data, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.path, raw, 0o644)
+
+	tmp, err = os.CreateTemp(filepath.Dir(s.path), filepath.Base(s.path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	name = tmp.Name()
+	defer os.Remove(name)
+
+	if err = tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		return err
+	}
+	if _, err = tmp.Write(raw); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err = tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(name, s.path)
 }
