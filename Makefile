@@ -46,5 +46,5 @@ build_image:
 	  -t q.local/rag:latest ./
 
 archive_image:
-	mkdir -p data
-	docker save q.local/rag:latest | gzip -c > data/q.local--rag--latest.tgz
+	mkdir -p target
+	docker save q.local/rag:latest | gzip -c > target/q.local--rag--latest.tgz
